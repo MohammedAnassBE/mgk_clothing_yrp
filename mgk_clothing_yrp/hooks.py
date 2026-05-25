@@ -1,5 +1,5 @@
 app_name = "mgk_clothing_yrp"
-app_title = "Mgk Clothing Yrp"
+app_title = "MGK Clothing YRP"
 app_publisher = "anas@essdee.fit"
 app_description = "Tiwel Manufacturing"
 app_email = "anas@essdee.fit"
@@ -182,10 +182,36 @@ app_license = "mit"
 
 # Overriding Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "mgk_clothing_yrp.event.get_events"
-# }
+
+override_whitelisted_methods = {
+	"yrp.yrp.doctype.purchase_invoice.purchase_invoice.fetch_grn_details": "mgk_clothing_yrp.overrides.purchase_invoice.fetch_grn_details",
+}
+
+# Fixtures
+# ------------------
+# Custom Fields owned by this app (module-tagged) travel with it.
+
+fixtures = [
+	{"dt": "Custom Field", "filters": [["module", "=", "MGK Clothing YRP"]]},
+]
+
+# Document Events
+# ---------------
+
+doc_events = {
+	"Purchase Order": {
+		"validate": "mgk_clothing_yrp.overrides.purchase_order.validate",
+	},
+	"Work Order": {
+		"before_submit": "mgk_clothing_yrp.overrides.work_order.before_submit",
+	},
+}
+
+# include js in doctype views
+doctype_js = {
+	"Purchase Order": "public/js/purchase_order_mgk.js",
+	"Work Order": "public/js/work_order_mgk.js",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
