@@ -1,0 +1,61 @@
+/* MGK Clothing — global base + shared layout tokens.
+   PrimeVue components are themed via the preset (theme.js); this file only
+   holds the page reset, shell layout variables, and a few app-level helpers. */
+
+:root {
+	--mgk-bg: #F4F1EB;          /* warm off-white page background */
+	--mgk-card: #FFFFFF;
+	--mgk-ink: #0B1220;
+	--mgk-ink-2: #1F2937;
+	--mgk-muted: #6B7280;
+	--mgk-muted-2: #9AA1AC;
+	--mgk-line: #E5E1D8;
+	--mgk-accent: #0F766E;
+	--mgk-accent-50: #E7F4F2;
+	--mgk-accent-700: #115E59;
+	--mgk-slate-50: #EEF2F6;
+
+	--sidebar-width: 232px;
+	--sidebar-collapsed-width: 60px;
+	--topbar-height: 56px;
+	--radius-sm: 5px;
+	--radius: 8px;
+	--radius-lg: 12px;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+		"Helvetica Neue", Arial, sans-serif;
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--mgk-ink);
+	background: var(--mgk-bg);
+	-webkit-font-smoothing: antialiased;
+}
+
+#app {
+	height: 100vh;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+/* mono helper for document ids */
+.mgk-mono {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--mgk-accent-700);
+}

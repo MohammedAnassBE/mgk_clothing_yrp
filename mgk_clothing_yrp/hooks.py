@@ -11,15 +11,20 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "mgk_clothing_yrp",
-# 		"logo": "/assets/mgk_clothing_yrp/logo.png",
-# 		"title": "Mgk Clothing Yrp",
-# 		"route": "/mgk_clothing_yrp",
-# 		"has_permission": "mgk_clothing_yrp.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "mgk_clothing_yrp",
+		"logo": "/assets/mgk_clothing_yrp/frontend/favicon.svg",
+		"title": "MGK Clothing",
+		"route": "/web",
+	}
+]
+
+# SPA catch-all: deep links under /web (the Vue router runs in history mode with
+# base "/web") all resolve to the web.html template, which boots the SPA.
+website_route_rules = [
+	{"from_route": "/web/<path:app_path>", "to_route": "web"},
+]
 
 # Includes in <head>
 # ------------------
@@ -58,6 +63,11 @@ app_license = "mit"
 
 # application home page (will override Website Settings)
 # home_page = "login"
+
+# Post-login landing: ordinary users land on the custom /web work hub;
+# System Manager / Administrator keep the Desk default (function returns None
+# for them, so Frappe falls through). See mgk_clothing_yrp/www_home.py.
+get_website_user_home_page = "mgk_clothing_yrp.www_home.get_website_user_home_page"
 
 # website user home page (by Role)
 # role_home_page = {
