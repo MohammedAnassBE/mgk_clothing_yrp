@@ -48,7 +48,7 @@
 			</div>
 
 			<Tag
-				v-if="!loading && doc && mode === 'view'"
+				v-if="!loading && doc && mode === 'view' && (isSubmittable || isWorkflow || doc.status)"
 				class="head-status"
 				:value="statusLabel"
 				:severity="statusSeverity"
@@ -58,6 +58,16 @@
 			<div class="head-actions">
 				<!-- ── VIEW mode, draft (docstatus 0) ── -->
 				<template v-if="mode === 'view' && doc">
+					<!-- Workflow-managed doctypes (Process Cost / Item Price): the
+					     transition buttons REPLACE plain Submit/Cancel (which are
+					     suppressed via isSubmittable=false). Server-authoritative. -->
+					<WorkflowActions
+						v-if="isWorkflow"
+						ref="workflowRef"
+						:doc="doc"
+						:doctype="doctype"
+						@changed="reloadView"
+					/>
 					<Button
 						v-if="docstatus === 0 && canWrite(doctype)"
 						label="Edit"
@@ -482,7 +492,7 @@
 						<Tab value="details">Details</Tab>
 						<Tab v-for="ct in childTables" :key="ct.fieldname" :value="ct.fieldname">
 							{{ ct.label }}
-							<span v-if="rowsFor(ct).length" class="tab-badge">{{ rowsFor(ct).length }}</span>
+							<span v-if="tabBadge(ct)" class="tab-badge">{{ tabBadge(ct) }}</span>
 						</Tab>
 						<Tab v-if="isWorkOrder" value="approval">
 							Approval Log
@@ -739,12 +749,13 @@ import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { useAppToast } from "@/composables/useToast"
 import { searchLink, getMeta, getDocWithOnload, callMethod } from "@/api/client"
-import { getRegistryByRoute, getRegistryByDoctype } from "@/config/doctypes"
+import { getRegistryByRoute, getRegistryByDoctype, WORKFLOW_SEVERITY } from "@/config/doctypes"
 import { getFieldConfig } from "@/config/fields"
 import WorkOrderApproval from "./WorkOrderApproval.vue"
 import StockItemGridEditor from "./StockItemGridEditor.vue"
 import LinkField from "@/components/LinkField.vue"
 import GRNReceivedTypeEditor from "./GRNReceivedTypeEditor.vue"
+import WorkflowActions from "./WorkflowActions.vue"
 
 const props = defineProps({
 	docRoute: { type: String, required: true },
@@ -760,6 +771,7 @@ const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
 const isWorkOrder = computed(() => doctype.value === "Work Order")
 const isSubmittable = computed(() => registry.value?.isSubmittable || false)
+const isWorkflow = computed(() => registry.value?.isWorkflow || false)
 
 // ── doc state ──
 // doctype is captured once at setup; correct only because AppLayout keys <router-view> by $route.path, remounting per doctype/record. Do not remove that :key.
@@ -782,6 +794,7 @@ const acting = ref(null) // "submit" | "cancel" | "delete" | "amend" | null
 const activeTab = ref("details")
 const approvalRef = ref(null)
 const approvalState = ref(null)
+const workflowRef = ref(null)
 
 // Reactive form model for edit/create (built fresh on entering those modes).
 const form = reactive({})
@@ -1005,7 +1018,12 @@ async function loadAll() {
 	loadChildMetas()
 	await docState.load(props.id)
 	if (!docState.doc.value) return
-	if (stockPivots.value.length) hydratePivotsForView()
+	// U1: transaction docs open on their primary items tab (Deliverables/Items),
+	// not the meta Details tab — so the core content is visible immediately.
+	if (stockPivots.value.length) {
+		activeTab.value = stockPivots.value[0].childField
+		hydratePivotsForView()
+	}
 	docState.loadLinked(props.id)
 	docState.loadActivity(props.id)
 }
@@ -1052,6 +1070,8 @@ function onShortcut(e) {
 			const allowed = mode.value === "create" ? canCreate(doctype.value) : canWrite(doctype.value)
 			if (allowed) onSave()
 		} else if (doc.value && docstatus.value === 0 && isSubmittable.value && canSubmit(doctype.value)) {
+			// Workflow doctypes (isSubmittable=false) are excluded here by design —
+			// they submit via WorkflowActions, never a plain docstatus PUT.
 			onSubmit()
 		}
 	} else if (key === "d") {
@@ -1202,8 +1222,13 @@ function isReadOnly(f) {
 const visibleFormFields = computed(() =>
 	formFields.value.filter((f) => {
 		if (f.dependsOn && !evalCondition(f.dependsOn)) return false
-		if (isReadOnly(f) && isEmptyForHide(form[f.fieldname], metaFieldMap.value[f.fieldname]?.fieldtype))
-			return false
+		// U4: in CREATE mode, read-only fields are system/derived (e.g. Open Status,
+		// Is Delivered) — never show them, even when they carry a default. In EDIT a
+		// read-only field is hidden only when empty (derived / not-yet-set).
+		if (isReadOnly(f)) {
+			if (mode.value === "create") return false
+			if (isEmptyForHide(form[f.fieldname], metaFieldMap.value[f.fieldname]?.fieldtype)) return false
+		}
 		return true
 	}),
 )
@@ -1791,6 +1816,7 @@ async function reloadView() {
 	docState.loadLinked(props.id)
 	docState.loadActivity(props.id)
 	if (isWorkOrder.value && approvalRef.value) approvalRef.value.reload?.()
+	if (isWorkflow.value && workflowRef.value) workflowRef.value.reload?.()
 }
 
 // ── Details field list (config → meta → doc keys) — VIEW mode ──
@@ -1872,6 +1898,12 @@ const childTables = computed(() => {
 				columns: childColumns(rows),
 			})
 		}
+		// U2: surface the primary content tables (Deliverables/Receivables/Items)
+		// FIRST, ahead of low-traffic logs.
+		const pivotFields = pivotChildFields.value
+		if (pivotFields.size) {
+			tables.sort((a, b) => (pivotFields.has(a.fieldname) ? 0 : 1) - (pivotFields.has(b.fieldname) ? 0 : 1))
+		}
 		return tables
 	}
 	for (const [k, v] of Object.entries(doc.value)) {
@@ -1906,6 +1938,17 @@ function childColumns(rows) {
 function rowsFor(ct) {
 	const rows = doc.value?.[ct.fieldname]
 	return Array.isArray(rows) ? rows : []
+}
+
+// U3: badge the count the user actually SEES. For size-pivot child tables the
+// grid shows grouped rows (item → attributes), not the flat child rows — so
+// badge the grouped entry count; otherwise the flat row count.
+function tabBadge(ct) {
+	if (pivotChildFields.value.has(ct.fieldname)) {
+		const groups = viewGrouped.value?.[ct.fieldname]
+		if (Array.isArray(groups)) return groups.reduce((n, g) => n + (g.items?.length || 0), 0)
+	}
+	return rowsFor(ct).length
 }
 
 // ── Approval log (Work Order) ──
@@ -2036,10 +2079,13 @@ const DOCSTATUS_LABELS = { 0: "Draft", 1: "Submitted", 2: "Cancelled" }
 const statusLabel = computed(() => {
 	const d = doc.value
 	if (!d) return ""
+	if (isWorkflow.value && d.workflow_state) return d.workflow_state
 	return d.status || DOCSTATUS_LABELS[d.docstatus] || "—"
 })
 const statusSeverity = computed(() => {
-	const ds = doc.value?.docstatus
+	const d = doc.value
+	if (isWorkflow.value && d?.workflow_state) return WORKFLOW_SEVERITY[d.workflow_state] || "warn"
+	const ds = d?.docstatus
 	if (ds === 1) return "success"
 	if (ds === 2) return "danger"
 	return "warn"

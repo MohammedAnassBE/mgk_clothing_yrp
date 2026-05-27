@@ -9,7 +9,7 @@
 				</p>
 			</div>
 			<div class="head-actions">
-				<IconField>
+				<IconField v-if="!accessDenied">
 					<InputIcon class="pi pi-search" />
 					<InputText
 						v-model="searchQuery"
@@ -18,7 +18,7 @@
 					/>
 				</IconField>
 				<Button
-					v-if="doctype && eligibleColumns.length"
+					v-if="doctype && !accessDenied && eligibleColumns.length"
 					label="Columns"
 					icon="pi pi-sliders-h"
 					severity="secondary"
@@ -27,7 +27,7 @@
 					@click="showColumnsModal = true"
 				/>
 				<Button
-					v-if="doctype"
+					v-if="doctype && !accessDenied"
 					:label="advFilters.length ? `Filter (${advFilters.length})` : 'Filter'"
 					icon="pi pi-filter"
 					severity="secondary"
@@ -111,7 +111,7 @@
 
 		<!-- Error -->
 		<Message v-if="errorMsg" severity="error" :closable="false" class="list-error">
-			{{ errorMsg }}
+			{{ accessDenied ? `You don’t have access to ${registry?.label || doctype}. Ask an administrator if you need it.` : errorMsg }}
 			<template #icon><i class="pi pi-exclamation-triangle" /></template>
 		</Message>
 
@@ -145,11 +145,11 @@
 				</template>
 			</Column>
 
-			<Column v-if="isSubmittable" header="Status" :style="{ width: '130px' }">
+			<Column v-if="isSubmittable || isWorkflow" header="Status" :style="{ width: '130px' }">
 				<template #body="{ data }">
 					<Tag
 						:value="statusLabel(data)"
-						:severity="statusSeverity(data.docstatus)"
+						:severity="rowSeverity(data)"
 						rounded
 					/>
 				</template>
@@ -205,7 +205,7 @@ import Paginator from "primevue/paginator"
 import Message from "primevue/message"
 import { useDocList } from "@/composables/useDocList"
 import { usePermissions } from "@/composables/usePermissions"
-import { getRegistryByRoute } from "@/config/doctypes"
+import { getRegistryByRoute, WORKFLOW_SEVERITY } from "@/config/doctypes"
 import { getMeta, getCount, callMethod } from "@/api/client"
 import ColumnCustomizerModal from "@/components/ColumnCustomizerModal.vue"
 import FilterPanel from "@/components/FilterPanel.vue"
@@ -221,6 +221,8 @@ const { canCreate, isAdmin, hasRole } = usePermissions()
 const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
 const isSubmittable = computed(() => registry.value?.isSubmittable || false)
+const isWorkflow = computed(() => registry.value?.isWorkflow || false)
+const workflowStates = computed(() => registry.value?.workflowStates || [])
 const dateTabField = computed(() => registry.value?.dateTabs || null)
 
 // ── Columns: meta-driven, overlaid with the user's saved per-user choice (#2) ──
@@ -341,6 +343,7 @@ const fetchFields = computed(() => {
 		if (!fields.includes(c.field)) fields.push(c.field)
 	}
 	if (isSubmittable.value && !fields.includes("docstatus")) fields.push("docstatus")
+	if (isWorkflow.value && !fields.includes("workflow_state")) fields.push("workflow_state")
 	return fields
 })
 
@@ -534,7 +537,12 @@ async function loadMetaAndColumns(dt) {
 		const statusField = (parent?.fields || []).find(
 			(f) => f.fieldname === "status"
 		)
-		if (isSubmittable.value) {
+		if (isWorkflow.value) {
+			// Workflow-managed → workflow_state tabs (Draft / Approval Pending /
+			// Approved / Rejected / Expired). docstatus would collapse the three
+			// docstatus-0 states (Draft + Approval Pending + Rejected) into one tab.
+			tabMode.value = "workflow"
+		} else if (isSubmittable.value) {
 			// Submittable → docstatus tabs (All/Draft/Submitted/Cancelled). yrp does
 			// NOT advance the `status` field on submit (a submitted PO still reads
 			// status="Draft"), so docstatus is the trustworthy Draft/Submitted/Cancelled
@@ -552,10 +560,10 @@ async function loadMetaAndColumns(dt) {
 			tabMode.value = "all"
 		}
 	} catch (_) {
-		// Meta failure must not break the list — degrade to docstatus tabs if
-		// submittable, else no tab strip (and meta-less columns → Name only).
+		// Meta failure must not break the list — degrade to workflow/docstatus tabs
+		// (both sourced independently of meta) if applicable, else no tab strip.
 		if (dt !== doctype.value) return
-		tabMode.value = isSubmittable.value ? "docstatus" : null
+		tabMode.value = isWorkflow.value ? "workflow" : isSubmittable.value ? "docstatus" : null
 	}
 }
 
@@ -569,6 +577,7 @@ async function loadTabCounts(dt) {
 	} catch (_) {
 		if (dt !== doctype.value) return
 		if (tabMode.value === "docstatus") statusTabs.value = buildDocstatusTabs({})
+		else if (tabMode.value === "workflow") statusTabs.value = buildWorkflowTabs(workflowStates.value, [])
 		else if (tabMode.value === "all") statusTabs.value = [{ label: "All", value: null, count: 0 }]
 		else {
 			tabMode.value = null
@@ -590,6 +599,17 @@ function buildDocstatusTabs(counts) {
 			count: counts[t.value] || 0,
 		})),
 	]
+}
+
+// Workflow tabs: All + one per workflow_state (value === the state string).
+// `counts` is positional, aligned 1:1 with `states`.
+function buildWorkflowTabs(states, counts) {
+	const total = counts.reduce((sum, c) => sum + (c || 0), 0)
+	const tabs = [{ label: "All", value: null, count: total }]
+	states.forEach((s, i) => {
+		tabs.push({ label: s, value: s, count: counts[i] || 0 })
+	})
+	return tabs
 }
 
 // Recompute the per-tab counts via parallel getCount calls, scoped to the
@@ -624,6 +644,13 @@ async function loadCounts() {
 			1: d1 || 0,
 			2: d2 || 0,
 		})
+	} else if (tabMode.value === "workflow") {
+		const states = workflowStates.value
+		const counts = await Promise.all(
+			states.map((s) => getCount(dt, { ...base, workflow_state: s })),
+		)
+		if (dt !== doctype.value) return
+		statusTabs.value = buildWorkflowTabs(states, counts)
 	} else if (tabMode.value === "all") {
 		const c = await getCount(dt, { ...base })
 		if (dt !== doctype.value) return
@@ -691,6 +718,7 @@ watch(
 				// Fall back to the route-query base value (not nothing) so a base
 				// constraint on status/docstatus is preserved.
 				if (tabMode.value === "status") listState.value.setFilter("status", routeBaseFilters.value?.status ?? null)
+				else if (tabMode.value === "workflow") listState.value.setFilter("workflow_state", routeBaseFilters.value?.workflow_state ?? null)
 				else listState.value.setFilter("docstatus", routeBaseFilters.value?.docstatus ?? null)
 			}
 			applyPendingStatus()
@@ -702,6 +730,12 @@ watch(
 
 const rows = computed(() => listState.value?.data.value || [])
 const errorMsg = computed(() => listState.value?.error.value || null)
+// U6: detect a permission/access error → show friendly copy + hide the (useless)
+// search/Columns/Filter toolbar on a denied list.
+const accessDenied = computed(() => {
+	const m = String(errorMsg.value || "")
+	return /insufficient permission|do not have|does not have|not permitted/i.test(m)
+})
 const totalCount = computed(() => {
 	const c = listState.value?.totalCount.value
 	return typeof c === "number" ? c : 0
@@ -724,6 +758,8 @@ function onTabChange(key) {
 		listState.value.setFilter("status", value === null ? (routeBaseFilters.value?.status ?? null) : value)
 	} else if (tabMode.value === "docstatus") {
 		listState.value.setFilter("docstatus", value === null ? (routeBaseFilters.value?.docstatus ?? null) : Number(value))
+	} else if (tabMode.value === "workflow") {
+		listState.value.setFilter("workflow_state", value === null ? (routeBaseFilters.value?.workflow_state ?? null) : value)
 	}
 	listState.value.fetch()
 }
@@ -746,8 +782,9 @@ async function onDateTabChange(value) {
 	if (tabMode.value) await loadCounts()
 	if (tabMode.value && prevActive !== "all" && activeTab.value === "all") {
 		// Fall back to the route-query base value (not nothing) so a base
-		// constraint on status/docstatus is preserved.
+		// constraint on status/docstatus/workflow_state is preserved.
 		if (tabMode.value === "status") listState.value.setFilter("status", routeBaseFilters.value?.status ?? null)
+		else if (tabMode.value === "workflow") listState.value.setFilter("workflow_state", routeBaseFilters.value?.workflow_state ?? null)
 		else listState.value.setFilter("docstatus", routeBaseFilters.value?.docstatus ?? null)
 	}
 	listState.value.fetch()
@@ -853,12 +890,18 @@ function formatNumber(val) {
 
 const DOCSTATUS_LABELS = { 0: "Draft", 1: "Submitted", 2: "Cancelled" }
 function statusLabel(row) {
+	if (isWorkflow.value && row.workflow_state) return row.workflow_state
 	return row.status || DOCSTATUS_LABELS[row.docstatus] || "—"
 }
 function statusSeverity(ds) {
 	if (ds === 1) return "success"
 	if (ds === 2) return "danger"
 	return "warn"
+}
+// Row-aware severity: workflow_state for workflow doctypes, else docstatus.
+function rowSeverity(row) {
+	if (isWorkflow.value && row.workflow_state) return WORKFLOW_SEVERITY[row.workflow_state] || "warn"
+	return statusSeverity(row.docstatus)
 }
 </script>
 

@@ -21,7 +21,10 @@
  * only a coarse grouping aid — real visibility is permission-driven.
  */
 
-// Submittable transaction DocTypes — get the docstatus tab strip.
+// Submittable transaction DocTypes — get the docstatus tab strip + the plain
+// Submit/Cancel buttons on the detail page. NOTE: workflow-managed doctypes
+// (see WORKFLOW below) are deliberately NOT listed here — they drive everything
+// through workflow actions, not plain docstatus submit/cancel.
 const SUBMITTABLE = new Set([
 	"Work Order",
 	"Production Order",
@@ -35,7 +38,33 @@ const SUBMITTABLE = new Set([
 	"Stock Update",
 	"Stock Reconciliation",
 	"Stock Reservation Entry",
+	// Plain-submittable (is_submittable=1, no workflow) — added 2026-05-27 so
+	// their existing Submit/Cancel + docstatus tabs render on /web.
+	"Bill Tracking",
+	"Production Term",
+	"Excel Sticker Print",
 ])
+
+// Workflow-managed DocTypes → their ORDERED workflow_state values. These render
+// transition-driven action buttons (WorkflowActions.vue) instead of plain
+// Submit/Cancel, and a workflow-state tab strip on the list. Verified 2026-05-27:
+// these are the only two active Workflows on mgk_yrp.site and both share the
+// identical state set below. KEEP IN SYNC if MGK edits the Workflow states.
+const WORKFLOW_STATES = ["Draft", "Approval Pending", "Approved", "Rejected", "Expired"]
+const WORKFLOW = {
+	"Process Cost": WORKFLOW_STATES,
+	"Item Price": WORKFLOW_STATES,
+}
+
+// Workflow-state → PrimeVue Tag severity. Shared by the detail badge and the
+// list Status column (both import this) so the two can't drift apart.
+export const WORKFLOW_SEVERITY = {
+	Approved: "success",
+	Rejected: "danger",
+	Expired: "danger",
+	"Approval Pending": "warn",
+	Draft: "warn",
+}
 
 function slugify(s) {
 	return s
@@ -139,9 +168,9 @@ const GROUPS = [
 			{ doctype: "Warehouse", icon: "pi pi-warehouse" },
 			{ doctype: "Holiday List", icon: "pi pi-calendar" },
 			{ doctype: "Terms and Condition", icon: "pi pi-book" },
-			// Workstation (erpnext) is not installed on mgk_yrp.site — included
-			// per plan; canRead() will be false so the sidebar hides it.
-			{ doctype: "Workstation", icon: "pi pi-wrench", note: "not installed" },
+			// Workstation (erpnext) is NOT installed on mgk_yrp.site. Removed from the
+			// registry 2026-05-27 — it was leaking into the sidebar for Administrator
+			// (canRead is always true for admins) and its list page is meaningless here.
 		],
 	},
 	{
@@ -163,6 +192,8 @@ for (const g of GROUPS) {
 			group: g.group,
 			roles: g.roles,
 			isSubmittable: SUBMITTABLE.has(it.doctype),
+			isWorkflow: it.doctype in WORKFLOW,
+			workflowStates: WORKFLOW[it.doctype] || null,
 			dateTabs: it.dateTabs || null,
 			listFields: it.listFields || null,
 			note: it.note || null,
@@ -196,4 +227,4 @@ export function getSidebarGroups(filterFn = () => true) {
 	})).filter((g) => g.items.length > 0)
 }
 
-export { DOCTYPES, SUBMITTABLE }
+export { DOCTYPES, SUBMITTABLE, WORKFLOW }

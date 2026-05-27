@@ -364,3 +364,49 @@ export async function amendDoc(doctype, name) {
   newDoc.amended_from = name
   return createDoc(doctype, newDoc)
 }
+
+// ---------------------------------------------------------------------------
+// Workflow transition helpers (workflow-managed DocTypes — Process Cost, Item
+// Price). Both core methods are @frappe.whitelist(): get_transitions is
+// role-filtered server-side; apply_workflow enforces role + self-approval. The
+// `doc` arg is passed as a JSON string (the methods parse_json it + load_from_db).
+// ---------------------------------------------------------------------------
+
+/**
+ * Allowed workflow transitions for `doc`, given the current user + workflow_state.
+ * @returns {object[]} transition rows ({ action, next_state, allowed, ... }); [] if none.
+ */
+export async function getWorkflowTransitions(doc) {
+  const result = await callMethod('frappe.model.workflow.get_transitions', {
+    doc: JSON.stringify(doc),
+  })
+  return Array.isArray(result) ? result : []
+}
+
+/**
+ * Apply a workflow action (e.g. "Submit" / "Approve" / "Reject") to `doc`.
+ * @returns the updated doc dict.
+ */
+export async function applyWorkflowAction(doc, action) {
+  return await callMethod('frappe.model.workflow.apply_workflow', {
+    doc: JSON.stringify(doc),
+    action,
+  })
+}
+
+/**
+ * Add a timeline comment to a document (used to record a workflow reject reason).
+ * Wraps the whitelisted `frappe.desk.form.utils.add_comment`.
+ */
+export async function addComment(doctype, name, content) {
+  // Both comment_email and comment_by must be the acting user's id. The user just
+  // performed an authenticated action, so session.user is reliably set.
+  const user = window.frappe?.session?.user || window.frappe?.boot?.user?.name || 'Administrator'
+  return await callMethod('frappe.desk.form.utils.add_comment', {
+    reference_doctype: doctype,
+    reference_name: name,
+    content,
+    comment_email: user,
+    comment_by: user,
+  })
+}
