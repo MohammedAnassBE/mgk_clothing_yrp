@@ -166,17 +166,11 @@ const GROUPS = [
 			{ doctype: "Production Term", icon: "pi pi-bolt" },
 			{ doctype: "Received Type", icon: "pi pi-inbox" },
 			{ doctype: "Warehouse", icon: "pi pi-warehouse" },
-			{ doctype: "Holiday List", icon: "pi pi-calendar" },
 			{ doctype: "Terms and Condition", icon: "pi pi-book" },
 			// Workstation (erpnext) is NOT installed on mgk_yrp.site. Removed from the
 			// registry 2026-05-27 — it was leaking into the sidebar for Administrator
 			// (canRead is always true for admins) and its list page is meaningless here.
 		],
-	},
-	{
-		group: "Tools",
-		roles: ["Purchase Manager", "Production Manager", "System Manager"],
-		items: [{ doctype: "Excel Sticker Print", icon: "pi pi-print" }],
 	},
 ]
 

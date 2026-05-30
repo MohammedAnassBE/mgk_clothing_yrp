@@ -91,7 +91,13 @@
 					:loading="saving"
 					@click="onSave"
 				/>
-				<a v-if="!isCreate" class="desk-link" :href="deskUrl" target="_blank" rel="noopener">
+				<a
+					v-if="!isCreate && (isAdmin || hasRole('System Manager'))"
+					class="desk-link"
+					:href="deskUrl"
+					target="_blank"
+					rel="noopener"
+				>
 					<i class="pi pi-external-link" /> Open in Desk
 				</a>
 			</div>
@@ -140,42 +146,36 @@
 					</div>
 					<div class="fld-wrap">
 						<label>Reference Item Variant</label>
-						<AutoComplete
+						<LinkField
 							v-model="header.reference_item_variant"
-							:suggestions="variantSuggestions"
-							@complete="searchVariant"
+							target-doctype="Item Variant"
+							:search-handler="searchVariantHandler"
 							:disabled="readonly"
 							placeholder="Generic (leave blank)"
-							dropdown
-							fluid
 						/>
 						<small class="fld-hint">Blank = generic matrix for the whole process pool.</small>
 					</div>
 					<div class="fld-wrap">
 						<label>Input Item</label>
-						<AutoComplete
+						<LinkField
 							v-model="header.input_item"
-							:suggestions="itemSuggestions"
-							@complete="searchItem"
+							target-doctype="Item"
 							:disabled="readonly"
 							placeholder="IPD item (leave blank)"
-							dropdown
-							fluid
-							@item-select="reloadAttributeValues"
+							@item-select="onInputItemChanged"
 							@change="onInputItemMaybeCleared"
 						/>
 						<small class="fld-hint">Source consumed (e.g. fabric for Cutting). Blank = IPD's item.</small>
 					</div>
 					<div class="fld-wrap">
 						<label>Output Item</label>
-						<AutoComplete
+						<LinkField
 							v-model="header.output_item"
-							:suggestions="itemSuggestions"
-							@complete="searchItem"
+							target-doctype="Item"
 							:disabled="readonly"
 							placeholder="IPD item (leave blank)"
-							dropdown
-							fluid
+							@item-select="onOutputItemChanged"
+							@change="onOutputItemChanged"
 						/>
 						<small class="fld-hint">Item produced. Blank = IPD's item.</small>
 					</div>
@@ -409,9 +409,11 @@ import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"
 import AutoComplete from "primevue/autocomplete"
 import Tooltip from "primevue/tooltip"
+import LinkField from "@/components/LinkField.vue"
 import { callMethod, getDoc, searchLink } from "@/api/client"
 import { useDoc } from "@/composables/useDoc"
 import { useAppToast } from "@/composables/useToast"
+import { usePermissions } from "@/composables/usePermissions"
 
 const vTooltip = Tooltip
 
@@ -422,6 +424,7 @@ const props = defineProps({
 const router = useRouter()
 const route = useRoute()
 const toast = useAppToast()
+const { isAdmin, hasRole } = usePermissions()
 
 const DOCTYPE = "IPD Process Matrix"
 const docState = useDoc(DOCTYPE)
@@ -443,6 +446,10 @@ const attributeValuesOutput = reactive({})
 const groups = ref([])            // [{ group_index, group_name, inputs:[row], outputs:[row] }]
 const dependentAttribute = ref(null)
 const docstatus = ref(0)
+// Default UOMs for new input/output rows — the consumed/produced item's default
+// UOM (input rows ← input_item ‖ IPD item, output rows ← output_item ‖ IPD item).
+const inputUom = ref("")
+const outputUom = ref("")
 
 const loading = ref(false)
 const loadError = ref(null)
@@ -464,8 +471,6 @@ const deskUrl = computed(
 // ── autocomplete buffers ──
 const ipdSuggestions = ref([])
 const processSuggestions = ref([])
-const variantSuggestions = ref([])
-const itemSuggestions = ref([])
 const attrSuggestions = ref([])
 const newInputAttr = ref(null)
 const newOutputAttr = ref(null)
@@ -488,6 +493,7 @@ async function load() {
 			docstatus.value = 0
 			if (header.ipd) {
 				await fetchDependentAttribute()
+				await refreshSideUoms()
 				// Pre-seed: only fires if attributes already exist on the IPD's
 				// item AND we add attribute rows — a brand-new matrix has none,
 				// so this is typically a graceful no-op (mirrors Desk: Generate
@@ -514,6 +520,7 @@ async function load() {
 
 			await reloadAttributeValues()
 			rebuildGroups(doc.combinations || [], doc.combination_attributes || [])
+			await refreshSideUoms()
 		}
 	} catch (e) {
 		loadError.value = e.message || "Failed to load"
@@ -664,7 +671,8 @@ function addRow(group, side) {
 	const list = side === "Input" ? inputAttributes.value : outputAttributes.value
 	const attrs = {}
 	for (const a of list) attrs[a] = null
-	arr.push({ qty: 0, uom: "", wastage_pct: 0, attrs })
+	const uom = (side === "Input" ? inputUom.value : outputUom.value) || ""
+	arr.push({ qty: 0, uom, wastage_pct: 0, attrs })
 }
 function deleteRow(group, key, index) {
 	group[key].splice(index, 1)
@@ -703,7 +711,7 @@ async function generateCombinations(opts = {}) {
 			combo.attrs.forEach((a) => {
 				if (a.attribute in attrs) attrs[a.attribute] = a.attribute_value
 			})
-			g0.inputs.push({ qty: 0, uom: "", wastage_pct: 0, attrs })
+			g0.inputs.push({ qty: 0, uom: inputUom.value || "", wastage_pct: 0, attrs })
 		})
 		;(r.output || []).forEach((combo) => {
 			const attrs = {}
@@ -711,7 +719,7 @@ async function generateCombinations(opts = {}) {
 			combo.attrs.forEach((a) => {
 				if (a.attribute in attrs) attrs[a.attribute] = a.attribute_value
 			})
-			g0.outputs.push({ qty: 0, uom: "", wastage_pct: 0, attrs })
+			g0.outputs.push({ qty: 0, uom: outputUom.value || "", wastage_pct: 0, attrs })
 		})
 		groups.value.sort((a, b) => a.group_index - b.group_index)
 		await reloadAttributeValues()
@@ -820,12 +828,10 @@ async function searchAttribute(e) {
 	if (dependentAttribute.value) names = names.filter((n) => n !== dependentAttribute.value)
 	attrSuggestions.value = names
 }
-async function searchItem(e) {
-	itemSuggestions.value = await searchNames("Item", e.query)
-}
-async function searchVariant(e) {
-	// Plain Item Variant search filtered to the IPD's item (avoids the Desk's
-	// positional-signature query helper). Falls back to unfiltered if no item.
+// Item Variant search filtered to the IPD's item (the reference variant must
+// belong to the matrix's IPD item). Returns rows for LinkField's searchHandler
+// (signature: async (query) => Array<{name}>).
+async function searchVariantHandler(query) {
 	try {
 		let filters = {}
 		if (header.ipd) {
@@ -838,14 +844,14 @@ async function searchVariant(e) {
 		}
 		const rows = await callMethod("frappe.client.get_list", {
 			doctype: "Item Variant",
-			filters: { ...filters, name: ["like", `%${e.query || ""}%`] },
+			filters: { ...filters, name: ["like", `%${query || ""}%`] },
 			fields: ["name"],
 			limit_page_length: 20,
 			order_by: "name asc",
 		})
-		variantSuggestions.value = (rows || []).map((x) => x.name)
+		return rows || []
 	} catch (_) {
-		variantSuggestions.value = []
+		return []
 	}
 }
 
@@ -865,13 +871,64 @@ async function onIpdChanged() {
 	inputAttributes.value = stripDependent(inputAttributes.value)
 	outputAttributes.value = stripDependent(outputAttributes.value)
 	await reloadAttributeValues()
+	await refreshSideUoms()
 }
 function onIpdMaybeCleared(e) {
 	// AutoComplete @change fires on free-text/clear. If emptied, reset dep attr.
 	if (!header.ipd) dependentAttribute.value = null
 }
+// ── UOM auto-fill (input rows ← input_item ‖ IPD item; output rows ← output_item
+//    ‖ IPD item). Mirrors the IPD Item BOM row, where uom = item.default_unit_of_measure.
+async function fetchItemUom(itemName) {
+	if (!itemName) return ""
+	try {
+		const r = await callMethod("frappe.client.get_value", {
+			doctype: "Item",
+			filters: { name: itemName },
+			fieldname: "default_unit_of_measure",
+		})
+		return r?.default_unit_of_measure || ""
+	} catch (_) {
+		return ""
+	}
+}
+async function ipdItemName() {
+	if (!header.ipd) return ""
+	try {
+		const r = await callMethod("frappe.client.get_value", {
+			doctype: "Item Production Detail",
+			filters: { name: header.ipd },
+			fieldname: "item",
+		})
+		return r?.item || ""
+	} catch (_) {
+		return ""
+	}
+}
+// Resolve the default UOMs and backfill any EMPTY uom cells (never clobber a
+// value the user typed). Called on load + whenever the IPD / input / output item changes.
+async function refreshSideUoms() {
+	const ipdIt = await ipdItemName()
+	const [iu, ou] = await Promise.all([
+		fetchItemUom(header.input_item || ipdIt),
+		fetchItemUom(header.output_item || ipdIt),
+	])
+	inputUom.value = iu
+	outputUom.value = ou
+	for (const g of groups.value) {
+		for (const row of g.inputs) if (!row.uom) row.uom = inputUom.value
+		for (const row of g.outputs) if (!row.uom) row.uom = outputUom.value
+	}
+}
+async function onInputItemChanged() {
+	await reloadAttributeValues()
+	await refreshSideUoms()
+}
+async function onOutputItemChanged() {
+	await refreshSideUoms()
+}
 function onInputItemMaybeCleared() {
-	reloadAttributeValues()
+	onInputItemChanged()
 }
 
 // ── navigation ──
@@ -882,8 +939,13 @@ function goIpd() {
 	if (header.ipd) router.push(`/item-production-detail/${encodeURIComponent(header.ipd)}`)
 }
 function goMatrixList() {
-	// IPD Process Matrix has no sidebar registry entry; fall back to Desk list.
-	window.open("/app/ipd-process-matrix", "_blank")
+	// IPD Process Matrix has no /web list (it's opened from an IPD's process row).
+	// Strict no-Desk rule: don't redirect to /app/ipd-process-matrix — surface a
+	// toast instead (mirrors BOMMappingEditor.goMappingList).
+	toast.warn(
+		"No /web list",
+		"Process Matrices are opened from an IPD's process — use “Configure combinations” there.",
+	)
 }
 </script>
 

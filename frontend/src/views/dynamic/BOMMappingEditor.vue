@@ -72,22 +72,22 @@
 			</div>
 			<div class="head-actions">
 				<Button
-					label="Disable all"
-					icon="pi pi-ban"
-					size="small"
-					severity="secondary"
-					outlined
-					:disabled="loading || !!loadError || !data.length"
-					@click="disableRows"
-				/>
-				<Button
 					label="Enable all"
 					icon="pi pi-check-circle"
 					size="small"
-					severity="secondary"
-					outlined
+					severity="success"
 					:disabled="loading || !!loadError || !data.length"
+					v-tooltip.bottom="'Include every combination'"
 					@click="enableRows"
+				/>
+				<Button
+					label="Disable incomplete"
+					icon="pi pi-ban"
+					size="small"
+					severity="warn"
+					:disabled="loading || !!loadError || !data.length"
+					v-tooltip.bottom="'Exclude included rows that have a blank BOM value'"
+					@click="disableRows"
 				/>
 				<Button
 					label="Save"
@@ -97,7 +97,13 @@
 					:disabled="loading || !!loadError"
 					@click="onSave"
 				/>
-				<a class="desk-link" :href="deskUrl" target="_blank" rel="noopener">
+				<a
+					v-if="isAdmin || hasRole('System Manager')"
+					class="desk-link"
+					:href="deskUrl"
+					target="_blank"
+					rel="noopener"
+				>
 					<i class="pi pi-external-link" /> Open in Desk
 				</a>
 			</div>
@@ -139,18 +145,179 @@
 				</div>
 			</section>
 
-			<!-- ── Empty configurations ── -->
-			<Message v-if="!attributes.length" severity="info" :closable="false">
-				No item-side attributes to map. Define this Item's attributes (and BOM Item
-				attributes) in Desk first — then the cross-product grid appears here.
-			</Message>
+			<!-- ── Attribute selectors (mirror the Desk item_attributes /
+			     bom_item_attributes grids), side by side: Item Attributes on the
+			     left, BOM Item Attributes on the right. Editing either rebuilds
+			     the cross-product grid below. ── -->
+			<div class="attr-panels-row">
+			<section class="panel attr-panel">
+				<div class="panel-head">
+					<h3>Item Attributes</h3>
+					<span class="panel-meta">produced item — drives the cross-product rows</span>
+				</div>
+				<div class="attr-body">
+					<div v-if="!itemAttrRows.length" class="attr-empty">
+						No item-side attributes selected.
+					</div>
+					<ul v-else class="attr-list">
+						<li v-for="(r, i) in itemAttrRows" :key="'ia-' + r.attribute" class="attr-row">
+							<span class="attr-name">{{ r.attribute }}</span>
+							<label class="same-toggle" v-tooltip.top="sameTip">
+								<Checkbox
+									:modelValue="!!r.same_attribute"
+									:binary="true"
+									@update:modelValue="setItemSame(i, $event)"
+								/>
+								<span>same</span>
+							</label>
+							<Button
+								icon="pi pi-times"
+								size="small"
+								text
+								rounded
+								severity="danger"
+								v-tooltip.left="'Remove attribute'"
+								@click="removeItemAttr(i)"
+							/>
+						</li>
+					</ul>
+					<div class="attr-add">
+						<Select
+							v-model="addItemAttrSel"
+							:options="availableItemAttrs"
+							:disabled="!availableItemAttrs.length"
+							:placeholder="availableItemAttrs.length ? 'Add an item attribute…' : 'All item attributes added'"
+							showClear
+							class="attr-add-select"
+						/>
+						<Button
+							label="Add"
+							icon="pi pi-plus"
+							size="small"
+							severity="secondary"
+							outlined
+							:disabled="!addItemAttrSel"
+							@click="addItemAttr"
+						/>
+					</div>
+				</div>
+			</section>
+
+			<section class="panel attr-panel">
+				<div class="panel-head">
+					<h3>BOM Item Attributes</h3>
+					<span class="panel-meta">consumed item — its values fill the BOM columns</span>
+				</div>
+				<div class="attr-body">
+					<div v-if="!bomAttrRows.length" class="attr-empty">
+						No BOM-side attributes selected.
+					</div>
+					<ul v-else class="attr-list">
+						<li v-for="(r, i) in bomAttrRows" :key="'ba-' + r.attribute" class="attr-row">
+							<span class="attr-name">{{ r.attribute }}</span>
+							<label class="same-toggle" v-tooltip.top="sameTip">
+								<Checkbox
+									:modelValue="!!r.same_attribute"
+									:binary="true"
+									@update:modelValue="setBomSame(i, $event)"
+								/>
+								<span>same</span>
+							</label>
+							<Button
+								icon="pi pi-times"
+								size="small"
+								text
+								rounded
+								severity="danger"
+								v-tooltip.left="'Remove attribute'"
+								@click="removeBomAttr(i)"
+							/>
+						</li>
+					</ul>
+					<div class="attr-add">
+						<Select
+							v-model="addBomAttrSel"
+							:options="availableBomAttrs"
+							:disabled="!availableBomAttrs.length"
+							:placeholder="availableBomAttrs.length ? 'Add a BOM item attribute…' : 'All BOM attributes added'"
+							showClear
+							class="attr-add-select"
+						/>
+						<Button
+							label="Add"
+							icon="pi pi-plus"
+							size="small"
+							severity="secondary"
+							outlined
+							:disabled="!addBomAttrSel"
+							@click="addBomAttr"
+						/>
+					</div>
+				</div>
+			</section>
+			</div>
+
+			<!-- ── Empty hint (no attributes yet) ── -->
+			<section v-if="!attributes.length" class="panel empty-config">
+				<div class="empty-config-body">
+					<i class="pi pi-table empty-icon" />
+					<div class="empty-text">
+						<h3>No attribute columns yet</h3>
+						<p>
+							Add at least one <strong>item-side</strong> and one
+							<strong>BOM-side</strong> attribute above to build the cross-product
+							grid — or auto-fill from the owning IPD (item side = the IPD's
+							primary attribute, BOM side = every attribute on
+							<strong>{{ bomItem || "the BOM item" }}</strong>).
+						</p>
+					</div>
+				</div>
+				<div class="empty-config-actions">
+					<Button
+						label="Configure columns from IPD"
+						icon="pi pi-sparkles"
+						size="small"
+						:loading="configuring"
+						@click="configureColumns"
+					/>
+					<a v-if="item" class="inline-link" @click="navItem(item)">Open produced Item</a>
+					<span v-if="item && bomItem" class="dot-sep">·</span>
+					<a v-if="bomItem" class="inline-link" @click="navItem(bomItem)">Open BOM Item</a>
+				</div>
+			</section>
 
 			<template v-else>
-				<div class="grid-meta">
-					{{ includedCount }} of {{ data.length }} combination(s) included
-					<span v-if="bomAttrs.length === 0" class="grid-warn">
-						· This mapping has no BOM-side attribute columns — nothing to map.
-					</span>
+				<!-- Grid toolbar: combination count + Enable/Disable all, right
+				     above the grid (mirrors the Desk EditBOMAttributeMapping
+				     component, whose Disable/Enable buttons sit with the table —
+				     the page-header pair scrolls out of view on a long grid). -->
+				<div class="grid-toolbar">
+					<div class="grid-meta">
+						{{ includedCount }} of {{ data.length }} combination(s) included
+						<span v-if="bomAttrs.length === 0" class="grid-warn">
+							· This mapping has no BOM-side attribute columns — nothing to map.
+						</span>
+					</div>
+					<div class="grid-toolbar-actions">
+						<Button
+							label="Enable all"
+							icon="pi pi-check-circle"
+							size="small"
+							severity="success"
+							:disabled="!data.length"
+							v-tooltip.top="'Include every combination'"
+							@click="enableRows"
+						/>
+						<Button
+							label="Disable incomplete"
+							icon="pi pi-ban"
+							size="small"
+							severity="warn"
+							:disabled="!data.length"
+							v-tooltip.top="'Exclude included rows that have a blank BOM value'"
+							@click="disableRows"
+						/>
+					</div>
 				</div>
 
 				<!-- ── Cross-product grid ── -->
@@ -280,7 +447,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue"
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue"
 import { useRouter } from "vue-router"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
@@ -289,10 +456,12 @@ import Tag from "primevue/tag"
 import Message from "primevue/message"
 import Select from "primevue/select"
 import InputNumber from "primevue/inputnumber"
+import Checkbox from "primevue/checkbox"
 import Tooltip from "primevue/tooltip"
 import { callMethod, getDoc } from "@/api/client"
 import { useDoc } from "@/composables/useDoc"
 import { useAppToast } from "@/composables/useToast"
+import { usePermissions } from "@/composables/usePermissions"
 
 const vTooltip = Tooltip
 
@@ -302,6 +471,7 @@ const props = defineProps({
 
 const router = useRouter()
 const toast = useAppToast()
+const { isAdmin, hasRole } = usePermissions()
 
 const DOCTYPE = "Item BOM Attribute Mapping"
 const docState = useDoc(DOCTYPE)
@@ -326,6 +496,30 @@ const itemAttrValues = reactive({}) // {attr: [vals]} — builds the cross-produ
 const bomAttrValues = reactive({})  // {attr: [vals]} — bom dropdown options
 const data = ref([])        // generated cross-product rows
 const ipdName = ref(null)   // owning IPD (for the breadcrumb), best-effort
+// saved `values` from the last load — re-reconciled whenever the attribute
+// selection changes so already-saved combinations survive a rebuild.
+const savedValues = ref([])
+
+// ── attribute selectors (mirror the Desk item_attributes / bom_item_attributes
+//    grids). The full attribute pool per side comes from get_attributes(item);
+//    the Add picker offers the pool minus the already-selected rows. ──
+const itemAttrPool = ref([]) // all attributes on the produced item
+const bomAttrPool = ref([])  // all attributes on the bom item
+const addItemAttrSel = ref(null)
+const addBomAttrSel = ref(null)
+const sameTip =
+	"Passthrough: when the SAME attribute is flagged on both sides, the BOM variant inherits its value from the produced variant (no column, not stored per-row)."
+// rebuild sequence guard — a later rebuild invalidates an in-flight earlier one.
+let rebuildSeq = 0
+
+const availableItemAttrs = computed(() => {
+	const taken = new Set(itemAttrRows.value.map((r) => r.attribute))
+	return itemAttrPool.value.filter((a) => !taken.has(a))
+})
+const availableBomAttrs = computed(() => {
+	const taken = new Set(bomAttrRows.value.map((r) => r.attribute))
+	return bomAttrPool.value.filter((a) => !taken.has(a))
+})
 
 // per-column Fill buffers
 const fillBom = reactive({})
@@ -333,6 +527,7 @@ const fillQty = ref(null)
 
 const loading = ref(false)
 const loadError = ref(null)
+const configuring = ref(false)
 const saving = computed(() => docState.saving.value)
 
 const deskUrl = computed(
@@ -357,7 +552,12 @@ async function load() {
 	// — send that to the Desk new-form rather than crashing on getDoc("…", "new").
 	// (Mirrors IPDConfigView's `new` handling.)
 	if (props.id === "new") {
-		window.location.href = "/app/item-bom-attribute-mapping/new"
+		// Should never arrive here — IPDConfigView's openMapping pre-creates
+		// the mapping (so it has the IPD + bom_item context) and routes to
+		// the resulting name. Surface a clear error rather than the old
+		// silent Desk redirect, which broke the strict no-Desk rule.
+		loadError.value =
+			"Open this editor from an IPD's BOM row — it can't be created in isolation."
 		return
 	}
 	loading.value = true
@@ -374,47 +574,11 @@ async function load() {
 			attribute: r.attribute,
 			same_attribute: r.same_attribute ? 1 : 0,
 		}))
+		savedValues.value = doc.values || []
 
-		// sameAttrs = item-side same ∩ bom-side same (intersection; mirrors
-		// get_attributes() in the Desk js AND _get_same_mapping_attributes()).
-		const itemSame = new Set(
-			itemAttrRows.value.filter((r) => r.same_attribute).map((r) => r.attribute),
-		)
-		sameAttrs.value = bomAttrRows.value
-			.filter((r) => r.same_attribute && itemSame.has(r.attribute))
-			.map((r) => r.attribute)
-		const sameSet = new Set(sameAttrs.value)
-
-		// Grid columns: drop same_attribute attrs from BOTH sides.
-		itemAttrs.value = itemAttrRows.value
-			.map((r) => r.attribute)
-			.filter((a) => !sameSet.has(a))
-		bomAttrs.value = bomAttrRows.value
-			.map((r) => r.attribute)
-			.filter((a) => !sameSet.has(a))
-
-		// Fetch attribute values:
-		//  - item side → builds the cross-product rows
-		//  - bom side  → dropdown options for the editable columns
-		await Promise.all([loadItemValues(), loadBomValues()])
-
-		// Build the editor `attributes` list (parallels get_attributes()).
-		const attrList = []
-		for (const attr of bomAttrs.value) {
-			attrList.push({ type: "bom", attribute: attr })
-		}
-		for (const attr of itemAttrs.value) {
-			attrList.push({
-				type: "item",
-				attribute: attr,
-				attribute_values: itemAttrValues[attr] || [],
-			})
-		}
-		attributes.value = attrList
-
-		// Generate the cross-product grid, then reconcile saved values onto it.
-		buildGrid()
-		reconcile(doc.values || [])
+		// The pickers need every attribute the produced / bom item carries.
+		await loadAttrPools()
+		await rebuildGrid()
 
 		// Best-effort: find an IPD that links this mapping (for the breadcrumb).
 		fetchOwningIpd()
@@ -425,28 +589,134 @@ async function load() {
 	}
 }
 
-async function loadItemValues() {
-	for (const k of Object.keys(itemAttrValues)) delete itemAttrValues[k]
-	if (!item.value || !itemAttrs.value.length) return
+// Full attribute pool per side (mirror the Desk set_query → get_item_attributes
+// filtered by item). Feeds the Add pickers.
+async function loadAttrPools() {
+	try {
+		const [ip, bp] = await Promise.all([
+			item.value
+				? callMethod("yrp.yrp.doctype.item.item.get_attributes", { item: item.value })
+				: Promise.resolve([]),
+			bomItem.value
+				? callMethod("yrp.yrp.doctype.item.item.get_attributes", { item: bomItem.value })
+				: Promise.resolve([]),
+		])
+		itemAttrPool.value = ip || []
+		bomAttrPool.value = bp || []
+	} catch (e) {
+		toast.warn("Attribute list", e.message)
+	}
+}
+
+// Recompute the derived grid columns from the editable itemAttrRows / bomAttrRows.
+// sameAttrs = item-side same ∩ bom-side same (passthrough — mirrors
+// _get_same_mapping_attributes); those are dropped from BOTH column lists.
+function recomputeColumns() {
+	const itemSame = new Set(
+		itemAttrRows.value.filter((r) => r.same_attribute).map((r) => r.attribute),
+	)
+	sameAttrs.value = bomAttrRows.value
+		.filter((r) => r.same_attribute && itemSame.has(r.attribute))
+		.map((r) => r.attribute)
+	const sameSet = new Set(sameAttrs.value)
+	itemAttrs.value = itemAttrRows.value.map((r) => r.attribute).filter((a) => !sameSet.has(a))
+	bomAttrs.value = bomAttrRows.value.map((r) => r.attribute).filter((a) => !sameSet.has(a))
+}
+
+function buildAttributesList() {
+	const attrList = []
+	for (const attr of bomAttrs.value) attrList.push({ type: "bom", attribute: attr })
+	for (const attr of itemAttrs.value) {
+		attrList.push({ type: "item", attribute: attr, attribute_values: itemAttrValues[attr] || [] })
+	}
+	attributes.value = attrList
+}
+
+// Recompute columns → refetch values → rebuild grid → reconcile saved values.
+// Called on load AND whenever the attribute selection changes. A sequence guard
+// drops a stale in-flight rebuild if the user edits again before it resolves —
+// the same `seq` is threaded into the value loaders so a superseded fetch neither
+// clears nor writes the shared value maps (which feed the live BOM dropdowns).
+// `notify` shows a "rebuilt — review & Save" toast for user-initiated edits.
+async function rebuildGrid({ notify = false } = {}) {
+	const seq = ++rebuildSeq
+	recomputeColumns()
+	await Promise.all([loadItemValues(seq), loadBomValues(seq)])
+	if (seq !== rebuildSeq) return // superseded by a newer edit
+	buildAttributesList()
+	buildGrid()
+	reconcile(savedValues.value || [])
+	if (notify && attributes.value.length) {
+		toast.info("Grid rebuilt", "Attribute columns changed — review the BOM values and click Save.")
+	}
+}
+
+// ── attribute-selector actions (item side) ──
+function addItemAttr() {
+	const a = addItemAttrSel.value
+	if (!a || itemAttrRows.value.some((r) => r.attribute === a)) return
+	itemAttrRows.value.push({ attribute: a, same_attribute: 0 })
+	addItemAttrSel.value = null
+	rebuildGrid({ notify: true })
+}
+function removeItemAttr(i) {
+	itemAttrRows.value.splice(i, 1)
+	rebuildGrid({ notify: true })
+}
+function setItemSame(i, val) {
+	itemAttrRows.value[i].same_attribute = val ? 1 : 0
+	rebuildGrid({ notify: true })
+}
+// ── attribute-selector actions (bom side) ──
+function addBomAttr() {
+	const a = addBomAttrSel.value
+	if (!a || bomAttrRows.value.some((r) => r.attribute === a)) return
+	bomAttrRows.value.push({ attribute: a, same_attribute: 0 })
+	addBomAttrSel.value = null
+	rebuildGrid({ notify: true })
+}
+function removeBomAttr(i) {
+	bomAttrRows.value.splice(i, 1)
+	rebuildGrid({ notify: true })
+}
+function setBomSame(i, val) {
+	bomAttrRows.value[i].same_attribute = val ? 1 : 0
+	rebuildGrid({ notify: true })
+}
+
+// Clear + write the shared value map atomically AFTER the fetch resolves, and
+// only if this rebuild is still current — so an out-of-order older fetch can't
+// clobber a newer rebuild's options (TOCTOU on the live dropdown options).
+async function loadItemValues(seq) {
+	if (!item.value || !itemAttrs.value.length) {
+		for (const k of Object.keys(itemAttrValues)) delete itemAttrValues[k]
+		return
+	}
 	try {
 		const r = await callMethod("yrp.yrp.doctype.item.item.get_attribute_values", {
 			item: item.value,
 			attributes: itemAttrs.value,
 		})
+		if (seq !== undefined && seq !== rebuildSeq) return // superseded
+		for (const k of Object.keys(itemAttrValues)) delete itemAttrValues[k]
 		for (const [k, v] of Object.entries(r || {})) itemAttrValues[k] = v || []
 	} catch (e) {
 		toast.warn("Item attribute values", e.message)
 	}
 }
 
-async function loadBomValues() {
-	for (const k of Object.keys(bomAttrValues)) delete bomAttrValues[k]
-	if (!bomItem.value || !bomAttrs.value.length) return
+async function loadBomValues(seq) {
+	if (!bomItem.value || !bomAttrs.value.length) {
+		for (const k of Object.keys(bomAttrValues)) delete bomAttrValues[k]
+		return
+	}
 	try {
 		const r = await callMethod("yrp.yrp.doctype.item.item.get_attribute_values", {
 			item: bomItem.value,
 			attributes: bomAttrs.value,
 		})
+		if (seq !== undefined && seq !== rebuildSeq) return // superseded
+		for (const k of Object.keys(bomAttrValues)) delete bomAttrValues[k]
 		for (const [k, v] of Object.entries(r || {})) bomAttrValues[k] = v || []
 	} catch (e) {
 		toast.warn("BOM attribute values", e.message)
@@ -528,6 +798,14 @@ function findIndex(itemValues) {
 // repopulate its bom cells + qty. Rows with no matching saved data are excluded.
 function reconcile(values) {
 	if (!data.value.length) return
+
+	// No saved values yet (fresh / just-configured mapping) → leave every row
+	// INCLUDED (buildGrid's default), exactly like the Desk's set_attributes,
+	// which generates all combinations with included=true so the user can fill
+	// them immediately. Only an existing mapping WITH saved values runs the
+	// include-only-the-saved-rows reconciliation below (mirrors load_data, which
+	// only toggles rows off when there is saved g_data to compare against).
+	if (!values || !values.length) return
 
 	// Group by saved index (same_attr rows never exist in `values`, so nothing to
 	// strip here — but guard defensively in case legacy data carries them).
@@ -704,7 +982,49 @@ async function persist(values) {
 	}
 }
 
-onMounted(load)
+// Heal a mapping with empty attribute columns: derive item-side = owning IPD's
+// primary attribute, bom-side = all BOM item attributes (server-side, mirrors
+// production_api). Then reload so the grid renders. Used for legacy mappings
+// created before openMapping seeded columns at creation time.
+async function configureColumns() {
+	configuring.value = true
+	try {
+		const res = await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.bom_mapping.configure_columns",
+			{ mapping: props.id },
+		)
+		if (res && res.changed === false) {
+			toast.info("Already configured", "This mapping already has attribute columns.")
+		} else {
+			toast.success("Columns configured", "Attribute columns set from the owning IPD.")
+		}
+		await load()
+	} catch (e) {
+		toast.error("Could not configure columns", e.message)
+	} finally {
+		configuring.value = false
+	}
+}
+
+// Ctrl/Cmd+S → Save (mirror the Frappe Desk shortcut). preventDefault stops the
+// browser's "save page" dialog. Guarded so it doesn't fire while loading, errored,
+// or already saving.
+function onKeydown(e) {
+	const key = (e.key || "").toLowerCase()
+	if ((e.ctrlKey || e.metaKey) && key === "s") {
+		e.preventDefault()
+		if (loading.value || loadError.value || saving.value) return
+		onSave()
+	}
+}
+
+onMounted(() => {
+	load()
+	window.addEventListener("keydown", onKeydown)
+})
+onBeforeUnmount(() => {
+	window.removeEventListener("keydown", onKeydown)
+})
 
 // ── navigation ──
 function goHome() {
@@ -714,9 +1034,13 @@ function goIpd() {
 	if (ipdName.value) router.push(`/item-production-detail/${encodeURIComponent(ipdName.value)}`)
 }
 function goMappingList() {
-	// Item BOM Attribute Mapping has no sidebar registry / web route; fall back to
-	// the Desk list (mirrors ProcessMatrixEditor.goMatrixList).
-	window.open("/app/item-bom-attribute-mapping", "_blank")
+	// No /web list page for Item BOM Attribute Mapping (open it only from the
+	// owning IPD's BOM row). Strict no-Desk rule: do NOT redirect to
+	// /app/item-bom-attribute-mapping. Surface a friendly toast instead.
+	toast.warn(
+		"No /web list",
+		"Item BOM Attribute Mappings are opened from an IPD's BOM row.",
+	)
 }
 function navItem(name) {
 	if (name) router.push(`/item/${encodeURIComponent(name)}`)
@@ -728,6 +1052,125 @@ function navItem(name) {
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
+}
+.inline-link {
+	color: var(--mgk-accent-700);
+	cursor: pointer;
+	text-decoration: underline;
+}
+.inline-link:hover {
+	color: var(--mgk-accent);
+}
+
+/* Empty-columns state with the auto-configure CTA */
+.empty-config {
+	padding: 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.empty-config-body {
+	display: flex;
+	gap: 14px;
+	align-items: flex-start;
+}
+.empty-icon {
+	font-size: 26px;
+	color: var(--mgk-accent-700);
+	margin-top: 2px;
+}
+.empty-text h3 {
+	margin: 0 0 4px;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--mgk-ink);
+}
+.empty-text p {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--mgk-muted);
+}
+.empty-config-actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+.dot-sep {
+	color: var(--mgk-muted-2);
+}
+
+/* Attribute selector panels (mirror Desk item_attributes / bom_item_attributes) —
+   side by side: Item Attributes left, BOM Item Attributes right. */
+.attr-panels-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 14px;
+	align-items: start;
+}
+@media (max-width: 760px) {
+	.attr-panels-row {
+		grid-template-columns: 1fr;
+	}
+}
+.attr-panel .panel-head {
+	gap: 6px 10px;
+	flex-wrap: wrap;
+}
+.attr-panel .panel-meta {
+	font-size: 11.5px;
+}
+.attr-body {
+	padding: 12px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.attr-empty {
+	font-size: 12.5px;
+	color: var(--mgk-muted-2);
+	font-style: italic;
+}
+.attr-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.attr-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 10px;
+	background: var(--mgk-slate-50);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius-sm);
+}
+.attr-name {
+	font-weight: 600;
+	font-size: 13px;
+	color: var(--mgk-ink);
+	min-width: 120px;
+}
+.same-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: var(--mgk-muted);
+	cursor: pointer;
+	margin-left: auto;
+}
+.attr-add {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.attr-add-select {
+	min-width: 240px;
 }
 
 /* Breadcrumb + header (mirror ProcessMatrixEditor / DocDetail) */
@@ -875,6 +1318,17 @@ function navItem(name) {
 }
 
 /* Grid meta */
+.grid-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+.grid-toolbar-actions {
+	display: flex;
+	gap: 8px;
+}
 .grid-meta {
 	font-size: 12.5px;
 	color: var(--mgk-muted);

@@ -58,7 +58,23 @@
 					outlined
 					@click="openGenericEdit"
 				/>
-				<a class="desk-link" :href="deskUrl" target="_blank" rel="noopener">
+				<Button
+					v-if="doc && canDelete('Item Production Detail')"
+					label="Delete"
+					icon="pi pi-trash"
+					size="small"
+					severity="danger"
+					outlined
+					:loading="deleting"
+					@click="onDelete"
+				/>
+				<a
+					v-if="isAdmin || hasRole('System Manager')"
+					class="desk-link"
+					:href="deskUrl"
+					target="_blank"
+					rel="noopener"
+				>
 					<i class="pi pi-external-link" /> Open in Desk
 				</a>
 			</div>
@@ -99,11 +115,129 @@
 				</div>
 			</div>
 
+			<!-- ── Item Attributes (mirrors the Desk AttributeList) ── -->
+			<section class="panel">
+				<div class="panel-head">
+					<h3>Item Attributes</h3>
+					<span class="panel-meta">
+						{{ itemAttrCards.length }} attribute(s)
+						<span v-if="itemAttrLoading"> · loading…</span>
+					</span>
+				</div>
+				<div v-if="!itemAttrCards.length" class="panel-empty">
+					No attributes on this IPD.
+				</div>
+				<div v-else class="ipd-attr-grid">
+					<div
+						v-for="(card, idx) in itemAttrCards"
+						:key="card.attr_name"
+						class="ipd-attr-card"
+						:class="{ editing: editingAttrIdx === idx }"
+					>
+						<div class="ipd-attr-head">
+							<span class="ipd-attr-title">{{ card.attr_name }}</span>
+							<Button
+								v-if="editingAttrIdx !== idx && card.mapping"
+								icon="pi pi-pencil"
+								text
+								rounded
+								size="small"
+								class="ipd-attr-edit-btn"
+								v-tooltip.top="'Edit values'"
+								@click="enterAttrEdit(idx)"
+							/>
+						</div>
+						<!-- VIEW: chips -->
+						<template v-if="editingAttrIdx !== idx">
+							<div v-if="card.values.length" class="ipd-chip-row">
+								<span
+									v-for="v in card.values"
+									:key="v"
+									class="ipd-attr-chip"
+								>{{ v }}</span>
+							</div>
+							<div v-else class="ipd-attr-empty">No values configured.</div>
+						</template>
+						<!-- EDIT: removable chips + add input -->
+						<template v-else>
+							<div class="ipd-chip-row">
+								<span
+									v-for="(v, i) in attrDraftValues"
+									:key="'d-' + i"
+									class="ipd-attr-chip removable"
+								>
+									{{ v }}
+									<button
+										class="ipd-chip-x"
+										type="button"
+										@click="removeAttrAt(i)"
+									>×</button>
+								</span>
+								<span v-if="!attrDraftValues.length" class="ipd-attr-empty">
+									No values — add one below.
+								</span>
+							</div>
+							<div class="ipd-add-row">
+								<AutoComplete
+									v-model="attrNewValue"
+									:suggestions="attrValueSuggestions"
+									@complete="onAttrNewComplete(card, $event)"
+									@item-select="addAttrValue"
+									@keydown.enter="addAttrValue"
+									placeholder="Pick or type new value…"
+									dropdown
+									completeOnFocus
+									class="ipd-add-input"
+									fluid
+								/>
+								<Button
+									label="Add"
+									icon="pi pi-plus"
+									size="small"
+									severity="secondary"
+									outlined
+									:disabled="!String(attrNewValue || '').trim()"
+									@click="addAttrValue"
+								/>
+							</div>
+							<div class="ipd-edit-actions">
+								<Button
+									label="Cancel"
+									icon="pi pi-times"
+									size="small"
+									severity="secondary"
+									outlined
+									:disabled="attrSaving"
+									@click="cancelAttrEdit"
+								/>
+								<Button
+									label="Save"
+									icon="pi pi-check"
+									size="small"
+									:loading="attrSaving"
+									@click="saveAttrCard(card)"
+								/>
+							</div>
+						</template>
+					</div>
+				</div>
+			</section>
+
 			<!-- ── Item BOM ── -->
 			<section class="panel">
 				<div class="panel-head">
 					<h3>Item BOM</h3>
 					<span class="panel-meta">{{ (doc.item_bom || []).length }} row(s)</span>
+					<Button
+						v-if="bomFormMode === 'off'"
+						label="Add row"
+						icon="pi pi-plus"
+						size="small"
+						severity="secondary"
+						outlined
+						class="panel-add-btn"
+						@click="openAddBom"
+					/>
 				</div>
 				<DataTable :value="doc.item_bom || []" class="mgk-table cfg-dt" :rowHover="false" dataKey="name">
 					<Column field="item" header="Item">
@@ -123,6 +257,9 @@
 					<Column field="process_name" header="Process">
 						<template #body="{ data }">{{ data.process_name || "—" }}</template>
 					</Column>
+					<Column v-if="doc.dependent_attribute" field="dependent_attribute_value" :header="doc.dependent_attribute">
+						<template #body="{ data }">{{ data.dependent_attribute_value || "—" }}</template>
+					</Column>
 					<Column header="Mapping">
 						<template #body="{ data }">
 							<Tag
@@ -135,24 +272,143 @@
 							<span v-else class="muted-dash">Flat qty</span>
 						</template>
 					</Column>
-					<Column header="" :style="{ width: '150px' }">
-						<template #body="{ data }">
-							<Button
-								v-if="data.based_on_attribute_mapping"
-								label="Open mapping"
-								icon="pi pi-arrow-up-right"
-								size="small"
-								text
-								:disabled="!data.attribute_mapping"
-								v-tooltip.left="data.attribute_mapping ? '' : 'No mapping document linked yet'"
-								@click="openMapping(data)"
-							/>
+					<Column header="" :style="{ width: '280px' }">
+						<template #body="{ data, index }">
+							<div class="row-actions">
+								<Button
+									v-if="data.based_on_attribute_mapping"
+									:label="data.attribute_mapping ? 'Open mapping' : 'Configure mapping'"
+									icon="pi pi-arrow-up-right"
+									size="small"
+									text
+									@click="openMapping(data)"
+								/>
+								<Button
+									icon="pi pi-pencil"
+									size="small"
+									text
+									severity="secondary"
+									v-tooltip.top="'Edit row'"
+									:disabled="bomFormMode !== 'off'"
+									@click="openEditBom(index)"
+								/>
+								<Button
+									icon="pi pi-trash"
+									size="small"
+									text
+									severity="danger"
+									v-tooltip.top="'Delete row'"
+									:disabled="bomFormMode !== 'off'"
+									@click="deleteBomRow(index)"
+								/>
+							</div>
 						</template>
 					</Column>
 					<template #empty>
 						<div class="table-empty">No BOM rows.</div>
 					</template>
 				</DataTable>
+
+				<!-- Inline add/edit form for Item BOM -->
+				<div v-if="bomFormMode !== 'off'" class="add-row-form">
+					<div class="form-title">
+						<i :class="bomFormMode === 'edit' ? 'pi pi-pencil' : 'pi pi-plus'" />
+						{{ bomFormMode === 'edit' ? `Edit BOM row #${editingBomIdx + 1}` : "Add BOM row" }}
+					</div>
+					<div class="form-grid">
+						<div class="form-field">
+							<label>Item *</label>
+							<AutoComplete
+								v-model="bomDraft.item"
+								:suggestions="bomItemSuggestions"
+								@complete="onBomItemComplete($event)"
+								@item-select="onBomItemPick($event)"
+								placeholder="Search Item…"
+								dropdown
+								completeOnFocus
+								fluid
+							/>
+						</div>
+						<div class="form-field">
+							<label>Qty of Product *</label>
+							<InputNumber
+								v-model="bomDraft.qty_of_product"
+								:minFractionDigits="0"
+								:maxFractionDigits="3"
+								fluid
+							/>
+						</div>
+						<div class="form-field">
+							<label>Qty of BOM Item *</label>
+							<InputNumber
+								v-model="bomDraft.qty_of_bom_item"
+								:minFractionDigits="0"
+								:maxFractionDigits="3"
+								fluid
+							/>
+						</div>
+						<div class="form-field">
+							<label>UOM</label>
+							<InputText
+								v-model="bomDraft.uom"
+								readonly
+								placeholder="Auto from item"
+								fluid
+							/>
+							<small class="field-hint">Fetched from the item's default UOM.</small>
+						</div>
+						<div class="form-field">
+							<label>Process</label>
+							<AutoComplete
+								v-model="bomDraft.process_name"
+								:suggestions="processSuggestions"
+								@complete="onProcessComplete($event)"
+								placeholder="Search Process…"
+								dropdown
+								completeOnFocus
+								fluid
+							/>
+						</div>
+						<div v-if="doc.dependent_attribute" class="form-field">
+							<label>{{ doc.dependent_attribute }} *</label>
+							<AutoComplete
+								v-model="bomDraft.dependent_attribute_value"
+								:suggestions="depAttrValueSuggestions"
+								@complete="onDepAttrValueComplete($event)"
+								:placeholder="`Select ${doc.dependent_attribute}…`"
+								dropdown
+								completeOnFocus
+								fluid
+							/>
+							<small class="field-hint">Stage at which this BOM item is consumed.</small>
+						</div>
+						<div class="form-field toggle-field">
+							<label>Based on Attribute Mapping</label>
+							<ToggleSwitch
+								:modelValue="!!bomDraft.based_on_attribute_mapping"
+								@update:modelValue="bomDraft.based_on_attribute_mapping = $event ? 1 : 0"
+							/>
+						</div>
+					</div>
+					<div class="add-row-actions">
+						<Button
+							label="Cancel"
+							icon="pi pi-times"
+							size="small"
+							severity="secondary"
+							outlined
+							:disabled="bomSaving"
+							@click="cancelAddBom"
+						/>
+						<Button
+							:label="bomFormMode === 'edit' ? 'Save changes' : 'Add row'"
+							icon="pi pi-check"
+							size="small"
+							:loading="bomSaving"
+							@click="saveBomRow"
+						/>
+					</div>
+				</div>
 			</section>
 
 			<!-- ── IPD Processes ── -->
@@ -160,6 +416,16 @@
 				<div class="panel-head">
 					<h3>IPD Processes</h3>
 					<span class="panel-meta">{{ (doc.ipd_processes || []).length }} process(es)</span>
+					<Button
+						v-if="processFormMode === 'off'"
+						label="Add row"
+						icon="pi pi-plus"
+						size="small"
+						severity="secondary"
+						outlined
+						class="panel-add-btn"
+						@click="openAddProcess"
+					/>
 				</div>
 				<DataTable :value="doc.ipd_processes || []" class="mgk-table cfg-dt" :rowHover="false" dataKey="name">
 					<Column field="process_name" header="Process">
@@ -173,22 +439,106 @@
 					<Column field="out_stage" header="Out Stage">
 						<template #body="{ data }">{{ data.out_stage || "—" }}</template>
 					</Column>
-					<Column header="" :style="{ width: '230px' }">
-						<template #body="{ data }">
-							<Button
-								label="Configure combinations"
-								icon="pi pi-sliders-h"
-								size="small"
-								:loading="configuring === data.process_name"
-								:disabled="!data.process_name || !!configuring"
-								@click="configureCombinations(data)"
-							/>
+					<Column header="" :style="{ width: '340px' }">
+						<template #body="{ data, index }">
+							<div class="row-actions">
+								<Button
+									label="Configure combinations"
+									icon="pi pi-sliders-h"
+									size="small"
+									:loading="configuring === data.process_name"
+									:disabled="!data.process_name || !!configuring"
+									@click="configureCombinations(data)"
+								/>
+								<Button
+									icon="pi pi-pencil"
+									size="small"
+									text
+									severity="secondary"
+									v-tooltip.top="'Edit row'"
+									:disabled="processFormMode !== 'off'"
+									@click="openEditProcess(index)"
+								/>
+								<Button
+									icon="pi pi-trash"
+									size="small"
+									text
+									severity="danger"
+									v-tooltip.top="'Delete row'"
+									:disabled="processFormMode !== 'off'"
+									@click="deleteProcessRow(index)"
+								/>
+							</div>
 						</template>
 					</Column>
 					<template #empty>
 						<div class="table-empty">No processes defined.</div>
 					</template>
 				</DataTable>
+
+				<!-- Inline add/edit form for IPD Processes -->
+				<div v-if="processFormMode !== 'off'" class="add-row-form">
+					<div class="form-title">
+						<i :class="processFormMode === 'edit' ? 'pi pi-pencil' : 'pi pi-plus'" />
+						{{ processFormMode === 'edit' ? `Edit process row #${editingProcessIdx + 1}` : "Add process row" }}
+					</div>
+					<div class="form-grid">
+						<div class="form-field">
+							<label>Process *</label>
+							<AutoComplete
+								v-model="processDraft.process_name"
+								:suggestions="processSuggestions"
+								@complete="onProcessComplete($event)"
+								placeholder="Search Process…"
+								dropdown
+								completeOnFocus
+								fluid
+							/>
+						</div>
+						<div class="form-field">
+							<label>In Stage</label>
+							<AutoComplete
+								v-model="processDraft.in_stage"
+								:suggestions="stageSuggestions"
+								@complete="onStageComplete($event)"
+								placeholder="Pick stage…"
+								dropdown
+								completeOnFocus
+								fluid
+							/>
+						</div>
+						<div class="form-field">
+							<label>Out Stage</label>
+							<AutoComplete
+								v-model="processDraft.out_stage"
+								:suggestions="stageSuggestions"
+								@complete="onStageComplete($event)"
+								placeholder="Pick stage…"
+								dropdown
+								completeOnFocus
+								fluid
+							/>
+						</div>
+					</div>
+					<div class="add-row-actions">
+						<Button
+							label="Cancel"
+							icon="pi pi-times"
+							size="small"
+							severity="secondary"
+							outlined
+							:disabled="processSaving"
+							@click="cancelAddProcess"
+						/>
+						<Button
+							:label="processFormMode === 'edit' ? 'Save changes' : 'Add row'"
+							icon="pi pi-check"
+							size="small"
+							:loading="processSaving"
+							@click="saveProcessRow"
+						/>
+					</div>
+				</div>
 			</section>
 
 			<!-- ── Process Matrices ── -->
@@ -233,11 +583,17 @@ import { useRouter } from "vue-router"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
+import InputText from "primevue/inputtext"
+import AutoComplete from "primevue/autocomplete"
+import InputNumber from "primevue/inputnumber"
+import ToggleSwitch from "primevue/toggleswitch"
 import Tag from "primevue/tag"
 import Message from "primevue/message"
 import Tooltip from "primevue/tooltip"
-import { getDoc, getList } from "@/api/client"
+import { getDoc, getList, deleteDoc, callMethod, searchLink } from "@/api/client"
 import { useAppToast } from "@/composables/useToast"
+import { useAppConfirm } from "@/composables/useConfirm"
+import { usePermissions } from "@/composables/usePermissions"
 import { getRegistryByDoctype } from "@/config/doctypes"
 
 // Local directive registration (components import their own deps in this app).
@@ -249,12 +605,301 @@ const props = defineProps({
 
 const router = useRouter()
 const toast = useAppToast()
+const confirm = useAppConfirm()
+const { canDelete, isAdmin, hasRole } = usePermissions()
+const deleting = ref(false)
 
 const doc = ref(null)
 const loading = ref(false)
 const error = ref(null)
 const matrices = ref([])
 const matricesLoading = ref(false)
+// Item Attributes cards: one per row in doc.item_attributes — { attr_name, mapping, values: [...] }
+const itemAttrCards = ref([])
+const itemAttrLoading = ref(false)
+// Inline-edit state (one card at a time).
+const editingAttrIdx = ref(-1)
+const attrDraftValues = ref([])
+const attrNewValue = ref("")
+const attrSaving = ref(false)
+// AutoComplete suggestion buffer for the "New value" picker — mirrors
+// ItemAttributeListView so the two surfaces share the same UX (lessons-
+// learned 2026-05-29: don't downgrade Link pickers when porting components).
+const attrValueSuggestions = ref([])
+
+// ── Add/Edit form for Item BOM ──
+// bomFormMode: "off" | "add" | "edit". editingBomIdx is the row index when
+// in "edit" mode (-1 otherwise). Single form serves both, switched by mode.
+const bomFormMode = ref("off")
+const editingBomIdx = ref(-1)
+const bomSaving = ref(false)
+const blankBomDraft = () => ({
+	item: "",
+	qty_of_product: null,
+	qty_of_bom_item: null,
+	uom: "",
+	process_name: "",
+	dependent_attribute_value: "",
+	based_on_attribute_mapping: 0,
+})
+const bomDraft = ref(blankBomDraft())
+const bomItemSuggestions = ref([])
+const processSuggestions = ref([])
+const depAttrValueSuggestions = ref([])
+
+function openAddBom() {
+	if (processFormMode.value !== "off") cancelAddProcess()
+	bomDraft.value = blankBomDraft()
+	editingBomIdx.value = -1
+	bomFormMode.value = "add"
+}
+function openEditBom(idx) {
+	const row = (doc.value?.item_bom || [])[idx]
+	if (!row) return
+	if (processFormMode.value !== "off") cancelAddProcess()
+	bomDraft.value = {
+		item: row.item || "",
+		qty_of_product: row.qty_of_product == null ? null : Number(row.qty_of_product),
+		qty_of_bom_item: row.qty_of_bom_item == null ? null : Number(row.qty_of_bom_item),
+		uom: row.uom || "",
+		process_name: row.process_name || "",
+		dependent_attribute_value: row.dependent_attribute_value || "",
+		based_on_attribute_mapping: row.based_on_attribute_mapping ? 1 : 0,
+	}
+	editingBomIdx.value = idx
+	bomFormMode.value = "edit"
+}
+function cancelAddBom() {
+	bomFormMode.value = "off"
+	editingBomIdx.value = -1
+	bomDraft.value = blankBomDraft()
+}
+async function deleteBomRow(idx) {
+	const row = (doc.value?.item_bom || [])[idx]
+	if (!row) return
+	const label = row.item ? `“${row.item}”` : `row #${idx + 1}`
+	confirm.require({
+		header: "Delete BOM row?",
+		message: `Delete BOM ${label}? This cannot be undone.`,
+		acceptLabel: "Delete",
+		acceptClass: "p-button-danger",
+		accept: async () => {
+			try {
+				const ipd = await callMethod("frappe.client.get", {
+					doctype: "Item Production Detail",
+					name: props.id,
+				})
+				const rows = [...(ipd.item_bom || [])]
+				rows.splice(idx, 1)
+				ipd.item_bom = rows
+				await callMethod("frappe.client.save", { doc: ipd })
+				toast.success("Deleted", "BOM row removed")
+				await load()
+			} catch (e) {
+				toast.error("Delete failed", e.message)
+			}
+		},
+	})
+}
+async function onBomItemComplete(e) {
+	try {
+		const rows = await searchLink("Item", e.query || "", {})
+		bomItemSuggestions.value = (rows || []).map((r) => r.name)
+	} catch (_) { bomItemSuggestions.value = [] }
+}
+// When the BOM item is chosen, auto-fetch its default UOM (mirrors production_api's
+// item_bom.uom = fetch_from item.default_unit_of_measure — the UOM is derived from
+// the item, never hand-picked).
+async function onBomItemPick(e) {
+	const name = typeof e?.value === "string" ? e.value : e?.value?.name || bomDraft.value.item
+	if (!name) return
+	try {
+		const r = await callMethod("frappe.client.get_value", {
+			doctype: "Item",
+			filters: { name },
+			fieldname: "default_unit_of_measure",
+		})
+		bomDraft.value.uom = r?.default_unit_of_measure || ""
+	} catch (_) { /* leave uom blank; reqd validation will catch it */ }
+}
+async function onProcessComplete(e) {
+	try {
+		const rows = await searchLink("Process", e.query || "", {})
+		processSuggestions.value = (rows || []).map((r) => r.name)
+	} catch (_) { processSuggestions.value = [] }
+}
+// Dependent-attribute-value picker: the IPD's dependent attribute's values
+// (e.g. Stage → Cut / Stitch / Pack) — the stage at which this BOM item is
+// consumed. Filtered to doc.dependent_attribute (mirrors production_api's
+// set_query on item_bom.dependent_attribute_value).
+async function onDepAttrValueComplete(e) {
+	const attrName = doc.value?.dependent_attribute
+	if (!attrName) { depAttrValueSuggestions.value = []; return }
+	try {
+		const rows = await searchLink("Item Attribute Value", e.query || "", { attribute_name: attrName })
+		depAttrValueSuggestions.value = (rows || []).map((r) => r.name)
+	} catch (_) { depAttrValueSuggestions.value = [] }
+}
+
+// ── Add/Edit form for IPD Processes ──
+const processFormMode = ref("off") // "off" | "add" | "edit"
+const editingProcessIdx = ref(-1)
+const processSaving = ref(false)
+const blankProcessDraft = () => ({ process_name: "", in_stage: "", out_stage: "" })
+const processDraft = ref(blankProcessDraft())
+const stageSuggestions = ref([])
+
+function openAddProcess() {
+	if (bomFormMode.value !== "off") cancelAddBom()
+	processDraft.value = blankProcessDraft()
+	editingProcessIdx.value = -1
+	processFormMode.value = "add"
+}
+function openEditProcess(idx) {
+	const row = (doc.value?.ipd_processes || [])[idx]
+	if (!row) return
+	if (bomFormMode.value !== "off") cancelAddBom()
+	processDraft.value = {
+		process_name: row.process_name || "",
+		in_stage: row.in_stage || "",
+		out_stage: row.out_stage || "",
+	}
+	editingProcessIdx.value = idx
+	processFormMode.value = "edit"
+}
+function cancelAddProcess() {
+	processFormMode.value = "off"
+	editingProcessIdx.value = -1
+	processDraft.value = blankProcessDraft()
+}
+async function deleteProcessRow(idx) {
+	const row = (doc.value?.ipd_processes || [])[idx]
+	if (!row) return
+	const label = row.process_name ? `“${row.process_name}”` : `row #${idx + 1}`
+	confirm.require({
+		header: "Delete process row?",
+		message: `Delete process ${label}? This cannot be undone.`,
+		acceptLabel: "Delete",
+		acceptClass: "p-button-danger",
+		accept: async () => {
+			try {
+				const ipd = await callMethod("frappe.client.get", {
+					doctype: "Item Production Detail",
+					name: props.id,
+				})
+				const rows = [...(ipd.ipd_processes || [])]
+				rows.splice(idx, 1)
+				ipd.ipd_processes = rows
+				await callMethod("frappe.client.save", { doc: ipd })
+				toast.success("Deleted", "Process row removed")
+				await load()
+			} catch (e) {
+				toast.error("Delete failed", e.message)
+			}
+		},
+	})
+}
+async function onStageComplete(e) {
+	// Stages are the IPD's dependent-attribute values (e.g. Cut/Piece/Pack).
+	const attrName = doc.value?.dependent_attribute
+	if (!attrName) { stageSuggestions.value = []; return }
+	try {
+		const rows = await searchLink("Item Attribute Value", e.query || "", { attribute_name: attrName })
+		stageSuggestions.value = (rows || []).map((r) => r.name)
+	} catch (_) { stageSuggestions.value = [] }
+}
+async function saveProcessRow() {
+	const d = processDraft.value
+	const proc = typeof d.process_name === "string" ? d.process_name : d.process_name?.name || ""
+	if (!proc) {
+		toast.warn("Missing required field", "Process is required.")
+		return
+	}
+	processSaving.value = true
+	try {
+		const ipd = await callMethod("frappe.client.get", {
+			doctype: "Item Production Detail",
+			name: props.id,
+		})
+		const rows = [...(ipd.ipd_processes || [])]
+		const patch = {
+			process_name: proc,
+			in_stage: typeof d.in_stage === "string" ? d.in_stage : d.in_stage?.name || "",
+			out_stage: typeof d.out_stage === "string" ? d.out_stage : d.out_stage?.name || "",
+		}
+		if (processFormMode.value === "edit" && editingProcessIdx.value >= 0 && editingProcessIdx.value < rows.length) {
+			// Preserve identifiers (name, idx, parent links) so the server updates in place.
+			rows[editingProcessIdx.value] = { ...rows[editingProcessIdx.value], ...patch }
+		} else {
+			rows.push({ doctype: "IPD Process", ...patch })
+		}
+		ipd.ipd_processes = rows
+		await callMethod("frappe.client.save", { doc: ipd })
+		toast.success("Saved", processFormMode.value === "edit" ? "Process row updated" : "Process row added")
+		cancelAddProcess()
+		await load()
+	} catch (e) {
+		toast.error("Save failed", e.message)
+	} finally {
+		processSaving.value = false
+	}
+}
+
+async function saveBomRow() {
+	const d = bomDraft.value
+	if (!d.item || !d.uom || !(Number(d.qty_of_product) > 0) || !(Number(d.qty_of_bom_item) > 0)) {
+		toast.warn("Missing required field", "Item, UOM, and both quantities are required.")
+		return
+	}
+	const depAttr = doc.value?.dependent_attribute
+	const depVal = typeof d.dependent_attribute_value === "string"
+		? d.dependent_attribute_value
+		: d.dependent_attribute_value?.name || ""
+	// production_api makes dependent_attribute_value required on the BOM row when
+	// the IPD has a dependent attribute (updateChildTableReqd, item_production_detail.js:522).
+	if (depAttr && !depVal) {
+		toast.warn("Missing required field", `${depAttr} (stage) is required for each BOM row.`)
+		return
+	}
+	bomSaving.value = true
+	try {
+		const ipd = await callMethod("frappe.client.get", {
+			doctype: "Item Production Detail",
+			name: props.id,
+		})
+		const rows = [...(ipd.item_bom || [])]
+		const patch = {
+			item: typeof d.item === "string" ? d.item : d.item?.name || "",
+			qty_of_product: Number(d.qty_of_product) || 0,
+			qty_of_bom_item: Number(d.qty_of_bom_item) || 0,
+			uom: typeof d.uom === "string" ? d.uom : d.uom?.name || "",
+			process_name: typeof d.process_name === "string" ? d.process_name : d.process_name?.name || "",
+			dependent_attribute_value: depVal,
+			based_on_attribute_mapping: d.based_on_attribute_mapping ? 1 : 0,
+		}
+		if (bomFormMode.value === "edit" && editingBomIdx.value >= 0 && editingBomIdx.value < rows.length) {
+			// Preserve identifiers + the attribute_mapping link so an existing
+			// cross-product mapping isn't orphaned when the row is edited. But if
+			// the user toggles "based on attribute mapping" OFF, clear the stale
+			// link (mirrors production_api unsetting bom.attribute_mapping when
+			// the flag is cleared — the engine ignores the mapping once the flag
+			// is off, so a dangling link would just be a confusing orphan).
+			if (!patch.based_on_attribute_mapping) patch.attribute_mapping = null
+			rows[editingBomIdx.value] = { ...rows[editingBomIdx.value], ...patch }
+		} else {
+			rows.push({ doctype: "Item BOM", ...patch })
+		}
+		ipd.item_bom = rows
+		await callMethod("frappe.client.save", { doc: ipd })
+		toast.success("Saved", bomFormMode.value === "edit" ? "BOM row updated" : "BOM row added")
+		cancelAddBom()
+		await load()
+	} catch (e) {
+		toast.error("Save failed", e.message)
+	} finally {
+		bomSaving.value = false
+	}
+}
 const configuring = ref(null) // process_name currently resolving its redirect
 
 const headerLine = computed(() => {
@@ -279,13 +924,14 @@ const deskUrl = computed(
 )
 
 async function load() {
-	// This rich view configures an EXISTING IPD. Creating a new IPD is a heavy
-	// master-data task (item attributes, dependent-attribute mapping, BOM) that
-	// the generic /web form doesn't model — our explicit route also captures
-	// `/item-production-detail/new`, so send that to the Desk new-form rather
-	// than 404-ing on getDoc("…", "new").
+	// This rich view configures an EXISTING IPD. Create goes through the
+	// generic DocDetail at /web/item-production-detail/new — the router has an
+	// explicit entry BEFORE this view so we should never receive id==="new"
+	// here. Defensive guard: surface a friendly error instead of the old
+	// silent Desk redirect (`/app/item-production-detail/new`) which broke the
+	// strict "no Desk for restricted users" rule.
 	if (props.id === "new") {
-		window.location.href = "/app/item-production-detail/new"
+		error.value = "Use the New button on the Item Production Detail list — this surface is for existing IPDs."
 		return
 	}
 	loading.value = true
@@ -293,10 +939,60 @@ async function load() {
 	try {
 		doc.value = await getDoc("Item Production Detail", props.id)
 		loadMatrices()
+		loadItemAttributes()
 	} catch (e) {
 		error.value = e.message || "Failed to load Item Production Detail"
 	} finally {
 		loading.value = false
+	}
+}
+
+// Hydrate the "Item Attributes" panel: one card per IPD attribute row,
+// showing the actual attribute values (Cut/Piece/Pack, S/M/L/XL, …)
+// fetched from each row's mapping doc. Single bulk get_list across every
+// mapping name so the panel renders in one round-trip.
+async function loadItemAttributes() {
+	const rows = doc.value?.item_attributes || []
+	if (!rows.length) {
+		itemAttrCards.value = []
+		return
+	}
+	itemAttrLoading.value = true
+	try {
+		// Fetch each mapping's full doc in parallel and read its `values`
+		// child rows. frappe.client.get_list strips child-doctype fields
+		// like `parent`/`attribute_value` so we can't pull all values in a
+		// single query — but typical IPDs have only 4-5 attribute rows so
+		// the round-trips are cheap, and the parent get_doc surfaces every
+		// child row in order.
+		const docs = await Promise.all(
+			rows.map((r) =>
+				r.mapping
+					? callMethod("frappe.client.get", {
+							doctype: r.mapping_doctype || "Item Item Attribute Mapping",
+							name: r.mapping,
+					  }).catch(() => null)
+					: Promise.resolve(null),
+			),
+		)
+		itemAttrCards.value = rows.map((r, i) => {
+			const m = docs[i]
+			const vals = (m?.values || []).map((v) => v.attribute_value).filter(Boolean)
+			return {
+				attr_name: r.attribute,
+				mapping: r.mapping || "",
+				values: vals,
+			}
+		})
+	} catch (e) {
+		toast.warn("Could not load attribute values", e.message)
+		itemAttrCards.value = rows.map((r) => ({
+			attr_name: r.attribute,
+			mapping: r.mapping || "",
+			values: [],
+		}))
+	} finally {
+		itemAttrLoading.value = false
 	}
 }
 
@@ -321,11 +1017,106 @@ async function loadMatrices() {
 onMounted(load)
 
 // ── Item BOM mapping link (R1b target) ──
-function openMapping(row) {
-	if (!row.attribute_mapping) return
-	router.push(
-		`/item-bom-attribute-mapping/${encodeURIComponent(row.attribute_mapping)}`,
-	)
+async function openMapping(row) {
+	if (row.attribute_mapping) {
+		router.push(
+			`/item-bom-attribute-mapping/${encodeURIComponent(row.attribute_mapping)}`,
+		)
+		return
+	}
+	// No mapping yet — auto-create one with the item + bom_item context AND the
+	// attribute columns (item-side = IPD primary attribute, bom-side = all BOM
+	// item attributes) so the editor's cross-product grid renders immediately.
+	// This mirrors production_api's IPD.update_mapping_values; doing the
+	// attribute derivation server-side keeps it identical to the Python
+	// reference (and avoids the old empty-columns bug where the editor showed
+	// "no item-side attributes to map"). Link it back onto the IPD's child row,
+	// then navigate. Errors surface as a toast.
+	try {
+		// create_mapping is idempotent + atomic: it back-links the BOM child row
+		// in the same request (passing bom_row), so there's no separate
+		// set_value round-trip whose failure could orphan a never-linked
+		// mapping. A repeat click returns the existing mapping rather than
+		// creating a duplicate.
+		const newName = await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.bom_mapping.create_mapping",
+			{ ipd: props.id, bom_item: row.item || "", bom_row: row.name || "" },
+		)
+		if (!newName) throw new Error("Server did not return a mapping name")
+		// Update the local doc so subsequent "Open mapping" clicks use the fast path.
+		row.attribute_mapping = newName
+		router.push(`/item-bom-attribute-mapping/${encodeURIComponent(newName)}`)
+	} catch (e) {
+		toast.error("Could not open mapping", e.message)
+	}
+}
+
+// ── Inline edit for Item Attributes cards ──
+function enterAttrEdit(idx) {
+	editingAttrIdx.value = idx
+	attrDraftValues.value = [...(itemAttrCards.value[idx]?.values || [])]
+	attrNewValue.value = ""
+}
+function cancelAttrEdit() {
+	editingAttrIdx.value = -1
+	attrDraftValues.value = []
+	attrNewValue.value = ""
+}
+function addAttrValue() {
+	const raw = attrNewValue.value
+	const v = (typeof raw === "string" ? raw : raw?.name || "").trim()
+	if (!v) return
+	if (attrDraftValues.value.includes(v)) {
+		toast.warn("Duplicate", `"${v}" already in the list.`)
+		attrNewValue.value = ""
+		return
+	}
+	attrDraftValues.value.push(v)
+	attrNewValue.value = ""
+	attrValueSuggestions.value = []
+}
+// Filtered list of existing Item Attribute Values for this attribute, minus
+// the ones already in the draft. Free-text entry still allowed — the
+// AutoComplete leaves v-model as the typed string when nothing matches.
+async function onAttrNewComplete(card, e) {
+	const q = e?.query || ""
+	try {
+		const rows = await searchLink("Item Attribute Value", q, {
+			attribute_name: card.attr_name,
+		})
+		attrValueSuggestions.value = (rows || [])
+			.map((r) => r.name)
+			.filter((n) => !attrDraftValues.value.includes(n))
+	} catch (_) {
+		attrValueSuggestions.value = []
+	}
+}
+function removeAttrAt(i) {
+	attrDraftValues.value.splice(i, 1)
+}
+async function saveAttrCard(card) {
+	if (!card.mapping) {
+		toast.error("No mapping doc", "Cannot save — the attribute mapping is missing.")
+		return
+	}
+	attrSaving.value = true
+	try {
+		await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.item_attribute.update_mapping_values",
+			{
+				mapping: card.mapping,
+				attribute_name: card.attr_name,
+				values: attrDraftValues.value,
+			},
+		)
+		toast.success("Saved", `${card.attr_name} values updated`)
+		cancelAttrEdit()
+		await loadItemAttributes()
+	} catch (e) {
+		toast.error("Save failed", e.message)
+	} finally {
+		attrSaving.value = false
+	}
 }
 
 // ── The synthesized "Configure combinations" redirect ──
@@ -368,11 +1159,10 @@ function goList() {
 	router.push("/item-production-detail")
 }
 function openGenericEdit() {
-	// This rich view OWNS /item-production-detail/:id, so we can't delegate field
-	// editing to the generic DocDetail (same path → re-enters this component).
-	// Full field/child editing of the IPD itself happens in the Desk form; the
-	// rich config flow (combinations / mappings) lives here.
-	window.open(deskUrl.value, "_blank")
+	// Field/child editing of the IPD itself goes through DocDetail at the
+	// `/fields` sub-route — see router (declared BEFORE the IPDConfigView
+	// catch-all). The rich BOM/matrix surface stays here.
+	router.push(`/item-production-detail/${encodeURIComponent(props.id)}/fields`)
 }
 function navigateDoc(dt, name) {
 	if (!name) return
@@ -380,9 +1170,35 @@ function navigateDoc(dt, name) {
 	if (reg) {
 		router.push(`/${reg.route}/${encodeURIComponent(name)}`)
 	} else {
-		const slug = dt.toLowerCase().replace(/ /g, "-")
-		window.open(`/app/${encodeURIComponent(slug)}/${encodeURIComponent(name)}`, "_blank")
+		// Non-registry doctype: don't redirect to Desk — restricted users
+		// must stay in /web (conventions.md 2026-05-29). Tell the user
+		// instead so they know the link is unsupported here.
+		toast.warn(
+			"Not available in /web",
+			`${dt} doesn't have a /web page yet.`,
+		)
 	}
+}
+
+function onDelete() {
+	if (!doc.value) return
+	confirm.require({
+		header: "Delete document",
+		message: `Permanently delete ${props.id}? This cannot be undone.`,
+		acceptLabel: "Delete",
+		acceptClass: "p-button-danger",
+		accept: async () => {
+			deleting.value = true
+			try {
+				await deleteDoc("Item Production Detail", props.id)
+				toast.success("Deleted", `${props.id} deleted`)
+				router.push("/item-production-detail")
+			} catch (e) {
+				toast.error("Delete failed", e.message)
+				deleting.value = false
+			}
+		},
+	})
 }
 
 // ── formatting ──
@@ -544,6 +1360,164 @@ a.av:hover {
 .panel-meta {
 	font-size: 12px;
 	color: var(--mgk-muted);
+}
+.panel-empty {
+	padding: 18px 14px;
+	color: var(--mgk-muted);
+	font-size: 13px;
+}
+.ipd-attr-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 12px;
+	padding: 12px 14px;
+}
+.ipd-attr-card {
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius-sm);
+	padding: 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+.ipd-attr-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.ipd-attr-title {
+	font-size: 11.5px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--mgk-muted);
+	font-weight: 600;
+	flex: 1;
+	min-width: 0;
+}
+.ipd-chip-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.ipd-attr-chip {
+	display: inline-flex;
+	align-items: center;
+	background: var(--mgk-accent-50);
+	color: var(--mgk-accent-700);
+	border-radius: 999px;
+	font-size: 12.5px;
+	font-weight: 500;
+	padding: 3px 11px;
+	line-height: 1.3;
+}
+.ipd-attr-empty {
+	color: var(--mgk-muted);
+	font-size: 12px;
+	font-style: italic;
+}
+.ipd-attr-card.editing {
+	border-color: var(--mgk-accent);
+	box-shadow: 0 0 0 3px var(--mgk-accent-50);
+}
+.ipd-attr-edit-btn {
+	color: var(--mgk-muted-2);
+}
+.ipd-attr-edit-btn:hover {
+	color: var(--mgk-accent-700);
+}
+.ipd-attr-chip.removable {
+	padding-right: 4px;
+}
+.ipd-chip-x {
+	background: transparent;
+	border: 0;
+	color: var(--mgk-accent-700);
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+	padding: 0 4px;
+	border-radius: 999px;
+	opacity: 0.7;
+}
+.ipd-chip-x:hover {
+	opacity: 1;
+	background: var(--mgk-accent);
+	color: white;
+}
+.ipd-add-row {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	margin-top: 4px;
+}
+.ipd-add-input {
+	flex: 1;
+	min-width: 0;
+}
+.ipd-edit-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	margin-top: 6px;
+}
+.panel-add-btn {
+	margin-left: auto;
+}
+.add-row-form {
+	padding: 14px;
+	border-top: 1px solid var(--mgk-line);
+	background: var(--mgk-slate-50);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.add-row-form .form-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 12px 16px;
+}
+.add-row-form .form-field {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.add-row-form .form-field label {
+	font-size: 11.5px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--mgk-muted);
+	font-weight: 600;
+}
+.add-row-form .toggle-field label {
+	margin-bottom: 4px;
+}
+.add-row-form .field-hint {
+	font-size: 10.5px;
+	color: var(--mgk-muted-2);
+	margin-top: 2px;
+}
+.add-row-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+}
+.add-row-form .form-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--mgk-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.row-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	justify-content: flex-end;
 }
 
 /* Tables */

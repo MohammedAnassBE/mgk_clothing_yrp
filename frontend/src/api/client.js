@@ -60,14 +60,32 @@ async function request(url, options = {}) {
     throw new Error(msg)
   }
 
-  if (response.status === 404) {
+  if (response.status === 404 || response.status === 409 || response.status === 417) {
+    // Frappe maps validate-throw failures to various 4xx codes (404 for
+    // `DoesNotExistError`, 417 for `ValidationError`, 409 for stale-doc).
+    // Frontend used to show generic "Not found" / "Conflict" toasts; instead
+    // surface the real `_server_messages` payload so the user sees the
+    // actual validation message (e.g. "Please set Stage values before
+    // setting it as Dependent Attribute").
     const body = await response.json().catch(() => ({}))
-    throw new Error(body.message || 'Not found')
-  }
-
-  if (response.status === 409) {
-    const body = await response.json().catch(() => ({}))
-    throw new Error(body.message || 'Conflict: document has been modified')
+    let msg = body.message || (
+      response.status === 404
+        ? 'Not found'
+        : response.status === 409
+          ? 'Conflict: document has been modified'
+          : `Request failed with status ${response.status}`
+    )
+    if (body._server_messages) {
+      try {
+        const parts = JSON.parse(body._server_messages).map((m) => {
+          try { return JSON.parse(m).message || m } catch { return m }
+        })
+        if (parts.length) msg = parts.join('\n')
+      } catch { /* keep default */ }
+    }
+    // Strip HTML tags for clean display.
+    msg = String(msg).replace(/<[^>]*>/g, '').trim()
+    throw new Error(msg)
   }
 
   if (!response.ok) {
@@ -296,14 +314,41 @@ export async function getCount(doctype, filters = {}, or_filters = null, distinc
 /**
  * Search for link-field values (type-ahead / autocomplete).
  */
+// Title-aware Link search. Delegates to the server `link_search`, which matches
+// the typed text against `name` AND the doctype's title_field / search_fields
+// (so e.g. an Item autonamed `Item-00012` is found by its descriptive `name1`
+// = "Greige Yarn"). Returns [{ name, label }] — `name` is the value a Link
+// stores, `label` is what to show the user. Back-compat: every existing caller
+// reads `r.name`, which is still present.
 export async function searchLink(doctype, txt, filters = {}) {
-  const result = await callMethod('frappe.client.get_list', {
-    doctype,
-    filters: { ...filters, name: ['like', `%${txt}%`] },
-    fields: ['name'],
-    limit_page_length: 20,
+  const result = await callMethod(
+    'mgk_clothing_yrp.mgk_clothing_yrp.api.link_search.link_search',
+    { doctype, txt: txt || '', filters, page_length: 20 },
+  )
+  return result || []
+}
+
+/**
+ * Autocomplete Addresses belonging to a party (Supplier/Customer/…).
+ * The Address ↔ party relation is a Dynamic Link child table, so a plain
+ * filter on `tabAddress` can't express it. Frappe's whitelisted
+ * `address_query` is the same path the Desk uses — it joins Dynamic Link
+ * rows and returns one row per matching Address as a tuple
+ * `(name, address_line1, link_doctype, link_name)`. We project to
+ * `{ name }` to keep the LinkField shape uniform with `searchLink`.
+ */
+export async function searchAddressForParty(partyDoctype, partyName, txt) {
+  if (!partyDoctype || !partyName) return []
+  const rows = await callMethod('frappe.contacts.doctype.address.address.address_query', {
+    doctype: 'Address',
+    txt: txt || '',
+    searchfield: 'name',
+    start: 0,
+    page_len: 20,
+    filters: { link_doctype: partyDoctype, link_name: partyName },
   })
-  return result
+  if (!Array.isArray(rows)) return []
+  return rows.map((row) => ({ name: Array.isArray(row) ? row[0] : row.name }))
 }
 
 // ---------------------------------------------------------------------------

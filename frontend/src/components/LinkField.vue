@@ -11,10 +11,11 @@
 	<div class="link-field">
 		<AutoComplete
 			:modelValue="modelValue"
-			@update:modelValue="$emit('update:modelValue', $event)"
+			@update:modelValue="onModelUpdate"
 			:suggestions="suggestions"
+			optionLabel="label"
 			@complete="onComplete"
-			@item-select="$emit('item-select', $event)"
+			@item-select="onItemSelect"
 			@change="$emit('change', $event)"
 			:disabled="disabled"
 			:invalid="invalid"
@@ -55,22 +56,54 @@ const props = defineProps({
 	disabled: { type: Boolean, default: false },
 	invalid: { type: Boolean, default: false },
 	filters: { type: Object, default: () => ({}) },
+	// Optional custom search: async (query) => Array<{ name }>. When provided,
+	// it replaces the default name-like search (used for Addresses where the
+	// link is via Dynamic Link rather than a direct field, so a plain filter
+	// can't reach the parent party — see `searchAddressForParty`).
+	searchHandler: { type: Function, default: null },
 })
-defineEmits(["update:modelValue", "item-select", "change"])
+const emit = defineEmits(["update:modelValue", "item-select", "change"])
 
+// Suggestions are objects { name, label } — `label` (title/search-field text) is
+// shown via optionLabel, while `name` is the value stored on select. A search
+// handler may still return plain {name} rows (no label) — we normalise those so
+// the dropdown always has a label to render.
 const suggestions = ref([])
 
+function normaliseRows(rows) {
+	return (rows || []).map((r) =>
+		typeof r === "string"
+			? { name: r, label: r }
+			: { name: r.name, label: r.label || r.name },
+	)
+}
+
 async function onComplete(e) {
-	if (!props.targetDoctype) {
+	if (!props.searchHandler && !props.targetDoctype) {
 		suggestions.value = []
 		return
 	}
 	try {
-		const rows = await searchLink(props.targetDoctype, e.query || "", props.filters)
-		suggestions.value = rows.map((r) => r.name)
+		const rows = props.searchHandler
+			? await props.searchHandler(e.query || "")
+			: await searchLink(props.targetDoctype, e.query || "", props.filters)
+		suggestions.value = normaliseRows(rows)
 	} catch (_) {
 		suggestions.value = []
 	}
+}
+
+// Selecting a suggestion stores its `name` (the Link value), not the object.
+function onItemSelect(e) {
+	const name = e?.value?.name ?? e?.value ?? ""
+	emit("update:modelValue", name)
+	emit("item-select", { value: name, originalEvent: e?.originalEvent })
+}
+
+// Free-text typing / clearing comes through as a string; an object can slip
+// through if PrimeVue echoes the selected suggestion — normalise to the name.
+function onModelUpdate(v) {
+	emit("update:modelValue", v && typeof v === "object" ? v.name : v)
 }
 
 // Open the linked record (new tab): /web detail if the doctype is in the registry,

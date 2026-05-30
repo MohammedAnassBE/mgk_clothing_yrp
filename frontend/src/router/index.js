@@ -17,9 +17,27 @@ const routes = [
 			},
 			// ── Rich production-config flows (R1a) — EXPLICIT routes, declared
 			//    BEFORE the generic :docRoute/:id catch-all so they win the match.
-			//    IPDConfigView: the IPD config surface (BOM + processes + matrices).
+			//    IPDConfigView: the IPD config surface (BOM + processes + matrices)
+			//    for an EXISTING IPD. Create flows go through DocDetail (the
+			//    rich view assumes the doc already exists; preserves the strict
+			//    "no Desk redirect" rule — see conventions.md 2026-05-29).
 			//    ProcessMatrixEditor: the "process the combination" editor; also
 			//    handles :id === "new" (create) reading ?ipd=&process= from query.
+			{
+				path: "item-production-detail/new",
+				name: "IPDCreate",
+				component: () => import("@/views/dynamic/DocDetail.vue"),
+				props: { docRoute: "item-production-detail", id: "new" },
+			},
+			// /web edit-fields path. IPDConfigView is the rich BOM/matrix surface;
+			// editing the IPD's scalar fields + child rows happens via DocDetail
+			// here. Must be declared BEFORE the IPDConfigView catch-all.
+			{
+				path: "item-production-detail/:id/fields",
+				name: "IPDEditFields",
+				component: () => import("@/views/dynamic/DocDetail.vue"),
+				props: (route) => ({ docRoute: "item-production-detail", id: route.params.id }),
+			},
 			{
 				path: "item-production-detail/:id",
 				name: "IPDConfig",

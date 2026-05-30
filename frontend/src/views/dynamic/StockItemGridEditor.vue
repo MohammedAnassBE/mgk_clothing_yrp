@@ -118,6 +118,10 @@
 									<template v-if="data.values[pv] && cellFields.length">
 										<span v-for="cf in cellFields" :key="'cf-' + cf.name" class="cell-extra">{{ cf.label }}: {{ fmtCell(data.values[pv][cf.name]) }}</span>
 									</template>
+									<span
+										v-if="hasSecondary(data.values[pv])"
+										class="cell-extra"
+									>Sec: {{ fmtCell(data.values[pv].secondary_qty) }} {{ data.values[pv].secondary_uom }}</span>
 							</template>
 						</Column>
 					</template>
@@ -138,6 +142,10 @@
 									<template v-if="data.values.default && cellFields.length">
 										<span v-for="cf in cellFields" :key="'cf-' + cf.name" class="cell-extra">{{ cf.label }}: {{ fmtCell(data.values.default[cf.name]) }}</span>
 									</template>
+									<span
+										v-if="hasSecondary(data.values.default)"
+										class="cell-extra"
+									>Sec: {{ fmtCell(data.values.default.secondary_qty) }} {{ data.values.default.secondary_uom }}</span>
 							</template>
 						</Column>
 					</template>
@@ -146,7 +154,7 @@
 						<template #body="{ data }">{{ data.default_uom || "—" }}</template>
 					</Column>
 
-					<Column v-if="editable" :style="{ width: '88px' }" bodyStyle="text-align:center">
+					<Column v-if="editable && !lockedItems" :style="{ width: '88px' }" bodyStyle="text-align:center">
 						<template #body="{ index }">
 							<Button
 								icon="pi pi-pencil"
@@ -176,11 +184,11 @@
 			</div>
 		</div>
 		<div v-else class="grid-empty-state">
-			No items yet. {{ editable ? "Add a parent item below to enter quantities per size." : "" }}
+			No items yet. {{ editable && !lockedItems ? "Add a parent item below to enter quantities per size." : "" }}
 		</div>
 
 		<!-- ── Add-item form ── -->
-		<section v-if="editable" class="add-form">
+		<section v-if="editable && !lockedItems" class="add-form">
 			<div class="add-head">
 				<h4>{{ draft.editing ? "Edit item" : (draft.parentItem ? "Configure quantities" : "Add item") }}</h4>
 				<span v-if="loadingAttrs" class="add-loading">
@@ -264,7 +272,35 @@
 					</div>
 				</div>
 
-				<!-- Qty pivot — one cell per primary-attribute value (the sizes) -->
+				<!-- Opt-in "Update Secondary" toggle. On flip ON, the editor fetches
+				     the Item's secondary_unit_of_measure (one UOM per row, shown as
+				     a label) and Secondary Qty becomes an editable per-cell input.
+				     Hidden entirely when the parent doctype doesn't carry secondary
+				     fields (showSecondaryToggle=false). -->
+				<div v-if="showSecondaryToggle" class="add-row sec-row">
+					<div class="add-fld toggle-fld">
+						<label>Update Secondary</label>
+						<ToggleSwitch
+							:modelValue="!!draft.updateSecondary"
+							@update:modelValue="onUpdateSecondaryToggle($event)"
+						/>
+					</div>
+					<div v-if="draft.updateSecondary && draft.secondaryUom" class="add-fld">
+						<label>Secondary UOM</label>
+						<div class="sec-uom-display">{{ draft.secondaryUom }}</div>
+					</div>
+					<div v-else-if="draft.updateSecondary && !draft.secondaryUom" class="add-fld">
+						<label>&nbsp;</label>
+						<div class="sec-uom-display muted">No Secondary UOM on this item</div>
+					</div>
+				</div>
+
+				<!-- Qty pivot — one cell per primary-attribute value (the sizes).
+				     Each cell renders the qty input + a numeric input per cellFields
+				     entry tagged `editable: true` (rate / …) + an optional Secondary
+				     Qty input when Update Secondary is on. Mirrors the Desk
+				     ItemDimensionFetch.vue per-primary-value loop AND the production_api
+				     DC deliverable_items.vue per-cell secondary_qty input. -->
 				<div v-if="draft.primaryAttribute && draft.primaryValues.length" class="qty-pivot">
 					<div
 						v-for="pv in draft.primaryValues"
@@ -281,9 +317,31 @@
 							class="cell-num"
 							fluid
 						/>
+						<template v-for="cf in editableCellFields" :key="'cf-' + pv + '-' + cf.name">
+							<label class="cell-sub">{{ cf.label }}</label>
+							<InputNumber
+								v-model="draft.values[pv][cf.name]"
+								:min="0"
+								:minFractionDigits="0"
+								:maxFractionDigits="3"
+								class="cell-num"
+								fluid
+							/>
+						</template>
+						<template v-if="draft.updateSecondary && draft.secondaryUom">
+							<label class="cell-sub">Sec Qty</label>
+							<InputNumber
+								v-model="draft.values[pv].secondary_qty"
+								:min="0"
+								:minFractionDigits="0"
+								:maxFractionDigits="3"
+								class="cell-num"
+								fluid
+							/>
+						</template>
 					</div>
 				</div>
-				<!-- No primary attribute → a single qty -->
+				<!-- No primary attribute → a single qty + the same editable cell fields -->
 				<div v-else class="qty-single">
 					<label>{{ draft.defaultUom || "Qty" }} <span class="req">*</span></label>
 					<InputNumber
@@ -294,6 +352,40 @@
 						class="cell-num qty-single-input"
 						fluid
 					/>
+					<template v-for="cf in editableCellFields" :key="'cfs-' + cf.name">
+						<label class="cell-sub">{{ cf.label }}</label>
+						<InputNumber
+							v-model="draft.values.default[cf.name]"
+							:min="0"
+							:minFractionDigits="0"
+							:maxFractionDigits="3"
+							class="cell-num qty-single-input"
+							fluid
+						/>
+					</template>
+					<template v-if="draft.updateSecondary && draft.secondaryUom">
+						<label class="cell-sub">Sec Qty ({{ draft.secondaryUom }})</label>
+						<InputNumber
+							v-model="draft.values.default.secondary_qty"
+							:min="0"
+							:minFractionDigits="0"
+							:maxFractionDigits="3"
+							class="cell-num qty-single-input"
+							fluid
+						/>
+					</template>
+				</div>
+
+				<!-- Per-row Allow Zero Valuation Rate toggle (mirrors the Desk
+				     otherInputs for Stock Reconciliation). -->
+				<div v-if="showAllowZeroRate" class="add-row rate-row">
+					<div class="add-fld toggle-fld">
+						<label>Allow Zero Valuation Rate</label>
+						<ToggleSwitch
+							:modelValue="!!draft.allow_zero_valuation_rate"
+							@update:modelValue="draft.allow_zero_valuation_rate = $event ? 1 : 0"
+						/>
+					</div>
 				</div>
 
 				<div class="add-actions">
@@ -330,6 +422,7 @@ import Button from "primevue/button"
 import InputNumber from "primevue/inputnumber"
 import AutoComplete from "primevue/autocomplete"
 import Select from "primevue/select"
+import ToggleSwitch from "primevue/toggleswitch"
 import Tooltip from "primevue/tooltip"
 import { callMethod, searchLink } from "@/api/client"
 import { useAppToast } from "@/composables/useToast"
@@ -345,8 +438,13 @@ const props = defineProps({
 	valueFields: { type: Array, default: () => [] },
 	// Per-logical-item fields (PARENT_CHILD_MAP.entry_fields) preserved verbatim.
 	entryFields: { type: Array, default: () => [] },
-	// Per-size DISPLAY fields shown stacked under the qty in each cell, e.g.
-	// [{ name: "pending_quantity", label: "Pending" }] (read-only labels).
+	// Per-size value fields. Each entry: { name, label, editable? }.
+	// Without `editable`: shown stacked under the qty in each cell as a
+	// read-only label (e.g. Pending / Cost / Amount — the WO/PO use case).
+	// With `editable: true`: also renders a numeric INPUT in the add-form
+	// inside every size cell, bound to `draft.values[pv][name]` — mirrors
+	// the Desk's `ItemDimensionFetch.vue` per-primary-value editable fields
+	// (rate, secondary_qty for Stock Entry/Update/Reconciliation).
 	cellFields: { type: Array, default: () => [] },
 	// Optional item-link query filters (passed to searchLink as Frappe filters).
 	itemFilters: { type: Object, default: () => ({}) },
@@ -356,6 +454,27 @@ const props = defineProps({
 	showDimensions: { type: Boolean, default: true },
 	// Optional grouped JSON to load on mount / when it changes (read-only view use).
 	initialData: { type: [Array, String, Object], default: null },
+	// true → render an "Allow Zero Valuation Rate" toggle in the add-form as a
+	// per-row entry field. Persisted on the item entry as
+	// `allow_zero_valuation_rate` (Frappe's escape hatch for opening-stock
+	// entries with rate 0). Matches the Desk's `otherInputs` for Stock
+	// Reconciliation.
+	showAllowZeroRate: { type: Boolean, default: false },
+	// true → render an opt-in "Update Secondary" toggle in the add-form. On
+	// toggle ON, fetch Item.secondary_unit_of_measure (one UOM per row, as a
+	// label), and render a Secondary Qty input inside every cell next to its
+	// qty. On commit, broadcast the fetched UOM to every cell's
+	// `secondary_uom`. Mirrors the production_api Delivery Challan flow
+	// (deliverable_items.vue `get_check_value`). Secondary fields are
+	// optional — when the toggle is OFF, no secondary_uom / secondary_qty
+	// leaves the editor (so the server doesn't reject a `secondary_uom: 0`).
+	showSecondaryToggle: { type: Boolean, default: false },
+	// true → composition is LOCKED. Hides the row-action column (delete +
+	// reload-into-draft Edit) AND the Add Item section, so the user can only
+	// edit per-cell qty / rate / Sec Qty of items already in the grid. Used
+	// for vouchers whose item set is derived from a parent doc (DC's items
+	// come from the WO; the user only adjusts qtys).
+	lockedItems: { type: Boolean, default: false },
 })
 
 const toast = useAppToast()
@@ -383,7 +502,15 @@ const blankDraft = () => ({
 	dependentAttribute: "", // dependent attribute NAME (e.g. "Stage") or ""
 	dependentValue: "", // chosen stage value
 	dependentDetails: null, // { attribute, attr_list: { stage: {attributes, uom, primary_attribute, primary_attribute_values} } }
-	values: { default: { qty: 0 } }, // { sizeVal: {qty}, … } or { default: {qty} }
+	values: { default: { qty: 0 } }, // { sizeVal: {qty, ...cellFields}, … } or { default: {qty} }
+	// Per-row Allow-Zero-Valuation toggle. Stored on the item entry as
+	// allow_zero_valuation_rate (Frappe's entry field for the no-rate path).
+	allow_zero_valuation_rate: 0,
+	// Per-row "Update Secondary" opt-in: when on, the editor renders a
+	// Secondary Qty input inside every cell and stamps secondary_uom on each
+	// cell from the item's Item.secondary_unit_of_measure (auto-fetched).
+	updateSecondary: false,
+	secondaryUom: "", // fetched from Item once the user picks one and toggles on
 })
 const draft = reactive(blankDraft())
 const loadingAttrs = ref(false)
@@ -429,6 +556,54 @@ const totalQty = computed(() => {
 	}
 	return t
 })
+
+// cellFields entries flagged `editable: true` get a per-cell numeric input in
+// the add-form (rate, secondary_qty…). All cellFields are also shown stacked
+// under the qty in the committed read-only grid (line 119/139).
+const editableCellFields = computed(() => (props.cellFields || []).filter((cf) => cf?.editable))
+
+// True when this cell holds a populated Secondary entry (a positive
+// secondary_qty AND a UOM stamped on it). Used by the cell-display template
+// to surface "Sec: 50 Kattu" only when relevant — mirrors the
+// production_api DC `attr.secondary_qty > 0 && attr.secondary_uom` rule.
+function hasSecondary(cell) {
+	return !!cell && Number(cell.secondary_qty) > 0 && !!cell.secondary_uom
+}
+
+// Toggle handler for "Update Secondary": ON → fetch the picked item's
+// secondary_unit_of_measure (mirrors production_api DC `get_check_value`);
+// OFF → drop the fetched UOM and zero out any per-cell secondary_qty already
+// entered so the payload stays clean.
+async function onUpdateSecondaryToggle(value) {
+	draft.updateSecondary = value ? true : false
+	if (!value) {
+		draft.secondaryUom = ""
+		for (const cell of Object.values(draft.values)) {
+			delete cell.secondary_qty
+			delete cell.secondary_uom
+		}
+		return
+	}
+	if (!draft.parentItem) {
+		toast.warn("Pick an item first", "Choose a parent item before enabling secondary.")
+		draft.updateSecondary = false
+		return
+	}
+	try {
+		const r = await callMethod("frappe.client.get_value", {
+			doctype: "Item",
+			filters: draft.parentItem,
+			fieldname: "secondary_unit_of_measure",
+		})
+		draft.secondaryUom = (r && r.secondary_unit_of_measure) || ""
+		if (!draft.secondaryUom) {
+			toast.warn("No Secondary UOM", "This item has no secondary_unit_of_measure configured.")
+		}
+	} catch (e) {
+		toast.error("UOM fetch failed", e.message)
+		draft.secondaryUom = ""
+	}
+}
 
 function visibleDimensions(group) {
 	if (!props.showDimensions || !dimensions.value.length) return []
@@ -534,11 +709,14 @@ async function fetchAttributeDetails(itemName) {
 	}
 }
 
-// A blank size-cell: qty + any per-cell value_fields, all 0.
+// A blank size-cell: just qty. Other valueFields (rate / secondary_qty /
+// secondary_uom / …) are NOT pre-initialised here — pre-init to 0 leaks
+// `secondary_uom: 0` into the payload (Link → UOM, server rejects with
+// "Could not find Row #N: Secondary UOM: 0"). Editable numeric inputs set
+// their cell field as the user types; auto-broadcast fields (secondary_uom)
+// land in commitDraft. Empty fields are skipped on commit.
 function blankCell() {
-	const c = { qty: 0 }
-	for (const f of props.valueFields) c[f] = 0
-	return c
+	return { qty: 0 }
 }
 
 // ════════════════ DEPENDENT ATTRIBUTE (e.g. Stage) ════════════════
@@ -648,6 +826,17 @@ function commitDraft() {
 		valuesOut[k] = out
 	}
 
+	// Broadcast secondary_uom from the fetched item value to every cell when
+	// the user opted in. Cell-level secondary_qty is already in valuesOut from
+	// the per-cell input (via the loop above). When the toggle is OFF, no
+	// secondary_uom / secondary_qty leaves the editor at all (matches user
+	// preference 2026-05-29 — "those are not mandatory").
+	if (props.showSecondaryToggle && draft.updateSecondary && draft.secondaryUom) {
+		for (const cell of Object.values(valuesOut)) {
+			cell.secondary_uom = draft.secondaryUom
+		}
+	}
+
 	const itemEntry = {
 		name: draft.parentItem,
 		dimensions: dimensionsOut,
@@ -655,6 +844,11 @@ function commitDraft() {
 		primary_attribute: draft.primaryAttribute || "",
 		default_uom: draft.defaultUom || "",
 		values: valuesOut,
+	}
+	// Per-row entry fields land at the item level so ungroup_items_from_ui
+	// copies them onto each generated child row.
+	if (props.showAllowZeroRate) {
+		itemEntry.allow_zero_valuation_rate = draft.allow_zero_valuation_rate ? 1 : 0
 	}
 
 	// Group attribute NAMES include the dependent attribute (it's a real attribute
@@ -748,6 +942,16 @@ async function startEdit(gi, index) {
 	draft.attributeValues = { ...(it.attributes || {}) }
 	draft.defaultUom = it.default_uom || draft.defaultUom || ""
 	draft.values = vals
+	if (props.showAllowZeroRate) {
+		draft.allow_zero_valuation_rate = Number(it.allow_zero_valuation_rate) || 0
+	}
+	// Re-derive Update Secondary state from the saved cells: if any cell
+	// carried a secondary_uom, the row was committed with secondary on.
+	if (props.showSecondaryToggle) {
+		const firstUom = Object.values(vals).find((c) => c?.secondary_uom)?.secondary_uom || ""
+		draft.updateSecondary = !!firstUom
+		draft.secondaryUom = firstUom
+	}
 	draft.resolved = true
 	removeItem(gi, index)
 }
@@ -1019,6 +1223,40 @@ defineExpose({ getItems, loadData, hasItems })
 }
 .qty-single .req {
 	color: #be123c;
+}
+
+.rate-row,
+.sec-row {
+	padding-top: 6px;
+	border-top: 1px dashed var(--mgk-line);
+	margin-top: 6px;
+}
+.toggle-fld {
+	justify-content: center;
+}
+.sec-uom-display {
+	font-size: 13px;
+	color: var(--mgk-ink);
+	padding: 6px 0;
+}
+.sec-uom-display.muted {
+	color: var(--mgk-muted);
+	font-style: italic;
+}
+/* Per-cell editable sublabel inside a qty-cell (Rate, Sec Qty under the qty). */
+.qty-cell .cell-sub {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--mgk-muted);
+	margin-top: 2px;
+}
+.qty-single .cell-sub {
+	font-size: 11.5px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--mgk-muted);
+	font-weight: 600;
+	margin-top: 6px;
 }
 
 .add-actions {

@@ -107,6 +107,37 @@
 						@click="onCancel"
 					/>
 
+					<!-- Work Order: Create DC / Create GRN — mirrors production_api
+					     work_order.js (Make DC / Make GRN) gated on docstatus=1 +
+					     open_status="Open". Pre-fills via route query; the create
+					     page's runDocAutofill fires get_work_order_defaults. -->
+					<Button
+						v-if="docstatus === 1 && isWorkOrder && doc.open_status === 'Open' && canCreate('Delivery Challan')"
+						label="Create DC"
+						icon="pi pi-send"
+						size="small"
+						outlined
+						@click="onCreateDcFromWo"
+					/>
+					<Button
+						v-if="docstatus === 1 && isWorkOrder && doc.open_status === 'Open' && canCreate('Goods Received Note')"
+						label="Create GRN"
+						icon="pi pi-plus-circle"
+						size="small"
+						outlined
+						@click="onCreateGrnFromWo"
+					/>
+					<!-- Purchase Order: Create GRN — mirrors WO's Create GRN. Gated on
+					     submitted state; the GRN create page's autofill takes the rest. -->
+					<Button
+						v-if="docstatus === 1 && isPurchaseOrder && canCreate('Goods Received Note')"
+						label="Create GRN"
+						icon="pi pi-plus-circle"
+						size="small"
+						outlined
+						@click="onCreateGrnFromPo"
+					/>
+
 					<!-- VIEW mode, cancelled (docstatus 2) -->
 					<Button
 						v-if="docstatus === 2 && isSubmittable && canAmend(doctype)"
@@ -287,16 +318,33 @@
 							fluid
 						/>
 
-						<!-- Time — plain HH:MM:SS text input (picker component intentionally avoided) -->
-						<InputText
+						<!-- Time — plain HH:MM:SS text input (picker component intentionally
+						     avoided) + a quick "Now" button for the common posting_time
+						     case (after toggling Edit Posting Date and Time). The user
+						     can still type a specific time. -->
+						<div
 							v-else-if="f.input === 'time'"
-							:id="'fld-' + f.fieldname"
-							v-model="form[f.fieldname]"
-							:disabled="isReadOnly(f)"
-							:invalid="isMissing(f)"
-							placeholder="HH:MM:SS"
-							class="fld"
-						/>
+							class="time-fld"
+						>
+							<InputText
+								:id="'fld-' + f.fieldname"
+								v-model="form[f.fieldname]"
+								:disabled="isReadOnly(f)"
+								:invalid="isMissing(f)"
+								placeholder="HH:MM:SS"
+								class="fld time-input"
+							/>
+							<Button
+								v-if="!isReadOnly(f)"
+								label="Now"
+								icon="pi pi-clock"
+								size="small"
+								severity="secondary"
+								outlined
+								class="time-now"
+								@click="form[f.fieldname] = nowTimeStr()"
+							/>
+						</div>
 
 						<!-- Check -->
 						<div v-else-if="f.input === 'check'" class="fld-check">
@@ -326,12 +374,14 @@
 
 						<!-- Link / Dynamic Link → LinkField (AutoComplete + "open linked doc").
 						     target-doctype is reactive: a Dynamic Link re-resolves from its
-						     controlling field at runtime. -->
+						     controlling field at runtime. search-handler is per-(doctype,
+						     fieldname) — used for Addresses filtered by the selected party. -->
 						<LinkField
 							v-else-if="f.input === 'link'"
 							:model-value="form[f.fieldname]"
 							@update:model-value="form[f.fieldname] = $event"
 							:target-doctype="f.isDynamic ? form[f.dynamicField] : f.linkTarget"
+							:search-handler="linkSearchHandlerFor(f)"
 							:disabled="isReadOnly(f)"
 							:invalid="isMissing(f)"
 							@item-select="onFieldChanged(f.fieldname)"
@@ -386,6 +436,9 @@
 						:value-fields="pv.valueFields"
 						:entry-fields="pv.entryFields"
 						:cell-fields="pv.cellFields || []"
+						:show-allow-zero-rate="!!pv.showAllowZeroRate"
+						:show-secondary-toggle="!!pv.showSecondaryToggle"
+						:locked-items="!!pv.lockedItems"
 						:editable="true"
 					/>
 				</div>
@@ -431,8 +484,17 @@
 								</span>
 							</template>
 							<template #editor="{ data, field }">
+								<!-- readonly columns (e.g. Item.attributes.mapping —
+								     auto-created by Item._ensure_attribute_mappings_exist)
+								     render a static span on cell-click instead of an
+								     input, so the user can't pick a value. -->
+								<span
+									v-if="col.readonly"
+									:class="{ 'mgk-mono': col.input === 'link' }"
+									class="cell-static"
+								>{{ childCellDisplay(data[field], col) }}</span>
 								<InputNumber
-									v-if="col.input === 'number'"
+									v-else-if="col.input === 'number'"
 									v-model="data[field]"
 									:minFractionDigits="col.minFraction"
 									:maxFractionDigits="col.maxFraction"
@@ -480,6 +542,38 @@
 						</template>
 					</DataTable>
 				</div>
+
+				<!-- ITEM: Attribute Values card grid — surfaces the actual values
+				     configured per attribute (Stage = Cut/Piece/Pack, …). The
+				     bare child-table tab only shows mapping IDs which the user
+				     can't read. -->
+				<div
+					v-if="isItem && doc && mode === 'edit'"
+					class="child-editor"
+				>
+					<div class="child-editor-head">
+						<h4>Attribute Values</h4>
+					</div>
+					<ItemAttributeListView :item-name="doc.name" />
+				</div>
+
+				<!-- ITEM: Dependent Attribute matrix editor — also visible in edit
+				     mode so the user can configure per-stage UOM/Display Name/
+				     applicable attributes without leaving the form. The editor
+				     has its own Save (separate server method); it doesn't go
+				     through the parent form save. -->
+				<div
+					v-if="isItem && doc && doc.dependent_attribute && mode === 'edit'"
+					class="child-editor"
+				>
+					<div class="child-editor-head">
+						<h4>Dependent Attribute ({{ doc.dependent_attribute }})</h4>
+					</div>
+					<ItemDependentAttributeEditor
+						:item-name="doc.name"
+						:editable="canWrite(doctype)"
+					/>
+				</div>
 			</div>
 		</div>
 
@@ -490,6 +584,7 @@
 				<Tabs v-model:value="activeTab">
 					<TabList>
 						<Tab value="details">Details</Tab>
+						<Tab v-if="isItem" value="attribute-values">Attribute Values</Tab>
 						<Tab v-for="ct in childTables" :key="ct.fieldname" :value="ct.fieldname">
 							{{ ct.label }}
 							<span v-if="tabBadge(ct)" class="tab-badge">{{ tabBadge(ct) }}</span>
@@ -497,6 +592,9 @@
 						<Tab v-if="isWorkOrder" value="approval">
 							Approval Log
 							<span v-if="approvalLog.length" class="tab-badge">{{ approvalLog.length }}</span>
+						</Tab>
+						<Tab v-if="isItem && doc.dependent_attribute" value="dependent-attribute">
+							Dependent Attribute
 						</Tab>
 						<Tab value="linked">
 							Linked Documents
@@ -593,6 +691,19 @@
 								(action · by · timestamp · reason). The latest action drives the
 								<code>before_submit</code> gate.
 							</p>
+						</TabPanel>
+
+						<!-- ATTRIBUTE VALUES (Item) — Desk AttributeList.vue port -->
+						<TabPanel v-if="isItem" value="attribute-values">
+							<ItemAttributeListView :item-name="doc.name" />
+						</TabPanel>
+
+						<!-- DEPENDENT ATTRIBUTE (Item, when set) — Desk port -->
+						<TabPanel v-if="isItem && doc.dependent_attribute" value="dependent-attribute">
+							<ItemDependentAttributeEditor
+								:item-name="doc.name"
+								:editable="canWrite(doctype)"
+							/>
 						</TabPanel>
 
 						<!-- LINKED DOCUMENTS -->
@@ -698,6 +809,22 @@
 					</template>
 				</Card>
 
+				<!-- Connections (Desk `links` panel parity — DC + GRN for WO) -->
+				<Card v-if="connections.length" class="side-card">
+					<template #title><span class="side-title">Connections</span></template>
+					<template #content>
+						<a
+							v-for="c in connections"
+							:key="c.doctype"
+							class="meta-row link-row"
+							@click="navigateConnection(c)"
+						>
+							<span class="k">{{ c.label }}</span>
+							<span class="v count-pill">{{ c.count ?? "…" }}</span>
+						</a>
+					</template>
+				</Card>
+
 				<!-- Linked summary -->
 				<Card class="side-card">
 					<template #title><span class="side-title">Linked Summary</span></template>
@@ -748,11 +875,19 @@ import { useDoc } from "@/composables/useDoc"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { useAppToast } from "@/composables/useToast"
-import { searchLink, getMeta, getDocWithOnload, callMethod } from "@/api/client"
+import { searchLink, getMeta, getDocWithOnload, callMethod, getCount } from "@/api/client"
 import { getRegistryByRoute, getRegistryByDoctype, WORKFLOW_SEVERITY } from "@/config/doctypes"
-import { getFieldConfig } from "@/config/fields"
+import {
+	getDetailFieldConfig,
+	getFormFieldOrder,
+	getHiddenFormFields,
+	getLinkSearchHandler,
+	getReadOnlyChildFields,
+} from "@/config/fields"
 import WorkOrderApproval from "./WorkOrderApproval.vue"
 import StockItemGridEditor from "./StockItemGridEditor.vue"
+import ItemDependentAttributeEditor from "./ItemDependentAttributeEditor.vue"
+import ItemAttributeListView from "./ItemAttributeListView.vue"
 import LinkField from "@/components/LinkField.vue"
 import GRNReceivedTypeEditor from "./GRNReceivedTypeEditor.vue"
 import WorkflowActions from "./WorkflowActions.vue"
@@ -770,6 +905,8 @@ const toast = useAppToast()
 const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
 const isWorkOrder = computed(() => doctype.value === "Work Order")
+const isPurchaseOrder = computed(() => doctype.value === "Purchase Order")
+const isItem = computed(() => doctype.value === "Item")
 const isSubmittable = computed(() => registry.value?.isSubmittable || false)
 const isWorkflow = computed(() => registry.value?.isWorkflow || false)
 
@@ -827,7 +964,13 @@ const GROUPED_JSON_FIELDS = new Set([
 // Child tables with a dedicated surface elsewhere → kept out of the generic
 // per-child-table tabs AND the edit grids. `mgk_approval_log` already renders as
 // the Approval Log timeline (view) and is written only by the approve/reject API.
-const CHILD_TABLE_EXCLUDE = new Set(["mgk_approval_log"])
+// Work Order's tracking_logs and track_pieces are server-side bookkeeping the
+// floor users don't need surfaced on /web (user, 2026-05-29).
+const CHILD_TABLE_EXCLUDE = new Set([
+	"mgk_approval_log",
+	"work_order_tracking_logs",
+	"work_order_track_pieces",
+])
 
 // ── R3a: stock size-pivot (grouped item_details) opt-in ──────────────────────
 // For these stock-voucher doctypes ONLY, edit/create renders the grouped pivot
@@ -845,16 +988,27 @@ const STOCK_GROUPED_MAP = {
 		childField: "items", groupedField: "item_details", ungroupKey: "Stock Entry",
 		label: "Items", valueFields: ["rate", "secondary_qty", "secondary_uom"],
 		entryFields: ["allow_zero_valuation_rate", "make_qty_zero"],
+		// rate is editable PER cell (matches Desk Stock/StockEntry/StockEntry.vue
+		// tableFields: rate uses_primary_attribute + qty_fields includes rate).
+		cellFields: [{ name: "rate", label: "Rate", editable: true }],
+		showAllowZeroRate: true,
+		showSecondaryToggle: true,
 	}],
 	"Stock Update": [{
 		childField: "stock_update_details", groupedField: "item_details", ungroupKey: "Stock Update",
 		label: "Stock Update Details", valueFields: ["rate", "secondary_qty", "secondary_uom"],
 		entryFields: ["allow_zero_valuation_rate", "make_qty_zero"],
+		cellFields: [{ name: "rate", label: "Rate", editable: true }],
+		showAllowZeroRate: true,
+		showSecondaryToggle: true,
 	}],
 	"Stock Reconciliation": [{
 		childField: "items", groupedField: "item_details", ungroupKey: "Stock Reconciliation",
 		label: "Items", valueFields: ["rate", "secondary_qty", "secondary_uom"],
 		entryFields: ["allow_zero_valuation_rate", "make_qty_zero"],
+		cellFields: [{ name: "rate", label: "Rate", editable: true }],
+		showAllowZeroRate: true,
+		showSecondaryToggle: true,
 	}],
 	"Delivery Challan": [{
 		childField: "items", groupedField: "item_details", ungroupKey: "Delivery Challan",
@@ -865,6 +1019,11 @@ const STOCK_GROUPED_MAP = {
 			"secondary_qty", "secondary_uom",
 		],
 		entryFields: ["stock_uom", "conversion_factor", "set_combination", "comments"],
+		showSecondaryToggle: true,
+		// DC is always against a WO; items derive from the WO and the user
+		// only edits per-cell qty/rate/Sec Qty — no Add Item, no per-row
+		// delete/edit (preference 2026-05-29).
+		lockedItems: true,
 	}],
 	"Goods Received Note": [{
 		childField: "items", groupedField: "item_details", ungroupKey: "Goods Received Note",
@@ -878,6 +1037,7 @@ const STOCK_GROUPED_MAP = {
 			"stock_uom", "conversion_factor", "ref_doctype", "ref_docname",
 			"delivery_challan_item", "set_combination", "comments",
 		],
+		showSecondaryToggle: true,
 	}],
 	"Purchase Order": [{
 		childField: "items", groupedField: "item_details", ungroupKey: "Purchase Order",
@@ -892,6 +1052,7 @@ const STOCK_GROUPED_MAP = {
 			"stock_uom", "conversion_factor", "delivery_date", "tax",
 			"discount_percentage", "set_combination", "comments",
 		],
+		showSecondaryToggle: true,
 	}],
 	"Work Order": [
 		{
@@ -921,6 +1082,86 @@ const STOCK_GROUPED_MAP = {
 // The pivot sections to render for the current doctype (empty ⇒ flat path).
 const stockPivots = computed(() => STOCK_GROUPED_MAP[doctype.value] || [])
 const useStockPivot = computed(() => isFormMode.value && stockPivots.value.length > 0)
+
+// ── Connections (Desk's `links` panel equivalent — preference 2026-05-29) ──
+// Each entry: { doctype, route, label?, filters(name) → [[field, op, value], …] }.
+// filters() takes the parent doc's name (e.g. WO-00010-1) and returns the
+// Frappe filter triples to apply on the child list. For DC the relationship
+// is direct (Link field `work_order`); for GRN it's a Dynamic Link so we
+// constrain BOTH `against` (the controlling Select) and `against_id` (the
+// value). The route matches the registry slug — DynamicListPage reads
+// route.query.filters and seeds them as the base filter on first fetch.
+const CONNECTIONS_MAP = {
+	"Work Order": [
+		{
+			doctype: "Delivery Challan",
+			route: "/delivery-challan",
+			filters: (name) => [["work_order", "=", name]],
+		},
+		{
+			doctype: "Goods Received Note",
+			route: "/goods-received-note",
+			filters: (name) => [
+				["against", "=", "Work Order"],
+				["against_id", "=", name],
+			],
+		},
+	],
+	"Purchase Order": [
+		{
+			doctype: "Goods Received Note",
+			route: "/goods-received-note",
+			filters: (name) => [
+				["against", "=", "Purchase Order"],
+				["against_id", "=", name],
+			],
+		},
+	],
+}
+
+const connections = ref([])
+
+// Live counts for the Connections card. Renders only when CONNECTIONS_MAP
+// has an entry for this doctype and we have a doc loaded.
+async function loadConnections() {
+	const configs = CONNECTIONS_MAP[doctype.value]
+	if (!configs?.length || !doc.value) {
+		connections.value = []
+		return
+	}
+	const items = configs.map((c) => ({
+		doctype: c.doctype,
+		route: c.route,
+		label: c.label || c.doctype,
+		filterTriples: c.filters(doc.value.name),
+		count: null,
+	}))
+	connections.value = items
+	// Fetch counts in parallel; each call updates its own slot reactively.
+	await Promise.all(
+		items.map(async (item, i) => {
+			const filterObj = {}
+			for (const [field, op, value] of item.filterTriples) {
+				filterObj[field] = op === "=" ? value : [op, value]
+			}
+			try {
+				const n = await getCount(item.doctype, filterObj)
+				const next = connections.value.slice()
+				next[i] = { ...next[i], count: Number(n) || 0 }
+				connections.value = next
+			} catch (_) {
+				/* leave count as null on failure */
+			}
+		}),
+	)
+}
+
+function navigateConnection(c) {
+	router.push({
+		path: c.route,
+		query: { filters: JSON.stringify(c.filterTriples) },
+	})
+}
 
 // R3b: Goods Received Note against a Work Order uses the received-type-SPLIT
 // editor (GRNReceivedTypeEditor) instead of the generic size-pivot — mirrors the
@@ -981,12 +1222,18 @@ async function hydratePivotsForView() {
 		for (const pv of stockPivots.value) {
 			const grouped = onload[pv.groupedField]
 			const groups = grouped != null ? grouped : []
-			// Drop padded all-zero entries (e.g. GRN received types with no qty) so
-			// the read-only view shows only what's actually recorded.
+			// Drop padded all-zero entries (e.g. GRN received types with no qty)
+			// so the read-only view shows only what's actually recorded — EXCEPT
+			// for locked-items vouchers (DC against WO), where user-zeroed rows
+			// are intentional draft state the user expects to see (so they can
+			// re-edit them later). The submit pass strips those server-side.
+			const keepAll = !!pv.lockedItems
 			next[pv.childField] = groups
 				.map((grp) => ({
 					...grp,
-					items: (grp.items || []).filter((e) => !entryHasNoValue(e, pv.cellFields || [])),
+					items: (grp.items || []).filter(
+						(e) => keepAll || !entryHasNoValue(e, pv.cellFields || []),
+					),
 				}))
 				.filter((grp) => (grp.items || []).length)
 		}
@@ -1026,6 +1273,7 @@ async function loadAll() {
 	}
 	docState.loadLinked(props.id)
 	docState.loadActivity(props.id)
+	loadConnections()
 }
 
 // The getdoctype bundle is [parentMeta, ...childMetas] keyed by DocType name.
@@ -1152,9 +1400,15 @@ function inputDescriptor(mf) {
 	return base
 }
 
+// Per-DocType set of fieldnames to never render in EDIT/CREATE (e.g. WO's
+// `includes_packing`). Empty Set for doctypes without overrides — safe to
+// `.has()` unconditionally.
+const hiddenFormFieldSet = computed(() => getHiddenFormFields(doctype.value))
+
 // The ordered, editable field list for the form. Drives create + edit.
-// Order: per-doctype config (when present) → meta order. Either way the
-// fieldtype/required/read-only come from meta (config only carries display type).
+// Order: per-doctype `formOrder` (when present) → meta order. Either way the
+// fieldtype/required/read-only come from meta. Fields in the doctype's
+// hide list are silently dropped (irrespective of where they sit in order).
 const formFields = computed(() => {
 	if (!isFormMode.value) return []
 	const mfMap = metaFieldMap.value
@@ -1162,8 +1416,10 @@ const formFields = computed(() => {
 
 	const out = []
 	const seen = new Set()
+	const hidden = hiddenFormFieldSet.value
 	const pushByFieldname = (fn) => {
 		if (seen.has(fn)) return
+		if (hidden.has(fn)) return
 		const mf = mfMap[fn]
 		if (!mf) return
 		if (!isEditableMetaField(mf)) return
@@ -1171,11 +1427,11 @@ const formFields = computed(() => {
 		out.push(inputDescriptor(mf))
 	}
 
-	const cfg = getFieldConfig(doctype.value)
-	if (cfg) {
-		for (const f of cfg) pushByFieldname(f.fieldname)
-		// Append any remaining editable meta fields not covered by config, so
-		// nothing required is silently un-editable.
+	const order = getFormFieldOrder(doctype.value)
+	if (order) {
+		for (const fn of order) pushByFieldname(fn)
+		// Append any remaining editable meta fields not covered by the order,
+		// so nothing required is silently un-editable.
 		for (const mf of meta.value.fields) pushByFieldname(mf.fieldname)
 		return out
 	}
@@ -1215,19 +1471,24 @@ function isReadOnly(f) {
 }
 
 // The form fields actually shown: drop any whose depends_on is currently false,
-// AND drop READ-ONLY fields that still have no value (derived/auto-filled fields
-// don't clutter the form — each reappears the instant it gets a value). Editable
-// empty fields always show — the user needs them to enter data. Reads `form` (via
-// evalCondition / the value lookup) so it re-filters reactively as the user edits.
+// AND drop READ-ONLY fields with no value. Reactive on `form` so the filter
+// re-runs as the user edits.
+//
+// Read-only rule (uniform across CREATE + EDIT): a read-only field with no
+// value is derived/auto-filled and must not clutter the form; it reappears the
+// instant it carries a value. This keeps system-managed fields hidden in
+// create (status / approved_by / start_date / end_date — all empty by default)
+// while letting fetch-from previews (supplier_name, delivery_location_name)
+// surface as soon as their source field resolves, AND letting fields with a
+// real default (wo_date = Today) show with that default. (The earlier
+// blanket-hide-on-create was overly broad — it masked wo_date and the fetched
+// names. User flagged on 2026-05-29.)
 const visibleFormFields = computed(() =>
 	formFields.value.filter((f) => {
 		if (f.dependsOn && !evalCondition(f.dependsOn)) return false
-		// U4: in CREATE mode, read-only fields are system/derived (e.g. Open Status,
-		// Is Delivered) — never show them, even when they carry a default. In EDIT a
-		// read-only field is hidden only when empty (derived / not-yet-set).
 		if (isReadOnly(f)) {
-			if (mode.value === "create") return false
-			if (isEmptyForHide(form[f.fieldname], metaFieldMap.value[f.fieldname]?.fieldtype)) return false
+			const mfType = metaFieldMap.value[f.fieldname]?.fieldtype
+			if (isEmptyForHide(form[f.fieldname], mfType)) return false
 		}
 		return true
 	}),
@@ -1275,6 +1536,13 @@ function clearForm() {
 
 function buildCreateForm() {
 	clearForm()
+	// Mirror Frappe's `doc.__islocal = 1` for new docs. Several yrp fields
+	// gate on it (e.g. Item.name1's `read_only_depends_on:"eval:!doc.__islocal"`
+	// means "read-only after first save"). Without this set, `!doc.__islocal`
+	// in create mode would evaluate to true and treat those fields as
+	// read-only, which the read-only-empty visibility rule then hides — and
+	// the user couldn't enter the Item Name.
+	form.__islocal = 1
 	for (const mf of meta.value?.fields || []) {
 		if (META_HIDDEN_FIELDTYPES.has(mf.fieldtype)) continue
 		if (SYSTEM_FIELDS.has(mf.fieldname)) continue
@@ -1285,6 +1553,38 @@ function buildCreateForm() {
 	// Initialise editable child tables to empty arrays.
 	for (const ct of editableChildTables.value) {
 		form[ct.fieldname] = []
+	}
+	// Pre-fill from route query (Create-from-parent buttons like WO → Create
+	// DC / Create GRN). Async: trigger the autofill source once everything is
+	// seeded so get_work_order_defaults / get_purchase_order_defaults run and
+	// fill the header + items grid. nextTick lets the editor mount first.
+	applyCreateFormQuery()
+}
+
+async function applyCreateFormQuery() {
+	const qp = router.currentRoute.value.query || {}
+	const keys = Object.keys(qp)
+	if (!keys.length) return
+	// Seed every query key that maps onto a form field. Coerce Check fields
+	// to 0/1 (the query string carries them as "0"/"1").
+	for (const [k, v] of Object.entries(qp)) {
+		if (!(k in form)) continue
+		const mf = metaFieldMap.value[k]
+		if (mf?.fieldtype === "Check") form[k] = Number(v) ? 1 : 0
+		else form[k] = v
+	}
+	// Fire the doctype's primary header+items autofill exactly once. The
+	// fields are already set on `form`, so onFieldChanged → runDocAutofill
+	// reads the right state. (For GRN, `against` is set BEFORE `against_id`
+	// in the loop above because that's the JS object iteration order from
+	// `onCreateGrnFromWo`; the against handler resets sources only on user
+	// flip, not on the initial seed.)
+	await nextTick()
+	const dt = doctype.value
+	if (dt === "Delivery Challan" && form.work_order) {
+		await onFieldChanged("work_order")
+	} else if (dt === "Goods Received Note" && form.against_id) {
+		await onFieldChanged("against_id")
 	}
 }
 
@@ -1372,6 +1672,10 @@ const editableChildTables = computed(() => {
 // inferring from existing rows, then a single generic column.
 function childEditColumns(tableField) {
 	const childDt = tableField.options
+	// Per-doctype overrides: columns the parent says must stay read-only even
+	// though the meta marks them editable (e.g. Item.attributes.mapping is
+	// auto-created server-side; the user must not pick it).
+	const readonlySet = getReadOnlyChildFields(doctype.value, childDt)
 	// 1) Prefer child-doctype meta if we have it cached.
 	const cmeta = childMetaCache.value[childDt]
 	if (cmeta?.fields?.length) {
@@ -1389,6 +1693,7 @@ function childEditColumns(tableField) {
 				linkTarget: mf.options || "",
 				minFraction: d.minFraction,
 				maxFraction: d.maxFraction,
+				readonly: readonlySet.has(mf.fieldname),
 			})
 		}
 		if (cols.length) return cols.slice(0, 10)
@@ -1532,6 +1837,34 @@ function zeroGroupedQtys(itemDetails) {
 
 async function runDocAutofill(fieldname) {
 	const dt = doctype.value
+	// Item Production Detail mirrors production_api's item-change handler
+	// (apps/production_api/.../item_production_detail.js line 665) — picking
+	// the parent Item auto-fills primary/dependent attribute + item_attributes
+	// child rows. Maps Item fields → IPD fields (different names), so it
+	// short-circuits the generic copy-by-key loop below.
+	if (dt === "Item Production Detail" && fieldname === "item") {
+		if (!form.item) {
+			form.primary_item_attribute = ""
+			form.dependent_attribute = ""
+			form.dependent_attribute_mapping = ""
+			form.item_attributes = []
+			return
+		}
+		try {
+			const r = await callMethod("yrp.yrp.doctype.item.item.get_complete_item_details", {
+				item_name: form.item,
+			})
+			if (r && typeof r === "object") {
+				form.primary_item_attribute = r.primary_attribute || ""
+				form.dependent_attribute = r.dependent_attribute || ""
+				form.dependent_attribute_mapping = r.dependent_attribute_mapping || ""
+				form.item_attributes = Array.isArray(r.attributes) ? r.attributes : []
+			}
+		} catch (e) {
+			toast.error("Auto-fill failed", e.message)
+		}
+		return
+	}
 	let method = ""
 	let args = null
 	if (dt === "Delivery Challan" && fieldname === "work_order") {
@@ -1550,11 +1883,20 @@ async function runDocAutofill(fieldname) {
 	} else {
 		return
 	}
+	// Per-doctype fields to drop from the autofill response so the user has
+	// to pick them manually (preference 2026-05-29 — DC's from_warehouse is
+	// the floor's pick, not WO-derived). The server-side `set_missing_values`
+	// fallback still rescues an empty value on save.
+	const AUTOFILL_SKIP = {
+		"Delivery Challan": new Set(["from_warehouse"]),
+	}
 	try {
 		const r = await callMethod(method, args)
 		if (!r || typeof r !== "object") return
+		const skip = AUTOFILL_SKIP[dt] || new Set()
 		for (const [k, v] of Object.entries(r)) {
 			if (k === "items" || k === "item_details") continue
+			if (skip.has(k)) continue
 			if (k in form) form[k] = v // apply returned header fields
 		}
 		// GRN: start every received type at 0 so the user types the actual received
@@ -1579,9 +1921,26 @@ function resetGrnSource() {
 	for (const pv of stockPivots.value) gridRefs[pv.childField]?.loadData?.([])
 }
 
-// Wired on editable link/select inputs: cascade fetch_from + run doctype auto-fill.
+// Per-field custom Link search (e.g. Work Order's address fields filter by the
+// selected party). Returns null when no override applies → LinkField falls
+// back to the default name-like search. Reactive on `form` — when the
+// controlling field (supplier / delivery_location) changes the factory re-runs
+// and the autocomplete picks up the new filter on next open.
+function linkSearchHandlerFor(f) {
+	return getLinkSearchHandler(doctype.value, f.fieldname, form)
+}
+
+// Wired on editable link/select inputs: cascade fetch_from + clear dependent
+// address fields + run doctype auto-fill.
 async function onFieldChanged(fieldname) {
 	await applyFetchFrom(fieldname)
+	// Work Order: changing the party invalidates any address picked under the
+	// previous party (the address autocomplete is filtered by party — keeping a
+	// stale value would let the user submit an address that doesn't belong).
+	if (doctype.value === "Work Order") {
+		if (fieldname === "supplier") form.supplier_address = ""
+		if (fieldname === "delivery_location") form.delivery_address = ""
+	}
 	if (doctype.value === "Goods Received Note" && fieldname === "against") {
 		resetGrnSource()
 		return
@@ -1637,6 +1996,7 @@ function buildPayload() {
 	const payload = {}
 	for (const [k, v] of Object.entries(form)) {
 		if (GROUPED_JSON_FIELDS.has(k)) continue
+		if (k === "__islocal") continue
 		payload[k] = v
 	}
 	// Ensure the grouped-JSON twins are NOT sent by default (extra safety).
@@ -1706,8 +2066,17 @@ async function onSave() {
 			toast.success("Saved", `${props.id} updated`)
 			mode.value = "view"
 			await docState.load(props.id)
+			// Re-hydrate the read-only stock-pivot grid; the Details fields and
+			// child tables refresh reactively from doc.value, but viewGrouped
+			// is fed from a separate getDocWithOnload call (only invoked in
+			// loadAll on mount/route-change). Without this re-hydration a WO /
+			// DC / GRN's Deliverables/Receivables tab kept showing the pre-save
+			// rows until the user reloaded the page (reported 2026-05-29 for
+			// WO-00010-1).
+			if (stockPivots.value.length) hydratePivotsForView()
 			docState.loadLinked(props.id)
 			docState.loadActivity(props.id)
+			loadConnections()
 		}
 	} catch (e) {
 		toast.error("Save failed", e.message)
@@ -1787,6 +2156,66 @@ function onDelete() {
 	})
 }
 
+// "Create DC" / "Create GRN" buttons on a submitted, Open Work Order —
+// mirror production_api/work_order.js (Make DC / Make GRN). We pass the
+// pre-fill values as route query params and let the target create page's
+// applyCreateFormQuery seed them + fire the doctype's existing
+// runDocAutofill (DC: get_work_order_defaults; GRN: same, via against_id).
+function todayStr() {
+	const d = new Date()
+	const pad = (n) => String(n).padStart(2, "0")
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+function nowTimeStrLocal() {
+	const d = new Date()
+	const pad = (n) => String(n).padStart(2, "0")
+	return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+function onCreateDcFromWo() {
+	if (!doc.value) return
+	router.push({
+		path: "/delivery-challan/new",
+		query: {
+			work_order: doc.value.name,
+			posting_date: todayStr(),
+			posting_time: nowTimeStrLocal(),
+			is_rework: doc.value.is_rework ? 1 : 0,
+			includes_packing: doc.value.includes_packing ? 1 : 0,
+		},
+	})
+}
+function onCreateGrnFromWo() {
+	if (!doc.value) return
+	router.push({
+		path: "/goods-received-note/new",
+		query: {
+			against: "Work Order",
+			against_id: doc.value.name,
+			supplier: doc.value.supplier || "",
+			supplier_address: doc.value.supplier_address || "",
+			posting_date: todayStr(),
+			delivery_date: todayStr(),
+			posting_time: nowTimeStrLocal(),
+			is_rework: doc.value.is_rework ? 1 : 0,
+			includes_packing: doc.value.includes_packing ? 1 : 0,
+		},
+	})
+}
+function onCreateGrnFromPo() {
+	if (!doc.value) return
+	router.push({
+		path: "/goods-received-note/new",
+		query: {
+			against: "Purchase Order",
+			against_id: doc.value.name,
+			supplier: doc.value.supplier || "",
+			posting_date: todayStr(),
+			delivery_date: todayStr(),
+			posting_time: nowTimeStrLocal(),
+		},
+	})
+}
+
 // deferred: amend flow left as-is by decision — useDoc.amend already routes
 // through the standard Frappe amend (copy → new draft); a rewrite is out of scope.
 function onAmend() {
@@ -1813,8 +2242,14 @@ function onAmend() {
 
 async function reloadView() {
 	await docState.load(props.id)
+	// See the note in onSave: viewGrouped doesn't refresh from a plain
+	// doc.load, so submit/cancel/amend/approval-change would leave the
+	// stock-pivot grid stale (e.g. receivables get process_cost stamped on
+	// WO submit) until a manual page reload.
+	if (stockPivots.value.length) hydratePivotsForView()
 	docState.loadLinked(props.id)
 	docState.loadActivity(props.id)
+	loadConnections()
 	if (isWorkOrder.value && approvalRef.value) approvalRef.value.reload?.()
 	if (isWorkflow.value && workflowRef.value) workflowRef.value.reload?.()
 }
@@ -1837,7 +2272,7 @@ const detailFields = computed(() => {
 	const out = []
 
 	// 1) explicit per-doctype config
-	const cfg = getFieldConfig(doctype.value)
+	const cfg = getDetailFieldConfig(doctype.value)
 	if (cfg) {
 		for (const f of cfg) {
 			if (!(f.fieldname in doc.value)) continue
@@ -2402,6 +2837,18 @@ function stripHtml(s) {
 .check-label {
 	font-size: 13px;
 	color: var(--mgk-ink-2);
+}
+.time-fld {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.time-fld .time-input {
+	flex: 1;
+	min-width: 0;
+}
+.time-fld .time-now {
+	flex-shrink: 0;
 }
 
 /* Child-table editor */
