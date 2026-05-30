@@ -265,7 +265,7 @@
 							<Tag
 								v-if="data.based_on_attribute_mapping"
 								value="Attribute-mapped"
-								severity="info"
+								severity="primary"
 								icon="pi pi-sitemap"
 								rounded
 							/>
@@ -305,7 +305,10 @@
 						</template>
 					</Column>
 					<template #empty>
-						<div class="table-empty">No BOM rows.</div>
+						<div class="mgk-empty">
+							<i class="pi pi-table" />
+							<p class="mgk-empty__text">No BOM rows.</p>
+						</div>
 					</template>
 				</DataTable>
 
@@ -472,7 +475,10 @@
 						</template>
 					</Column>
 					<template #empty>
-						<div class="table-empty">No processes defined.</div>
+						<div class="mgk-empty">
+							<i class="pi pi-cog" />
+							<p class="mgk-empty__text">No processes defined.</p>
+						</div>
 					</template>
 				</DataTable>
 
@@ -569,7 +575,10 @@
 						</template>
 					</Column>
 					<template #empty>
-						<div class="table-empty">No process matrices for this IPD yet. Use “Configure combinations” above.</div>
+						<div class="mgk-empty">
+							<i class="pi pi-sitemap" />
+							<p class="mgk-empty__text">No process matrices for this IPD yet. Use “Configure combinations” above.</p>
+						</div>
 					</template>
 				</DataTable>
 			</section>
@@ -1343,23 +1352,55 @@ a.av:hover {
 	border-radius: var(--radius);
 	overflow: hidden;
 }
+/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--mgk-line);
-	background: var(--mgk-slate-50);
+	gap: var(--space-2);
+	padding: 10px 16px;
+	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+}
+.panel-head::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--mgk-accent-ink);
+	opacity: 0.85;
+	flex: 0 0 auto;
 }
 .panel-head h3 {
 	margin: 0;
-	font-size: 14px;
-	font-weight: 600;
-	color: var(--mgk-ink);
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--mgk-accent-ink);
 }
+/* Row-count reads as the right-aligned count pill on the band. */
 .panel-meta {
-	font-size: 12px;
-	color: var(--mgk-muted);
+	margin-left: auto;
+	background: rgba(255, 255, 255, 0.22);
+	color: var(--mgk-accent-ink);
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 8px;
+	border-radius: 999px;
+}
+/* Inline panel actions (Add row) sit after the count, on the band. They get a
+   white-on-teal outline so the secondary button stays legible against the band. */
+.panel-add-btn {
+	margin-left: 0;
+}
+:deep(.panel-add-btn.p-button-outlined) {
+	border-color: rgba(255, 255, 255, 0.55);
+	color: var(--mgk-accent-ink);
+	background: rgba(255, 255, 255, 0.1);
+}
+:deep(.panel-add-btn.p-button-outlined:hover) {
+	border-color: var(--mgk-accent-ink);
+	background: rgba(255, 255, 255, 0.2);
+	color: var(--mgk-accent-ink);
 }
 .panel-empty {
 	padding: 18px 14px;
@@ -1404,10 +1445,11 @@ a.av:hover {
 .ipd-attr-chip {
 	display: inline-flex;
 	align-items: center;
+	min-height: 28px;
 	background: var(--mgk-accent-50);
 	color: var(--mgk-accent-700);
 	border-radius: 999px;
-	font-size: 12.5px;
+	font-size: 12px;
 	font-weight: 500;
 	padding: 3px 11px;
 	line-height: 1.3;
@@ -1539,18 +1581,11 @@ a.av:hover {
 	color: var(--mgk-muted-2);
 	font-size: 12.5px;
 }
-.table-empty {
-	text-align: center;
-	padding: 22px 0;
-	color: var(--mgk-muted);
-	font-size: 13px;
-}
+/* Table headers inherit the PART 1c slate band; only refine the type here. */
 :deep(.mgk-table .p-datatable-thead > tr > th) {
-	background: var(--mgk-card);
 	font-size: 11.5px;
 	letter-spacing: 0.03em;
 	text-transform: uppercase;
-	color: var(--mgk-muted);
 }
 :deep(.mgk-table .p-datatable-tbody > tr > td) {
 	font-size: 13px;

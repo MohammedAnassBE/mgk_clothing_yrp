@@ -237,10 +237,19 @@
 		<!-- ════════════════ CREATE / EDIT FORM ════════════════ -->
 		<div v-else-if="isFormMode" class="form-layout">
 			<div class="detail-main form-card">
-				<!-- Field grid (inputs) -->
-				<div class="form-grid">
+				<!-- Field grid (inputs), grouped into titled cards by Section Break
+				     so the edit form mirrors the read-view Details cards. -->
+				<section
+					v-for="s in visibleFormSections"
+					:key="s.key"
+					class="mgk-card form-section"
+				>
+					<header class="mgk-card__head">
+						<span class="mgk-card__title">{{ s.label }}</span>
+					</header>
+					<div class="mgk-card__body form-grid">
 					<div
-						v-for="f in visibleFormFields"
+						v-for="f in s.fields"
 						:key="f.fieldname"
 						class="form-field"
 						:class="{ wide: f.wide }"
@@ -397,10 +406,11 @@
 							class="fld"
 						/>
 					</div>
-
-					<div v-if="!formFields.length" class="empty-inline">
-						No editable fields for this DocType.
 					</div>
+				</section>
+
+				<div v-if="!formFields.length" class="empty-inline">
+					No editable fields for this DocType.
 				</div>
 
 				<!-- R3a: stock size-pivot editor(s) — grouped item_details path.
@@ -536,8 +546,21 @@
 						</Column>
 
 						<template #empty>
-							<div class="table-empty">
-								{{ ct.columnsAvailable ? "No rows. Use “Add Row”." : "Editing this table isn’t available here — open in Desk." }}
+							<div v-if="ct.columnsAvailable" class="mgk-empty">
+								<i class="pi pi-table" />
+								<p class="mgk-empty__text">No rows yet.</p>
+								<Button
+									label="Add Row"
+									icon="pi pi-plus"
+									size="small"
+									severity="secondary"
+									outlined
+									@click="addChildRow(ct)"
+								/>
+							</div>
+							<div v-else class="mgk-empty">
+								<i class="pi pi-table" />
+								<p class="mgk-empty__text">Editing this table isn’t available here — open in Desk.</p>
 							</div>
 						</template>
 					</DataTable>
@@ -606,21 +629,37 @@
 					<TabPanels>
 						<!-- DETAILS -->
 						<TabPanel value="details">
-							<div class="field-grid">
-								<div v-for="f in detailFields" :key="f.fieldname" class="field">
-									<label class="field-label">{{ f.label }}</label>
-									<div
-										class="field-value"
-										:class="{ link: f.isLink, mgkmono: f.isLink }"
-										@click="f.isLink && navigateLink(f, doc[f.fieldname])"
-									>
-										{{ displayValue(doc[f.fieldname], f.type) }}
+							<div v-if="detailSections.length" class="details-stack">
+								<section
+									v-for="s in detailSections"
+									:key="s.key"
+									class="detail-card"
+								>
+									<header class="detail-card__head">
+										<span class="detail-card__dot" />
+										<span class="detail-card__title">{{ s.label }}</span>
+									</header>
+									<div class="detail-card__body">
+										<div class="field-grid">
+											<div v-for="f in s.fields" :key="f.fieldname" class="field">
+												<div
+													class="field-value"
+													:class="{
+														link: f.isLink,
+														mgkmono: f.isLink,
+														'is-empty': isEmptyValue(doc[f.fieldname]),
+													}"
+													@click="f.isLink && navigateLink(f, doc[f.fieldname])"
+												>
+													{{ displayValue(doc[f.fieldname], f.type) }}
+												</div>
+												<label class="field-label">{{ f.label }}</label>
+											</div>
+										</div>
 									</div>
-								</div>
-								<div v-if="!detailFields.length" class="empty-inline">
-									No displayable fields.
-								</div>
+								</section>
 							</div>
+							<div v-else class="empty-inline">No displayable fields.</div>
 						</TabPanel>
 
 						<!-- CHILD TABLES (one panel each) -->
@@ -656,7 +695,10 @@
 									</template>
 								</Column>
 								<template #empty>
-									<div class="table-empty">No rows.</div>
+									<div class="mgk-empty">
+										<i class="pi pi-table" />
+										<p class="mgk-empty__text">No rows.</p>
+									</div>
 								</template>
 							</DataTable>
 						</TabPanel>
@@ -764,7 +806,11 @@
 			<aside class="detail-side">
 				<!-- WO design-approval summary -->
 				<Card v-if="isWorkOrder && approvalState && approvalState.needs_approval" class="side-card">
-					<template #title><span class="side-title">Design Approval</span></template>
+					<template #title>
+						<header class="mgk-card__head">
+							<span class="mgk-card__title">Design Approval</span>
+						</header>
+					</template>
 					<template #content>
 						<div class="meta-row">
 							<span class="k">Role</span>
@@ -799,7 +845,11 @@
 
 				<!-- Quick Info -->
 				<Card class="side-card">
-					<template #title><span class="side-title">Quick Info</span></template>
+					<template #title>
+						<header class="mgk-card__head">
+							<span class="mgk-card__title">Quick Info</span>
+						</header>
+					</template>
 					<template #content>
 						<div v-for="m in quickInfo" :key="m.label" class="meta-row">
 							<span class="k">{{ m.label }}</span>
@@ -811,7 +861,11 @@
 
 				<!-- Connections (Desk `links` panel parity — DC + GRN for WO) -->
 				<Card v-if="connections.length" class="side-card">
-					<template #title><span class="side-title">Connections</span></template>
+					<template #title>
+						<header class="mgk-card__head">
+							<span class="mgk-card__title">Connections</span>
+						</header>
+					</template>
 					<template #content>
 						<a
 							v-for="c in connections"
@@ -827,7 +881,11 @@
 
 				<!-- Linked summary -->
 				<Card class="side-card">
-					<template #title><span class="side-title">Linked Summary</span></template>
+					<template #title>
+						<header class="mgk-card__head">
+							<span class="mgk-card__title">Linked Summary</span>
+						</header>
+					</template>
 					<template #content>
 						<div v-if="linkedLoading" class="empty-inline sm">Loading…</div>
 						<template v-else-if="linkedGroups.length">
@@ -879,6 +937,7 @@ import { searchLink, getMeta, getDocWithOnload, callMethod, getCount } from "@/a
 import { getRegistryByRoute, getRegistryByDoctype, WORKFLOW_SEVERITY } from "@/config/doctypes"
 import {
 	getDetailFieldConfig,
+	getDetailGroups,
 	getFormFieldOrder,
 	getHiddenFormFields,
 	getLinkSearchHandler,
@@ -956,6 +1015,9 @@ const SYSTEM_FIELDS = new Set([
 const META_HIDDEN_FIELDTYPES = new Set([
 	"Section Break", "Column Break", "Tab Break", "HTML", "Heading", "Button",
 	"Fold", "Image", "Geolocation", "Signature", "Table", "Table MultiSelect",
+	// Internal data blobs — never useful in a read-only Details view (e.g. Work
+	// Order's *_json fields). Hidden everywhere so no DocType leaks them.
+	"JSON", "Code",
 ])
 // Hidden grouped-JSON fields — NEVER editable / sent (the flat-rows contract).
 const GROUPED_JSON_FIELDS = new Set([
@@ -1265,10 +1327,10 @@ async function loadAll() {
 	loadChildMetas()
 	await docState.load(props.id)
 	if (!docState.doc.value) return
-	// U1: transaction docs open on their primary items tab (Deliverables/Items),
-	// not the meta Details tab — so the core content is visible immediately.
+	// Open on the redesigned Details tab (default) so it's the first impression.
+	// Still hydrate the stock pivots so their child tables render instantly when
+	// the user switches to them.
 	if (stockPivots.value.length) {
-		activeTab.value = stockPivots.value[0].childField
 		hydratePivotsForView()
 	}
 	docState.loadLinked(props.id)
@@ -1493,6 +1555,51 @@ const visibleFormFields = computed(() =>
 		return true
 	}),
 )
+
+// Group the visible form fields into titled cards by Section Break, mirroring the
+// read-view detailSections. Pure presentational partition — preserves the exact
+// visibleFormFields order + filtering; only adds the section a field belongs to.
+// Each field's section is looked up from the meta field order (Section Break =
+// boundary). Fields outside any meta section (or with a custom order that has no
+// section breaks) fall into the first "Details" card, so nothing is dropped.
+const visibleFormSections = computed(() => {
+	const fields = visibleFormFields.value
+	if (!fields.length) return []
+
+	// Build fieldname → { key, label } section assignment from meta order.
+	const sectionByField = {}
+	let firstSection = null
+	let cur = { key: "details", label: "Details" }
+	let sectionCount = 0
+	for (const mf of meta.value?.fields || []) {
+		if (mf.fieldtype === "Section Break") {
+			cur = {
+				key: mf.fieldname || `sec-${sectionCount}`,
+				label: mf.label || (sectionCount === 0 ? "Details" : "More"),
+			}
+			sectionCount++
+			continue
+		}
+		if (!firstSection) firstSection = cur
+		sectionByField[mf.fieldname] = cur
+	}
+	if (!firstSection) firstSection = { key: "details", label: "Details" }
+
+	// Partition visibleFormFields into ordered sections, preserving field order.
+	const out = []
+	const byKey = {}
+	for (const f of fields) {
+		const sec = sectionByField[f.fieldname] || firstSection
+		let bucket = byKey[sec.key]
+		if (!bucket) {
+			bucket = { key: sec.key, label: sec.label, fields: [] }
+			byKey[sec.key] = bucket
+			out.push(bucket)
+		}
+		bucket.fields.push(f)
+	}
+	return out
+})
 
 function isEditableMetaField(mf) {
 	if (META_HIDDEN_FIELDTYPES.has(mf.fieldtype)) return false
@@ -2316,6 +2423,108 @@ const detailFields = computed(() => {
 	return out
 })
 
+// ── Details tab, grouped into titled cards by Section Break ──
+// Same skip rules as detailFields (kept above because quickInfo needs the flat
+// list). The only addition here is partitioning meta.fields on Section Break so
+// the Details tab renders one accent-header card per logical section. Empty
+// groups are dropped so we never render a naked teal header.
+const detailSections = computed(() => {
+	if (!doc.value) return []
+
+	// 0) curated per-doctype GROUPS → multiple titled cards (for DocTypes whose
+	//    own section layout is flat/unnamed, e.g. Work Order). Wins over the
+	//    single-card config + meta grouping. Empty groups (all fields dropped)
+	//    are not rendered.
+	const groups = getDetailGroups(doctype.value)
+	if (groups) {
+		const out = []
+		for (const g of groups) {
+			const fields = []
+			for (const raw of g.fields) {
+				const fn = typeof raw === "string" ? raw : raw.fieldname
+				if (!fn || !(fn in doc.value)) continue
+				if (SYSTEM_FIELDS.has(fn)) continue
+				const mf = metaFieldMap.value[fn]
+				if (mf && META_HIDDEN_FIELDTYPES.has(mf.fieldtype)) continue
+				if (mf?.hidden) continue
+				if (mf?.read_only && isEmptyForHide(doc.value[fn], mf?.fieldtype)) continue
+				const label = (typeof raw === "object" && raw.label) || mf?.label || humanize(fn)
+				const type = (typeof raw === "object" && raw.type) || (mf ? mfTypeToDisplay(mf.fieldtype) : null)
+				fields.push({
+					fieldname: fn,
+					label,
+					type,
+					isLink: type === "Link" || mf?.fieldtype === "Link" || !!linkTypeFor(fn),
+				})
+			}
+			if (fields.length) {
+				out.push({
+					key: g.key || g.label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+					label: g.label,
+					fields,
+				})
+			}
+		}
+		if (out.length) return out
+	}
+
+	// 1) explicit per-doctype config → single "Details" card
+	const cfg = getDetailFieldConfig(doctype.value)
+	if (cfg) {
+		const fields = []
+		for (const f of cfg) {
+			if (!(f.fieldname in doc.value)) continue
+			const cmf = metaFieldMap.value[f.fieldname]
+			if (cmf?.read_only && isEmptyForHide(doc.value[f.fieldname], cmf?.fieldtype)) continue
+			fields.push({
+				fieldname: f.fieldname,
+				label: f.label || humanize(f.fieldname),
+				type: f.type || null,
+				isLink: f.type === "Link" || linkTypeFor(f.fieldname),
+			})
+		}
+		return fields.length ? [{ key: "details", label: "Details", fields }] : []
+	}
+
+	// 2) meta-driven → partition on Section Break
+	if (meta.value?.fields?.length) {
+		const sections = []
+		let cur = { key: "details", label: null, fields: [] }
+		const flush = () => {
+			if (cur.fields.length) sections.push(cur)
+		}
+		for (const mf of meta.value.fields) {
+			if (mf.fieldtype === "Section Break") {
+				flush()
+				cur = { key: mf.fieldname || `sec-${sections.length}`, label: mf.label || null, fields: [] }
+				continue
+			}
+			if (META_HIDDEN_FIELDTYPES.has(mf.fieldtype)) continue
+			if (SYSTEM_FIELDS.has(mf.fieldname)) continue
+			if (mf.hidden) continue
+			if (!(mf.fieldname in doc.value)) continue
+			if (mf.read_only && isEmptyForHide(doc.value[mf.fieldname], mf.fieldtype)) continue
+			cur.fields.push({
+				fieldname: mf.fieldname,
+				label: mf.label || humanize(mf.fieldname),
+				type: mfTypeToDisplay(mf.fieldtype),
+				isLink: mf.fieldtype === "Link",
+			})
+		}
+		flush()
+		return sections.map((s, i) => ({ ...s, label: s.label || (i === 0 ? "Details" : "More") }))
+	}
+
+	// 3) bare fallback → one "Details" card
+	const fields = []
+	for (const [k, v] of Object.entries(doc.value)) {
+		if (SYSTEM_FIELDS.has(k)) continue
+		if (Array.isArray(v) || (v && typeof v === "object")) continue
+		fields.push({ fieldname: k, label: humanize(k), type: null, isLink: false })
+	}
+	return fields.length ? [{ key: "details", label: "Details", fields }] : []
+})
+
 // ── Child tables (from meta Table fields) — VIEW mode ──
 const childTables = computed(() => {
 	if (!doc.value) return []
@@ -2636,6 +2845,11 @@ function humanize(s) {
 		.replace(/_/g, " ")
 		.replace(/\b\w/g, (c) => c.toUpperCase())
 }
+// Empty for display purposes — drives the quiet "—" placeholder styling in the
+// Details cards (matches displayValue's own empty check).
+function isEmptyValue(v) {
+	return v === null || v === undefined || v === ""
+}
 function mfTypeToDisplay(ft) {
 	if (ft === "Date") return "Date"
 	if (ft === "Datetime") return "Datetime"
@@ -2796,11 +3010,21 @@ function stripHtml(s) {
 .form-layout {
 	display: block;
 }
+/* The edit/create form is a stack of titled .mgk-card sections, so its outer
+   container drops its own card chrome (border/bg) and just owns the rhythm. */
+.detail-main.form-card {
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	overflow: visible;
+}
 .form-card {
-	padding: 18px 20px;
 	display: flex;
 	flex-direction: column;
-	gap: 20px;
+	gap: var(--space-4);
+}
+.form-section .form-grid {
+	margin: 0;
 }
 .form-grid {
 	display: grid;
@@ -2820,6 +3044,16 @@ function stripHtml(s) {
 }
 .form-field.wide {
 	grid-column: 1 / -1;
+}
+/* Form labels match the Details label scale — uppercase muted, ABOVE the input
+   (the form's natural order is preserved; the value-as-hero order swap is
+   scoped to .field in the read view only). */
+.form-field > label.field-label {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--mgk-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
 }
 .form-field .fld {
 	width: 100%;
@@ -2896,13 +3130,58 @@ function stripHtml(s) {
 	border-radius: 999px;
 }
 
-/* Field grid (view) */
+/* Details tab — grouped accent-header cards */
+.details-stack {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+	gap: 16px;
+	align-items: start;
+}
+@media (min-width: 1400px) {
+	.details-stack {
+		grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+	}
+}
+
+.detail-card {
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius);
+	overflow: hidden;
+	box-shadow: var(--mgk-shadow-sm);
+}
+.detail-card__head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	/* AA FIX: band runs accent-600 → accent-700 so white title passes 4.6:1 */
+	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+}
+.detail-card__dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--mgk-accent-ink);
+	opacity: 0.85;
+	flex: 0 0 auto;
+}
+.detail-card__title {
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	color: var(--mgk-accent-ink);
+}
+.detail-card__body {
+	padding: 16px 18px 18px;
+}
+
 .field-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 14px 28px;
+	gap: 4px 28px;
 }
-@media (max-width: 700px) {
+@media (max-width: 640px) {
 	.field-grid {
 		grid-template-columns: 1fr;
 	}
@@ -2910,18 +3189,22 @@ function stripHtml(s) {
 .field {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 2px;
+	padding: 9px 0;
 	min-width: 0;
+	border-bottom: 1px solid var(--mgk-line);
 }
 .field-label {
-	font-size: 11.5px;
-	letter-spacing: 0.04em;
+	font-size: 11px;
+	letter-spacing: 0.03em;
 	text-transform: uppercase;
 	color: var(--mgk-muted);
 	font-weight: 600;
 }
 .field-value {
-	font-size: 13.5px;
+	font-size: 16px;
+	line-height: 1.35;
+	font-weight: 600;
 	color: var(--mgk-ink);
 	word-break: break-word;
 }
@@ -2934,7 +3217,21 @@ function stripHtml(s) {
 }
 .field-value.mgkmono {
 	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-	font-size: 13px;
+	font-size: 15px;
+	letter-spacing: -0.01em;
+}
+.field-value.is-empty {
+	color: var(--mgk-muted-2);
+	font-weight: 500;
+}
+/* Value-as-hero ordering — SCOPED to Details cards (.field) only, so the
+   create/edit form (.form-field .field-label) keeps its label ABOVE the input.
+   A global .field-label{order:2} inverted the edit form. */
+.field > .field-value {
+	order: 1;
+}
+.field > .field-label {
+	order: 2;
 }
 
 .empty-inline {
@@ -2952,12 +3249,6 @@ function stripHtml(s) {
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius-sm);
 	overflow: hidden;
-}
-.table-empty {
-	text-align: center;
-	padding: 22px 0;
-	color: var(--mgk-muted);
-	font-size: 13px;
 }
 
 /* Timeline */
@@ -3090,20 +3381,19 @@ function stripHtml(s) {
 }
 .side-card {
 	border: 1px solid var(--mgk-line);
-	box-shadow: none;
+	box-shadow: var(--mgk-shadow-sm);
+	overflow: hidden;
 }
+/* Band head is full-bleed; the body owns the inset. Matches the Details cards. */
 :deep(.side-card .p-card-body) {
-	padding: 14px 16px;
+	padding: 0;
+	gap: 0;
+}
+:deep(.side-card .p-card-caption) {
+	margin: 0;
 }
 :deep(.side-card .p-card-content) {
-	padding: 0;
-}
-.side-title {
-	font-size: 11.5px;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: var(--mgk-muted);
-	font-weight: 600;
+	padding: 14px 16px;
 }
 .meta-row {
 	display: flex;

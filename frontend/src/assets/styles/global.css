@@ -3,24 +3,63 @@
    holds the page reset, shell layout variables, and a few app-level helpers. */
 
 :root {
-	--mgk-bg: #F4F1EB;          /* warm off-white page background */
-	--mgk-card: #FFFFFF;
-	--mgk-ink: #0B1220;
-	--mgk-ink-2: #1F2937;
-	--mgk-muted: #6B7280;
-	--mgk-muted-2: #9AA1AC;
-	--mgk-line: #E5E1D8;
-	--mgk-accent: #0F766E;
-	--mgk-accent-50: #E7F4F2;
-	--mgk-accent-700: #115E59;
-	--mgk-slate-50: #EEF2F6;
+	/* ── Surfaces ── */
+	--mgk-bg:        #F6F8FA;   /* cool near-white page (was warm cream #F4F1EB) */
+	--mgk-card:      #FFFFFF;   /* white panels/cards */
+	--mgk-slate-50:  #EEF2F7;   /* secondary surface (table headers, hover rows) */
 
+	/* ── Text ── */
+	--mgk-ink:       #0B1220;   /* primary value text — ~16:1 on white */
+	--mgk-ink-2:     #1E293B;   /* secondary headings — ~13:1 */
+	--mgk-muted:     #5B6573;   /* labels/hints — AA on white (~4.9:1) */
+	--mgk-muted-2:   #94A3B8;   /* disabled/subtle/empty placeholder */
+
+	/* ── Lines ── */
+	--mgk-line:      #E2E8F0;   /* cool crisp hairline (was warm #E5E1D8) */
+
+	/* ── Accent: brighter modern teal, same family ── */
+	--mgk-accent:    #0D9488;   /* vivid teal — fills, header band, icons (was #0F766E) */
+	--mgk-accent-50: #E6F6F4;   /* light teal wash — badges, focus tint */
+	--mgk-accent-600:#0F827A;   /* mid teal — header-band gradient stop */
+	--mgk-accent-700:#0F766E;   /* dark teal — link text, hover (AA ~4.6:1 on white) */
+	--mgk-accent-ink:#FFFFFF;   /* text/icon color ON the teal header band */
+
+	/* ── Elevation (cool, not warm) ── */
+	--mgk-shadow:    rgba(15, 23, 42, 0.06);
+	--mgk-shadow-md: rgba(15, 23, 42, 0.10);
+
+	/* ── Sizing ── */
 	--sidebar-width: 232px;
 	--sidebar-collapsed-width: 60px;
 	--topbar-height: 56px;
-	--radius-sm: 5px;
-	--radius: 8px;
-	--radius-lg: 12px;
+	--radius-sm: 6px;    /* was 5px */
+	--radius: 10px;      /* was 8px */
+	--radius-lg: 14px;   /* was 12px */
+
+	/* ── Spacing scale (replaces 14 ad-hoc gap values) ── */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+
+	/* ── Shadow scale (replaces inline shadow + the unused -md token) ── */
+	--mgk-shadow-sm: 0 1px 2px var(--mgk-shadow), 0 1px 1px rgba(15, 23, 42, 0.04);
+	--mgk-shadow-pop: 0 4px 12px var(--mgk-shadow-md);   /* dropdowns/dialogs — USES --mgk-shadow-md, resolving the "unused" minor */
+
+	/* ── Status colors (single source for all badges/pills) ── */
+	--mgk-success:    #047857;   /* AA on white 4.6:1 */
+	--mgk-success-50: #ECFDF5;
+	--mgk-warn:       #B45309;   /* amber-ink, AA 4.5:1 — replaces bare orange text */
+	--mgk-warn-50:    #FEF3C7;
+	--mgk-danger:     #BE123C;   /* matches existing #be123c already in code */
+	--mgk-danger-50:  #FFE4E6;
+
+	/* ── Form control geometry (single source) ── */
+	--ctrl-h: 38px;              /* touch target floor — meets ~40px principle */
+	--ctrl-pad: 8px 11px;
+	--ctrl-radius: var(--radius-sm);
 }
 
 * {
@@ -59,3 +98,77 @@ a {
 	font-weight: 600;
 	color: var(--mgk-accent-700);
 }
+
+/* ── Bright Workshop card system (canonical — mirrors DocDetail .detail-card) ── */
+.mgk-card {
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius);
+	box-shadow: var(--mgk-shadow-sm);
+	overflow: hidden;
+}
+.mgk-card__head {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 10px 16px;
+	/* AA FIX: band runs accent-600 → accent-700 so white title passes 4.6:1 */
+	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+}
+.mgk-card__head::before {            /* leading dot glyph */
+	content: "";
+	width: 6px; height: 6px;
+	border-radius: 999px;
+	background: var(--mgk-accent-ink);
+	opacity: 0.85;
+	flex: 0 0 auto;
+}
+.mgk-card__title {
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--mgk-accent-ink);
+}
+.mgk-card__count {                   /* optional right-aligned count pill */
+	margin-left: auto;
+	background: rgba(255,255,255,0.22);
+	color: var(--mgk-accent-ink);
+	font-size: 11px; font-weight: 600;
+	padding: 1px 8px; border-radius: 999px;
+}
+.mgk-card__body { padding: var(--space-4); }
+
+/* Lightweight panel-head variant for editors that can't use the full band */
+.mgk-panel-head {
+	border-left: 4px solid var(--mgk-accent);
+	padding: 8px 14px;
+	background: var(--mgk-slate-50);
+	font-size: 13px; font-weight: 700; letter-spacing: 0.01em;
+	color: var(--mgk-ink-2);
+	border-bottom: 1px solid var(--mgk-line);
+}
+
+/* Value-as-hero field (Details pattern, reusable in editors' read rows) */
+.mgk-field { display: flex; flex-direction: column; gap: 2px; padding: 9px 0; min-width: 0; border-bottom: 1px solid var(--mgk-line); }
+.mgk-field__value { order: 1; font-size: 16px; line-height: 1.35; font-weight: 600; color: var(--mgk-ink); word-break: break-word; }
+.mgk-field__label { order: 2; font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--mgk-muted); font-weight: 600; }
+
+/* Section header for editors (when a full band is overkill) */
+.mgk-section-title {
+	display: flex; align-items: center; gap: var(--space-2);
+	font-size: 14px; font-weight: 700; color: var(--mgk-ink-2);
+	padding-left: 10px; border-left: 3px solid var(--mgk-accent);
+	letter-spacing: 0.01em;
+}
+
+/* Empty-state (replaces every bare grey "No rows" text) */
+.mgk-empty {
+	display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
+	padding: 28px 16px; text-align: center;
+	color: var(--mgk-muted);
+	border: 1px dashed var(--mgk-line); border-radius: var(--radius);
+	background: var(--mgk-bg);
+}
+.mgk-empty .pi { font-size: 26px; color: var(--mgk-accent); opacity: 0.85; }
+.mgk-empty__text { font-size: 13px; }

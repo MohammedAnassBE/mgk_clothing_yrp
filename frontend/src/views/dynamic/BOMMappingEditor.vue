@@ -72,24 +72,6 @@
 			</div>
 			<div class="head-actions">
 				<Button
-					label="Enable all"
-					icon="pi pi-check-circle"
-					size="small"
-					severity="success"
-					:disabled="loading || !!loadError || !data.length"
-					v-tooltip.bottom="'Include every combination'"
-					@click="enableRows"
-				/>
-				<Button
-					label="Disable incomplete"
-					icon="pi pi-ban"
-					size="small"
-					severity="warn"
-					:disabled="loading || !!loadError || !data.length"
-					v-tooltip.bottom="'Exclude included rows that have a blank BOM value'"
-					@click="disableRows"
-				/>
-				<Button
 					label="Save"
 					icon="pi pi-check"
 					size="small"
@@ -293,9 +275,13 @@
 				     the page-header pair scrolls out of view on a long grid). -->
 				<div class="grid-toolbar">
 					<div class="grid-meta">
-						{{ includedCount }} of {{ data.length }} combination(s) included
+						<Tag
+							:value="`${includedCount} of ${data.length} included`"
+							severity="primary"
+							rounded
+						/>
 						<span v-if="bomAttrs.length === 0" class="grid-warn">
-							· This mapping has no BOM-side attribute columns — nothing to map.
+							This mapping has no BOM-side attribute columns — nothing to map.
 						</span>
 					</div>
 					<div class="grid-toolbar-actions">
@@ -303,7 +289,6 @@
 							label="Enable all"
 							icon="pi pi-check-circle"
 							size="small"
-							severity="success"
 							:disabled="!data.length"
 							v-tooltip.top="'Include every combination'"
 							@click="enableRows"
@@ -312,7 +297,8 @@
 							label="Disable incomplete"
 							icon="pi pi-ban"
 							size="small"
-							severity="warn"
+							severity="secondary"
+							outlined
 							:disabled="!data.length"
 							v-tooltip.top="'Exclude included rows that have a blank BOM value'"
 							@click="disableRows"
@@ -437,7 +423,10 @@
 						</Column>
 
 						<template #empty>
-							<div class="table-empty">No combinations.</div>
+							<div class="mgk-empty">
+							<i class="pi pi-table" />
+							<p class="mgk-empty__text">No combinations.</p>
+						</div>
 						</template>
 					</DataTable>
 				</section>
@@ -1247,20 +1236,40 @@ function navItem(name) {
 	border-radius: var(--radius);
 	overflow: hidden;
 }
+/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--mgk-line);
-	background: var(--mgk-slate-50);
+	gap: var(--space-2);
+	padding: 10px 16px;
+	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+}
+.panel-head::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--mgk-accent-ink);
+	opacity: 0.85;
+	flex: 0 0 auto;
 }
 .panel-head h3 {
 	margin: 0;
-	font-size: 14px;
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--mgk-accent-ink);
+}
+/* The panel-meta sub-label on the attr heads reads as a right-aligned count pill. */
+.panel-head .panel-meta {
+	margin-left: auto;
+	background: rgba(255, 255, 255, 0.22);
+	color: var(--mgk-accent-ink);
+	font-size: 11px;
 	font-weight: 600;
-	color: var(--mgk-ink);
+	padding: 1px 8px;
+	border-radius: 999px;
 }
 
 /* Context grid */
@@ -1330,12 +1339,15 @@ function navItem(name) {
 	gap: 8px;
 }
 .grid-meta {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
 	font-size: 12.5px;
 	color: var(--mgk-muted);
 	padding: 0 2px;
 }
 .grid-warn {
-	color: #b45309;
+	color: var(--mgk-warn);
 }
 
 /* Grid */
@@ -1364,34 +1376,32 @@ function navItem(name) {
 .item-chip {
 	font-weight: 500;
 }
+/* Constrain the repeated per-row inputs so rows stop wasting horizontal space. */
 .cell-select,
 .cell-num {
 	width: 100%;
+	max-width: 160px;
 }
 .cell-missing :deep(.p-select),
 .cell-missing :deep(.p-inputnumber-input) {
-	border-color: #f0b27a;
+	border-color: var(--mgk-warn);
 }
 .cell-missing.cell-num :deep(.p-inputnumber-input) {
-	border-color: #f0b27a;
-}
-.table-empty {
-	text-align: center;
-	padding: 16px 0;
-	color: var(--mgk-muted);
-	font-size: 12.5px;
+	border-color: var(--mgk-warn);
 }
 
 :deep(.bom-dt .p-datatable-thead > tr > th) {
-	background: var(--mgk-slate-50);
 	font-size: 11.5px;
 	letter-spacing: 0.03em;
-	color: var(--mgk-muted);
 	padding: 8px;
 	vertical-align: top;
 }
+/* Zebra striping + taller rows for a long (15-row) grid's scannability. */
+:deep(.bom-dt .p-datatable-tbody > tr:nth-child(even)) {
+	background: var(--mgk-bg);
+}
 :deep(.bom-dt .p-datatable-tbody > tr > td) {
-	padding: 5px 8px;
+	padding: 9px 10px;
 	vertical-align: middle;
 }
 </style>

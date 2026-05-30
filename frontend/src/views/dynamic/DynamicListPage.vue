@@ -4,9 +4,7 @@
 		<div class="page-head">
 			<div>
 				<h1 class="page-title">{{ registry?.label || docRoute }}</h1>
-				<p class="page-sub">
-					{{ doctype }}<span v-if="!doctype"> — unknown route</span>
-				</p>
+				<p v-if="!doctype" class="page-sub">unknown route</p>
 			</div>
 			<div class="head-actions">
 				<IconField v-if="!accessDenied">
@@ -156,9 +154,9 @@
 			</Column>
 
 			<template #empty>
-				<div class="table-empty">
-					<i class="pi pi-inbox" style="font-size: 1.6rem; opacity: 0.4" />
-					<p>No records found</p>
+				<div class="mgk-empty">
+					<i class="pi pi-inbox" />
+					<p class="mgk-empty__text">No records found</p>
 				</div>
 			</template>
 		</DataTable>
@@ -919,10 +917,10 @@ function rowSeverity(row) {
 }
 
 .page-title {
-	font-size: 22px;
+	font-size: 24px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
-	margin: 0;
+	margin: 0 0 var(--space-3);
 	color: var(--mgk-ink);
 }
 
@@ -946,7 +944,8 @@ function rowSeverity(row) {
 
 .date-tab {
 	font-size: 12px;
-	padding: 4px 10px;
+	min-height: 32px;
+	padding: 6px 12px;
 	border-radius: 999px;
 	color: var(--mgk-muted);
 	cursor: pointer;
@@ -955,9 +954,9 @@ function rowSeverity(row) {
 }
 
 .date-tab.active {
-	color: var(--mgk-ink);
-	background: var(--mgk-slate-50);
-	border-color: var(--mgk-line);
+	color: var(--mgk-accent-700);
+	background: var(--mgk-accent-50);
+	border-color: var(--mgk-accent);
 	font-weight: 600;
 }
 
@@ -990,17 +989,10 @@ function rowSeverity(row) {
 	cursor: pointer;
 }
 
-.table-empty {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 8px;
-	padding: 30px 0;
-	color: var(--mgk-muted);
-}
-
-.table-empty p {
-	margin: 0;
+/* Taller rows (~40px) for a comfortable touch target. */
+:deep(.mgk-table .p-datatable-tbody > tr > td) {
+	padding-top: 11px;
+	padding-bottom: 11px;
 	font-size: 13px;
 }
 

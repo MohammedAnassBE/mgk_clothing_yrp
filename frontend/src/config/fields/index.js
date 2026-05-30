@@ -39,6 +39,18 @@ export function getDetailFieldConfig(doctype) {
 }
 
 /**
+ * Curated VIEW Details grouping: Array<{ label, key?, fields: Array<string |
+ * {fieldname, label?, type?}> }>, or null to fall back to meta Section-Break
+ * grouping. Use this for DocTypes whose own section structure is flat/unnamed
+ * (e.g. Work Order's 26-field top section) so the Details tab still renders as
+ * tidy, meaningfully-titled cards instead of one giant card. Takes precedence
+ * over `detail` (single card) and meta grouping in DocDetail.detailSections.
+ */
+export function getDetailGroups(doctype) {
+	return FIELD_CONFIGS[doctype]?.detailGroups || null
+}
+
+/**
  * EDIT/CREATE field-order array (config-listed fields first, rest appended
  * by DocDetail in meta order). null means "use meta order entirely".
  */

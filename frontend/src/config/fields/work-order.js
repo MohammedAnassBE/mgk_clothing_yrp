@@ -18,25 +18,59 @@
  */
 import { searchAddressForParty } from "@/api/client"
 
-const detail = [
-	{ fieldname: "production_detail", label: "Item Production Detail", type: "Link" },
-	{ fieldname: "process_name", label: "Process", type: "Link" },
-	{ fieldname: "item", label: "Item", type: "Link" },
-	{ fieldname: "supplier", label: "Supplier (Job-worker)", type: "Link" },
-	{ fieldname: "supplier_name", label: "Job-worker Name" },
-	{ fieldname: "delivery_location", label: "Delivery Location", type: "Link" },
-	{ fieldname: "delivery_location_name", label: "Delivery Location Name" },
-	{ fieldname: "parent_wo", label: "Parent WO", type: "Link" },
-	{ fieldname: "total_quantity", label: "Total Quantity", type: "Float" },
-	{ fieldname: "wo_date", label: "WO Date", type: "Date" },
-	{ fieldname: "planned_start_date", label: "Planned Start", type: "Date" },
-	{ fieldname: "planned_end_date", label: "Planned End", type: "Date" },
-	{ fieldname: "expected_delivery_date", label: "Expected Delivery", type: "Date" },
-	{ fieldname: "is_rework", label: "Is Rework", type: "Check" },
-	{ fieldname: "rework_type", label: "Rework Type" },
-	{ fieldname: "supplier_address", label: "Supplier Address", type: "Link" },
-	{ fieldname: "delivery_address", label: "Delivery Address", type: "Link" },
-	{ fieldname: "comments", label: "Comments", type: "Text" },
+// Curated VIEW Details grouping. Work Order's own DocType layout is a flat
+// 26-field top section + several UNNAMED sections, so meta Section-Break
+// grouping would render one giant card + repeated "More" cards. These named
+// groups give it the same tidy multi-card Details tab as Delivery Challan.
+// Fields not present / hidden / read-only-empty are dropped per-group by
+// DocDetail; a group whose fields all drop is not rendered. JSON blobs and the
+// *_details / *_name / amended_from noise are filtered globally, so they are
+// intentionally omitted here.
+const detailGroups = [
+	{
+		label: "Identity",
+		fields: [
+			"naming_series", "status", "is_rework", "rework_type",
+			"item", "production_detail", "process_name", "parent_wo",
+		],
+	},
+	{
+		label: "Job-worker & Delivery",
+		fields: [
+			"supplier", "supplier_type", "supplier_address",
+			"delivery_location", "delivery_address", "terms_and_condition",
+		],
+	},
+	{
+		label: "Schedule",
+		fields: [
+			"wo_date", "planned_start_date", "planned_end_date", "expected_delivery_date",
+			"start_date", "end_date", "first_dc_date", "last_dc_date", "first_grn_date", "last_grn_date",
+		],
+	},
+	{
+		label: "Quantities",
+		fields: [
+			"total_quantity", "planned_quantity",
+			"total_no_of_pieces_delivered", "total_no_of_pieces_received", "wo_colours",
+		],
+	},
+	{
+		label: "Status & Closure",
+		fields: [
+			"open_status", "is_delivered", "is_internal_unit", "includes_packing", "is_manual_entry",
+			"close_reason", "close_other_reason", "close_remarks", "closed_by",
+			"approved_by", "rejection_reason",
+		],
+	},
+	{
+		label: "Stock & Costing",
+		fields: ["process_cost", "reduce_stock_entry", "update_stock_entry"],
+	},
+	{
+		label: "Notes",
+		fields: ["comments"],
+	},
 ]
 
 // Form-mode field order — every editable field listed in the order the Desk
@@ -103,7 +137,7 @@ const linkSearchHandlers = {
 }
 
 export default {
-	detail,
+	detailGroups,
 	formOrder,
 	hideFormFields,
 	linkSearchHandlers,

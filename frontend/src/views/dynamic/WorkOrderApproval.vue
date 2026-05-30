@@ -203,20 +203,20 @@ defineExpose({ state, reload: loadState })
 	display: flex;
 	align-items: flex-start;
 	gap: 10px;
-	background: #FEF6E7;
-	border: 1px solid #F3D9A8;
+	background: var(--mgk-warn-50);
+	border: 1px solid var(--mgk-warn);
 	border-radius: var(--radius-sm);
 	padding: 11px 14px;
 	margin-bottom: 14px;
 	font-size: 12.5px;
-	color: #92560a;
+	color: var(--mgk-warn);
 	line-height: 1.5;
 }
 
 .gate-banner.cleared {
-	background: #ECFDF3;
-	border-color: #bfe3cb;
-	color: #1b5e2b;
+	background: var(--mgk-success-50);
+	border-color: var(--mgk-success);
+	color: var(--mgk-success);
 }
 
 .gate-banner .g-ic {
@@ -253,7 +253,7 @@ defineExpose({ state, reload: loadState })
 .reject-error {
 	display: block;
 	margin-top: 6px;
-	color: #be123c;
+	color: var(--mgk-danger);
 	font-size: 12px;
 }
 </style>

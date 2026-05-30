@@ -211,7 +211,7 @@
 								v-for="a in inputAttributes"
 								:key="'ia-' + a"
 								:value="a"
-								severity="info"
+								severity="primary"
 								rounded
 							>
 								<span>{{ a }}</span>
@@ -239,7 +239,7 @@
 								v-for="a in outputAttributes"
 								:key="'oa-' + a"
 								:value="a"
-								severity="success"
+								severity="secondary"
 								rounded
 							>
 								<span>{{ a }}</span>
@@ -327,7 +327,10 @@
 							</template>
 						</Column>
 						<template #empty>
-							<div class="table-empty">No input rows.</div>
+							<div class="mgk-empty">
+								<i class="pi pi-table" />
+								<p class="mgk-empty__text">No input rows.</p>
+							</div>
 						</template>
 					</DataTable>
 				</div>
@@ -382,15 +385,30 @@
 							</template>
 						</Column>
 						<template #empty>
-							<div class="table-empty">No output rows.</div>
+							<div class="mgk-empty">
+								<i class="pi pi-table" />
+								<p class="mgk-empty__text">No output rows.</p>
+							</div>
 						</template>
 					</DataTable>
 				</div>
 			</section>
 
-			<div v-if="!groups.length" class="empty-state">
-				No groups yet. Click <strong>Add Group</strong>, or use
-				<strong>Generate Combinations</strong> to seed from the attribute cross-product.
+			<div v-if="!groups.length" class="mgk-empty">
+				<i class="pi pi-sitemap" />
+				<p class="mgk-empty__text">
+					No groups yet. Add a group, or use
+					<strong>Generate Combinations</strong> to seed from the attribute cross-product.
+				</p>
+				<Button
+					v-if="!readonly"
+					label="Add Group"
+					icon="pi pi-plus"
+					size="small"
+					severity="secondary"
+					outlined
+					@click="addGroup"
+				/>
 			</div>
 		</template>
 	</div>
@@ -1033,24 +1051,37 @@ function goMatrixList() {
 	border-radius: var(--radius);
 	overflow: hidden;
 }
+/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--mgk-line);
-	background: var(--mgk-slate-50);
+	gap: var(--space-2);
+	padding: 10px 16px;
+	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+}
+.panel-head::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--mgk-accent-ink);
+	opacity: 0.85;
+	flex: 0 0 auto;
 }
 .panel-head h3 {
 	margin: 0;
-	font-size: 14px;
-	font-weight: 600;
-	color: var(--mgk-ink);
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--mgk-accent-ink);
 }
+/* Explanatory sub-label reads as lighter text on the band (it's prose, not a count). */
 .panel-meta {
-	font-size: 12px;
-	color: var(--mgk-muted);
+	margin-left: auto;
+	max-width: 60%;
+	font-size: 11.5px;
+	color: rgba(255, 255, 255, 0.85);
 	text-align: right;
 }
 
@@ -1080,11 +1111,11 @@ function goMatrixList() {
 	font-weight: 600;
 }
 .fld-wrap .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 .fld-hint {
-	font-size: 11px;
-	color: var(--mgk-muted-2);
+	font-size: 12px;
+	color: var(--mgk-muted);
 }
 
 /* Attribute pickers */
@@ -1107,10 +1138,10 @@ function goMatrixList() {
 	gap: 10px;
 }
 .input-col {
-	border-top: 2px solid #5e64ff;
+	border-top: 2px solid var(--mgk-accent);
 }
 .output-col {
-	border-top: 2px solid #28a745;
+	border-top: 2px solid var(--mgk-accent-700);
 }
 .attr-col-head {
 	display: flex;
@@ -1175,10 +1206,10 @@ function goMatrixList() {
 	padding-left: 10px;
 }
 .input-side {
-	border-left: 3px solid #5e64ff;
+	border-left: 3px solid var(--mgk-accent);
 }
 .output-side {
-	border-left: 3px solid #28a745;
+	border-left: 3px solid var(--mgk-accent-700);
 }
 .side-heading {
 	display: flex;
@@ -1197,27 +1228,11 @@ function goMatrixList() {
 .cell-text {
 	width: 100%;
 }
-.table-empty {
-	text-align: center;
-	padding: 16px 0;
-	color: var(--mgk-muted);
-	font-size: 12.5px;
-}
-.empty-state {
-	padding: 24px;
-	text-align: center;
-	color: var(--mgk-muted);
-	border: 1px dashed var(--mgk-line);
-	border-radius: var(--radius);
-	background: var(--mgk-card);
-}
-
+/* Table headers inherit the PART 1c slate band; only refine the type here. */
 :deep(.combo-dt .p-datatable-thead > tr > th) {
-	background: var(--mgk-slate-50);
 	font-size: 11.5px;
 	letter-spacing: 0.03em;
 	text-transform: uppercase;
-	color: var(--mgk-muted);
 	padding: 6px 8px;
 }
 :deep(.combo-dt .p-datatable-tbody > tr > td) {

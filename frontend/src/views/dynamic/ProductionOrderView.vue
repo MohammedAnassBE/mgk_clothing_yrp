@@ -1091,20 +1091,30 @@ function formatNumber(val) {
 	border-radius: var(--radius);
 	overflow: visible; /* allow dropdowns to escape the card */
 }
+/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--mgk-line);
-	background: var(--mgk-slate-50);
+	gap: var(--space-2);
+	padding: 10px 16px;
+	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+}
+.panel-head::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--mgk-accent-ink);
+	opacity: 0.85;
+	flex: 0 0 auto;
 }
 .panel-head h3 {
 	margin: 0;
-	font-size: 14px;
-	font-weight: 600;
-	color: var(--mgk-ink);
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--mgk-accent-ink);
 }
 
 /* Header grid */

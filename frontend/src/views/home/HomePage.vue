@@ -9,8 +9,8 @@
 		     to its DocType list pre-filtered to the same condition (§6.4). -->
 		<template v-if="visibleQueues.length">
 			<div class="section-head">
-				<h2>My Work Today</h2>
-				<span class="hint">Live counts across your queues</span>
+				<h2 class="mgk-section-title">My Work Today</h2>
+				<span class="section-hint">Live counts across your queues</span>
 			</div>
 
 			<div class="queue-grid">
@@ -37,8 +37,8 @@
 		     creates (CUSTOM_UI §11). -->
 		<template v-if="quickCreates.length">
 			<div class="section-head">
-				<h2>Quick Create</h2>
-				<span class="hint">Start a new document</span>
+				<h2 class="mgk-section-title">Quick Create</h2>
+				<span class="section-hint">Start a new document</span>
 			</div>
 
 			<div class="quick-create-row">
@@ -56,8 +56,8 @@
 
 		<!-- Jump to — hero shortcut grid (kept). -->
 		<div class="section-head">
-			<h2>Jump to</h2>
-			<span class="hint">Live document lists</span>
+			<h2 class="mgk-section-title">Jump to</h2>
+			<span class="section-hint">Live document lists</span>
 		</div>
 
 		<div class="shortcut-grid">
@@ -157,6 +157,10 @@ const visibleShortcuts = computed(() =>
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	/* Containment: blank lower region reads as intentional margin, not void. */
+	max-width: 1100px;
+	margin: 0 auto;
+	width: 100%;
 }
 
 .home-greeting h1 {
@@ -166,10 +170,8 @@ const visibleShortcuts = computed(() =>
 	letter-spacing: -0.01em;
 }
 
+/* Helper text stacks directly under the heading (not right-aligned). */
 .section-head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
 	margin: 14px 0 8px;
 }
 
@@ -179,9 +181,12 @@ const visibleShortcuts = computed(() =>
 	margin: 0;
 }
 
-.section-head .hint {
-	font-size: 12px;
-	color: var(--mgk-muted);
+.section-hint {
+	display: block;
+	margin-top: 2px;
+	padding-left: 13px;   /* aligns under the section-title text past its accent bar */
+	font-size: 11px;
+	color: var(--mgk-muted-2);
 }
 
 /* ── My Work Today queue cards ── */
@@ -198,6 +203,7 @@ const visibleShortcuts = computed(() =>
 	background: var(--mgk-card);
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius);
+	box-shadow: var(--mgk-shadow-sm);
 	padding: 14px 16px;
 	cursor: pointer;
 	text-align: left;
@@ -220,20 +226,18 @@ const visibleShortcuts = computed(() =>
 	flex-shrink: 0;
 }
 
-/* Tone palette — coloured square icon per queue. */
+/* Tone palette. Teal is the default identity; amber is reserved for genuine
+   alert queues (design approvals pending). The old off-palette blue "info"
+   tone is folded into teal so the home grid reads as one accent system. */
 .q-icon.tone-amber {
-	background: #FEF6E7;
-	color: #B45309;
+	background: var(--mgk-warn-50);
+	color: var(--mgk-warn);
 }
 
-.q-icon.tone-info {
-	background: #E7F0FB;
-	color: #1D4ED8;
-}
-
+.q-icon.tone-info,
 .q-icon.tone-emerald {
 	background: var(--mgk-accent-50);
-	color: var(--mgk-accent-700);
+	color: var(--mgk-accent);
 }
 
 .q-icon.tone-slate {
@@ -256,7 +260,7 @@ const visibleShortcuts = computed(() =>
 	font-size: 28px;
 	font-weight: 700;
 	line-height: 1.15;
-	color: var(--mgk-ink);
+	color: var(--mgk-accent);
 	letter-spacing: -0.02em;
 	margin: 2px 0;
 }
@@ -286,15 +290,16 @@ const visibleShortcuts = computed(() =>
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
+	min-height: 38px;
 	background: var(--mgk-card);
 	border: 1px solid var(--mgk-line);
-	border-radius: 999px;
+	border-radius: var(--radius);
 	padding: 8px 16px;
 	font-size: 13px;
 	font-weight: 600;
 	color: var(--mgk-ink-2);
 	cursor: pointer;
-	transition: border-color 0.14s, background 0.14s, color 0.14s;
+	transition: border-color 0.14s, background 0.14s;
 }
 
 .qc-pill i {
@@ -305,11 +310,12 @@ const visibleShortcuts = computed(() =>
 .qc-pill:hover {
 	border-color: var(--mgk-accent);
 	background: var(--mgk-accent-50);
-	color: var(--mgk-accent-700);
 }
 
-.qc-pill:hover i {
-	color: var(--mgk-accent-700);
+.qc-pill:hover span {
+	text-decoration: underline;
+	text-decoration-color: var(--mgk-accent);
+	text-underline-offset: 3px;
 }
 
 /* ── Jump-to shortcut grid ── */
@@ -326,6 +332,7 @@ const visibleShortcuts = computed(() =>
 	background: var(--mgk-card);
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius);
+	box-shadow: var(--mgk-shadow-sm);
 	padding: 14px 16px;
 	cursor: pointer;
 	text-align: left;
