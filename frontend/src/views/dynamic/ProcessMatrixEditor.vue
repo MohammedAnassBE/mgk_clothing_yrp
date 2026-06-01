@@ -44,23 +44,22 @@
 		<nav class="crumbs">
 			<a @click="goHome">Home</a>
 			<span class="sep">/</span>
-			<a v-if="header.ipd" @click="goIpd">{{ header.ipd }}</a>
+			<a v-if="header.ipd" @click="goIpd">{{ ipdLabel }}</a>
 			<a v-else @click="goMatrixList">IPD Process Matrix</a>
 			<span class="sep">/</span>
 			<span class="crumb-cur mgk-mono">{{ isCreate ? "New Matrix" : id }}</span>
 		</nav>
 
-		<!-- Header -->
+		<!-- Header (Q2: human descriptor is the hero; the matrix code is a chip). -->
 		<div class="detail-head">
 			<div class="id-block">
-				<div class="doc-id mgk-mono">
-					<span v-if="isCreate">New Process Matrix</span>
-					<span v-else>{{ id }}</span>
+				<div class="doc-hero">
+					{{ header.process_name || (isCreate ? "New Process Matrix" : "Process Matrix") }}
 				</div>
-				<div class="doc-title">
-					Process the combination
-					<span v-if="header.process_name"> · {{ header.process_name }}</span>
+				<div class="doc-sub">
+					Process the combination<span v-if="ipdLabel"> · {{ ipdLabel }}</span>
 				</div>
+				<div v-if="!isCreate" class="doc-id mgk-mono">{{ id }}</div>
 			</div>
 			<Tag v-if="readonly" class="head-status" value="Read-only (submitted)" severity="secondary" rounded />
 			<div class="head-actions">
@@ -415,8 +414,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from "vue"
-import { useRouter, useRoute } from "vue-router"
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
+import { useRouter, useRoute, onBeforeRouteLeave } from "vue-router"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -431,6 +430,7 @@ import LinkField from "@/components/LinkField.vue"
 import { callMethod, getDoc, searchLink } from "@/api/client"
 import { useDoc } from "@/composables/useDoc"
 import { useAppToast } from "@/composables/useToast"
+import { useAppConfirm } from "@/composables/useConfirm"
 import { usePermissions } from "@/composables/usePermissions"
 
 const vTooltip = Tooltip
@@ -442,6 +442,7 @@ const props = defineProps({
 const router = useRouter()
 const route = useRoute()
 const toast = useAppToast()
+const confirm = useAppConfirm()
 const { isAdmin, hasRole } = usePermissions()
 
 const DOCTYPE = "IPD Process Matrix"
@@ -463,6 +464,9 @@ const attributeValuesInput = reactive({})   // { attr: [values] }
 const attributeValuesOutput = reactive({})
 const groups = ref([])            // [{ group_index, group_name, inputs:[row], outputs:[row] }]
 const dependentAttribute = ref(null)
+// Q3: the owning IPD's produced item (IPD is hash-autonamed with no title_field,
+// so its human identity is the `item` data field — fetched in fetchDependentAttribute).
+const ipdItem = ref("")
 const docstatus = ref(0)
 // Default UOMs for new input/output rows — the consumed/produced item's default
 // UOM (input rows ← input_item ‖ IPD item, output rows ← output_item ‖ IPD item).
@@ -475,6 +479,31 @@ const saving = computed(() => docState.saving.value)
 const generating = ref(false)
 
 const readonly = computed(() => docstatus.value === 1 || docstatus.value === 2)
+
+// Q6: unsaved-changes guard. A deep watch flags the editable model dirty once
+// armed (after load + any create-mode auto-generate settle, so programmatic
+// seeding doesn't count). resetDirty()/armDirty() bracket load(); onSave clears it.
+const isDirty = ref(false)
+const dirtyArmed = ref(false)
+watch(
+	[header, groups, inputAttributes, outputAttributes, attributeValuesInput, attributeValuesOutput],
+	() => { if (dirtyArmed.value) isDirty.value = true },
+	{ deep: true },
+)
+async function armDirty() {
+	await nextTick()
+	dirtyArmed.value = true
+}
+function beforeUnloadGuard(e) {
+	if (isDirty.value && !readonly.value) {
+		e.preventDefault()
+		e.returnValue = ""
+	}
+}
+
+// Q2/Q3: the owning IPD's produced item names the breadcrumb + hero (the IPD's
+// own name is a meaningless hash). Falls back to the IPD code until item resolves.
+const ipdLabel = computed(() => (header.ipd ? (ipdItem.value || header.ipd) : ""))
 
 const totalCombos = computed(() => {
 	let n = 0
@@ -497,6 +526,8 @@ const newOutputAttr = ref(null)
 async function load() {
 	loading.value = true
 	loadError.value = null
+	dirtyArmed.value = false
+	isDirty.value = false
 	try {
 		if (isCreate.value) {
 			// Seed header from query (?ipd=&process=).
@@ -545,18 +576,23 @@ async function load() {
 	} finally {
 		loading.value = false
 	}
+	// Q3: resolve the owning IPD's human title for the breadcrumb/hero.
+	// Q6: arm dirty tracking only after load + auto-generate settle.
+	armDirty()
 }
 
 async function fetchDependentAttribute() {
 	dependentAttribute.value = null
+	ipdItem.value = ""
 	if (!header.ipd) return
 	try {
 		const r = await callMethod("frappe.client.get_value", {
 			doctype: "Item Production Detail",
 			filters: { name: header.ipd },
-			fieldname: "dependent_attribute",
+			fieldname: ["dependent_attribute", "item"],
 		})
 		dependentAttribute.value = r?.dependent_attribute || null
+		ipdItem.value = r?.item || ""
 	} catch (_) {
 		dependentAttribute.value = null
 	}
@@ -627,6 +663,40 @@ async function reloadAttributeValues() {
 }
 
 onMounted(load)
+
+// Q6: unsaved-changes guards — native browser-close + SPA route-leave.
+// Ctrl/Cmd+S → Save (mirror the Desk + DocDetail shortcut the specialized editors
+// were missing). preventDefault stops the browser's "save page" dialog.
+function onKeydown(e) {
+	const key = (e.key || "").toLowerCase()
+	if ((e.ctrlKey || e.metaKey) && key === "s") {
+		e.preventDefault()
+		if (readonly.value || saving.value || loading.value) return
+		onSave()
+	}
+}
+onMounted(() => {
+	window.addEventListener("beforeunload", beforeUnloadGuard)
+	window.addEventListener("keydown", onKeydown)
+})
+onBeforeUnmount(() => {
+	window.removeEventListener("beforeunload", beforeUnloadGuard)
+	window.removeEventListener("keydown", onKeydown)
+})
+onBeforeRouteLeave((to, from, next) => {
+	if (isDirty.value && !readonly.value) {
+		confirm.require({
+			header: "Discard unsaved changes?",
+			message: "You have unsaved changes to this matrix. Leave without saving?",
+			icon: "pi pi-exclamation-triangle",
+			acceptLabel: "Leave",
+			acceptClass: "p-button-danger",
+			rejectLabel: "Stay",
+			accept: () => { isDirty.value = false; next() },
+			reject: () => next(false),
+		})
+	} else next()
+})
 
 // React to query changes in create mode (router keys on path, so ?ipd= changes
 // do NOT remount — re-seed when they change while still on /new).
@@ -818,6 +888,7 @@ async function onSave() {
 		if (isCreate.value) {
 			const result = await docState.save(payload)
 			const newName = result?.name
+			isDirty.value = false // clear before navigating so the leave-guard stays silent
 			toast.success("Created", newName ? `Matrix ${newName} created` : "Matrix created")
 			if (newName) {
 				// Different path → AppLayout remounts → loads saved doc cleanly.
@@ -1002,9 +1073,21 @@ function goMatrixList() {
 	flex-direction: column;
 	gap: 3px;
 }
-.doc-id {
-	font-size: 18px;
+/* Q2: hero is the human descriptor; the matrix code drops to a small mono chip. */
+.doc-hero {
+	font-size: 20px;
+	font-weight: 700;
 	letter-spacing: -0.01em;
+	color: var(--mgk-ink);
+	line-height: 1.2;
+}
+.doc-sub {
+	font-size: 13px;
+	color: var(--mgk-muted);
+}
+.doc-id {
+	font-size: 12px;
+	color: var(--mgk-muted);
 }
 .doc-title {
 	font-size: 13px;
@@ -1051,13 +1134,13 @@ function goMatrixList() {
 	border-radius: var(--radius);
 	overflow: hidden;
 }
-/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
+/* Section heads share the Bright Workshop band (light tint; mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
 	padding: 10px 16px;
-	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+	background: var(--mgk-accent-50); border-bottom: 1px solid var(--mgk-line);
 }
 .panel-head::before {
 	content: "";
@@ -1081,7 +1164,7 @@ function goMatrixList() {
 	margin-left: auto;
 	max-width: 60%;
 	font-size: 11.5px;
-	color: rgba(255, 255, 255, 0.85);
+	color: var(--mgk-muted);
 	text-align: right;
 }
 

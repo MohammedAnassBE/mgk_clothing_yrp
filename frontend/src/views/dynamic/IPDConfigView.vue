@@ -33,14 +33,15 @@
 			<span class="sep">/</span>
 			<a @click="goList">Item Production Detail</a>
 			<span class="sep">/</span>
-			<span class="crumb-cur mgk-mono">{{ id }}</span>
+			<span class="crumb-cur" :class="{ 'mgk-mono': !itemLabel }">{{ itemLabel || id }}</span>
 		</nav>
 
-		<!-- Header -->
+		<!-- Header (Q2: the produced item is the hero; the IPD code is a chip). -->
 		<div class="detail-head">
 			<div class="id-block">
+				<div class="doc-hero">{{ itemLabel || id }}</div>
+				<div v-if="headerLine" class="doc-sub">{{ headerLine }}</div>
 				<div class="doc-id mgk-mono">{{ id }}</div>
-				<div v-if="headerLine" class="doc-title">{{ headerLine }}</div>
 			</div>
 			<Tag
 				v-if="doc"
@@ -921,6 +922,10 @@ const headerLine = computed(() => {
 	return bits.join(" · ")
 })
 
+// Q2/Q3: the produced item names the hero + breadcrumb. Item is autonamed from
+// name1, so doc.item IS already the human name — no title resolution needed.
+const itemLabel = computed(() => doc.value?.item || "")
+
 const approvalSeverity = computed(() => {
 	const s = doc.value?.approval_status
 	if (s === "Approved") return "success"
@@ -1255,9 +1260,21 @@ function fmtNum(v) {
 	flex-direction: column;
 	gap: 3px;
 }
-.doc-id {
-	font-size: 18px;
+/* Q2: hero is the produced item; the IPD code drops to a small mono chip. */
+.doc-hero {
+	font-size: 20px;
+	font-weight: 700;
 	letter-spacing: -0.01em;
+	color: var(--mgk-ink);
+	line-height: 1.2;
+}
+.doc-sub {
+	font-size: 13px;
+	color: var(--mgk-muted);
+}
+.doc-id {
+	font-size: 12px;
+	color: var(--mgk-muted);
 }
 .doc-title {
 	font-size: 13px;
@@ -1352,13 +1369,13 @@ a.av:hover {
 	border-radius: var(--radius);
 	overflow: hidden;
 }
-/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
+/* Section heads share the Bright Workshop band (light tint; mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
 	padding: 10px 16px;
-	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+	background: var(--mgk-accent-50); border-bottom: 1px solid var(--mgk-line);
 }
 .panel-head::before {
 	content: "";
@@ -1380,7 +1397,7 @@ a.av:hover {
 /* Row-count reads as the right-aligned count pill on the band. */
 .panel-meta {
 	margin-left: auto;
-	background: rgba(255, 255, 255, 0.22);
+	background: #fff;
 	color: var(--mgk-accent-ink);
 	font-size: 11px;
 	font-weight: 600;
@@ -1393,13 +1410,13 @@ a.av:hover {
 	margin-left: 0;
 }
 :deep(.panel-add-btn.p-button-outlined) {
-	border-color: rgba(255, 255, 255, 0.55);
+	border-color: var(--mgk-accent);
 	color: var(--mgk-accent-ink);
-	background: rgba(255, 255, 255, 0.1);
+	background: transparent;
 }
 :deep(.panel-add-btn.p-button-outlined:hover) {
 	border-color: var(--mgk-accent-ink);
-	background: rgba(255, 255, 255, 0.2);
+	background: var(--mgk-accent-50);
 	color: var(--mgk-accent-ink);
 }
 .panel-empty {

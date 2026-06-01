@@ -415,7 +415,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from "vue"
+import { ref, reactive, computed, onMounted, watch, nextTick } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -479,8 +479,22 @@ const props = defineProps({
 
 const toast = useAppToast()
 
+// Q6: let the parent (DocDetail) treat grid edits as "unsaved changes". The grid
+// keeps its own state (not in the parent `form`), so without this a quantity/rate
+// edit wouldn't trip the parent's dirty guard. We emit `change` on genuine user
+// edits to `groups` (cell qty/rate, add/delete row) — armed AFTER loadData/mount
+// so the programmatic hydration/seed never false-fires.
+const emit = defineEmits(["change"])
+const changeArmed = ref(false)
+
 // ── grouped state (== save_stock_items.py shape) ──
 const groups = ref([])
+
+watch(
+	groups,
+	() => { if (changeArmed.value) emit("change") },
+	{ deep: true },
+)
 
 // ── dimension config (lot / received_type …) ──
 const dimensions = ref([])
@@ -524,6 +538,9 @@ const dimSuggestions = reactive({}) // { fieldname: [values] }
 onMounted(async () => {
 	if (props.showDimensions) await loadDimensions()
 	if (props.initialData != null) loadData(props.initialData)
+	// Arm change-emit after the initial (programmatic) state settles. A later
+	// external loadData() (parent hydrate/autofill) re-disarms then re-arms.
+	nextTick(() => { changeArmed.value = true })
 })
 
 // Read-only view use: (re)load when the grouped data arrives/changes.
@@ -1015,6 +1032,7 @@ function hasItems() {
 // Rebuild internal state from a saved grouped payload (array or JSON string).
 // Tolerant of partial entries (missing dimensions/attributes/values).
 function loadData(grouped) {
+	changeArmed.value = false // programmatic load — don't emit change
 	let data = grouped
 	if (typeof data === "string") {
 		try {
@@ -1025,6 +1043,7 @@ function loadData(grouped) {
 	}
 	if (!Array.isArray(data)) {
 		groups.value = []
+		nextTick(() => { changeArmed.value = true })
 		return
 	}
 	groups.value = data.map((g) => ({
@@ -1042,6 +1061,7 @@ function loadData(grouped) {
 			values: cloneValues(it.values),
 		})),
 	}))
+	nextTick(() => { changeArmed.value = true })
 }
 
 function cloneValues(values) {

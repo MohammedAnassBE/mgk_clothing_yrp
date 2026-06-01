@@ -136,9 +136,18 @@ const linkSearchHandlers = {
 			: emptyHandler,
 }
 
+// Q18: unify the vendor party to ONE term across WO/DC/GRN. The Desk/meta calls
+// it "Supplier"; on MGK's floor the party doing the job IS the job-worker.
+const labels = {
+	supplier: "Job-worker",
+	supplier_name: "Job-worker Name",
+	supplier_address: "Job-worker Address",
+}
+
 export default {
 	detailGroups,
 	formOrder,
 	hideFormFields,
 	linkSearchHandlers,
+	labels,
 }

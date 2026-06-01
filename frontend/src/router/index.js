@@ -111,26 +111,34 @@ router.beforeEach((to) => {
 // on "+ New"). Recover with a ONE-SHOT full reload at the intended destination
 // to pull the current build. A short time-guard prevents a reload loop if the
 // chunk is genuinely missing rather than merely stale.
-const RELOAD_KEY = "mgk:last-chunk-reload"
-function recoverFromStaleChunk(targetPath) {
-	const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0)
-	if (Date.now() - last < 10000) return // reloaded recently — let the error surface
-	sessionStorage.setItem(RELOAD_KEY, String(Date.now()))
-	if (targetPath) window.location.assign("/web" + targetPath)
-	else window.location.reload()
+// Stale-chunk handling. After a new build deploys, an already-open tab still
+// references the PREVIOUS build's hashed chunks, so a dynamic import can 404.
+// We USED TO force a full reload to recover — but that reload redirected the user
+// mid-interaction (typing an Item on the Production Order grid bounced the page
+// back to a blank /new and wiped their input). AUTO-RELOAD IS DISABLED (user
+// request, 2026-06-01): we swallow the error and log a hint instead; the user
+// refreshes manually (Ctrl+Shift+R) to pick up a new build. NOTHING here
+// navigates or reloads the page anymore.
+function onStaleChunk(cause) {
+	console.warn(
+		"[mgk] a code chunk failed to load — a newer build is probably deployed. " +
+		"Hard-refresh (Ctrl+Shift+R) to update. cause:",
+		cause || "",
+	)
 }
 
-router.onError((error, to) => {
+router.onError((error) => {
 	const msg = error?.message || ""
 	if (/dynamically imported module|module script failed|Failed to fetch/i.test(msg)) {
-		recoverFromStaleChunk(to?.fullPath)
+		onStaleChunk(msg)
 	}
 })
 
-// Vite's preload helper dispatches this on the window when a modulepreload fails.
+// Vite's preload helper dispatches this when a modulepreload fails. Prevent the
+// default unhandled hard-error, but do NOT reload.
 window.addEventListener("vite:preloadError", (event) => {
 	event.preventDefault()
-	recoverFromStaleChunk()
+	onStaleChunk(event?.payload?.message)
 })
 
 export default router

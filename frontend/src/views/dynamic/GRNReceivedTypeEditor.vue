@@ -172,7 +172,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, onMounted, watch, nextTick } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -188,8 +188,20 @@ const props = defineProps({
 	editable: { type: Boolean, default: true },
 })
 
+// Q6: emit `change` on genuine user edits so DocDetail's dirty guard sees grid
+// edits (this editor's state lives here, not in the parent `form`). Armed after
+// loadData/mount so the programmatic seed never false-fires.
+const emit = defineEmits(["change"])
+const changeArmed = ref(false)
+
 // ── grouped state (== save_stock_items.py shape; same as the Desk's `items`) ──
 const groups = ref([])
+
+watch(
+	groups,
+	() => { if (changeArmed.value) emit("change") },
+	{ deep: true },
+)
 
 // ── dimension labels (for the row meta) ──
 const dimensions = ref([])
@@ -211,6 +223,8 @@ onMounted(async () => {
 	} catch (_) {
 		availableRTs.value = []
 	}
+	// Arm change-emit after initial state settles (a later external loadData re-arms).
+	nextTick(() => { changeArmed.value = true })
 })
 
 const dimensionLabels = computed(() => {
@@ -448,6 +462,7 @@ function formatQty(value) {
 // ════════════════ PUBLIC API (same surface DocDetail drives) ════════════════
 // Rebuild internal `groups` from a saved grouped payload (array or JSON string).
 function loadData(grouped) {
+	changeArmed.value = false // programmatic load — don't emit change
 	let data = grouped
 	if (typeof data === "string") {
 		try {
@@ -458,10 +473,11 @@ function loadData(grouped) {
 	}
 	if (!Array.isArray(data)) {
 		groups.value = []
-		return
+	} else {
+		// Deep clone so edits don't mutate the caller's onload object.
+		groups.value = JSON.parse(JSON.stringify(data))
 	}
-	// Deep clone so edits don't mutate the caller's onload object.
-	groups.value = JSON.parse(JSON.stringify(data))
+	nextTick(() => { changeArmed.value = true })
 }
 
 // Deep-cloned grouped JSON for buildPayload. Strips empty groups defensively

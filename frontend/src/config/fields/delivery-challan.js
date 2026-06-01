@@ -24,6 +24,13 @@ const linkSearchHandlers = {
 			: null,
 }
 
+// Q18: same single vendor-party term as Work Order ("Job-worker").
+const labels = {
+	supplier: "Job-worker",
+	supplier_name: "Job-worker Name",
+}
+
 export default {
 	linkSearchHandlers,
+	labels,
 }

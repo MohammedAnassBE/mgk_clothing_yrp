@@ -22,7 +22,7 @@
 	--mgk-accent-50: #E6F6F4;   /* light teal wash — badges, focus tint */
 	--mgk-accent-600:#0F827A;   /* mid teal — header-band gradient stop */
 	--mgk-accent-700:#0F766E;   /* dark teal — link text, hover (AA ~4.6:1 on white) */
-	--mgk-accent-ink:#FFFFFF;   /* text/icon color ON the teal header band */
+	--mgk-accent-ink:var(--mgk-accent-700);  /* teal title/icon ON the light (accent-50) header band */
 
 	/* ── Elevation (cool, not warm) ── */
 	--mgk-shadow:    rgba(15, 23, 42, 0.06);
@@ -112,8 +112,8 @@ a {
 	align-items: center;
 	gap: var(--space-2);
 	padding: 10px 16px;
-	/* AA FIX: band runs accent-600 → accent-700 so white title passes 4.6:1 */
-	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+	/* Light band: pale tint + teal title (AA ~4.6:1), header recedes so data leads. */
+	background: var(--mgk-accent-50); border-bottom: 1px solid var(--mgk-line);
 }
 .mgk-card__head::before {            /* leading dot glyph */
 	content: "";
@@ -132,7 +132,7 @@ a {
 }
 .mgk-card__count {                   /* optional right-aligned count pill */
 	margin-left: auto;
-	background: rgba(255,255,255,0.22);
+	background: #fff;
 	color: var(--mgk-accent-ink);
 	font-size: 11px; font-weight: 600;
 	padding: 1px 8px; border-radius: 999px;

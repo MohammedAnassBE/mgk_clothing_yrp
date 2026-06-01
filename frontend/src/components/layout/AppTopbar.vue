@@ -52,10 +52,23 @@ const primaryRole = computed(() => {
 })
 const roleTitle = computed(() => `Roles: ${roles.join(", ") || "—"}`)
 
+// Q3: readable titles for the specialized rich-flow routes (their route.name is
+// camelCase like "ProcessMatrix", which leaked into the topbar). Generic
+// list/detail routes resolve to the DocType label via the registry.
+const ROUTE_TITLES = {
+	Home: "Home",
+	IPDCreate: "New Item Production Detail",
+	IPDEditFields: "Edit Item Production Detail",
+	IPDConfig: "Item Production Detail",
+	ProcessMatrix: "Process Matrix",
+	BOMMapping: "Item BOM Mapping",
+	ProductionOrder: "Production Order",
+}
+
 const pageTitle = computed(() => {
-	if (route.name === "Home") return "Home"
 	const reg = getRegistryByRoute(route.params.docRoute)
-	return reg?.label || route.name || ""
+	if (reg) return reg.label
+	return ROUTE_TITLES[route.name] || route.name || ""
 })
 
 const initials = computed(() => {

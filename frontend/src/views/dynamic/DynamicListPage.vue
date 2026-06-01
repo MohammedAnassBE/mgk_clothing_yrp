@@ -112,16 +112,95 @@
 			{{ accessDenied ? `You don’t have access to ${registry?.label || doctype}. Ask an administrator if you need it.` : errorMsg }}
 			<template #icon><i class="pi pi-exclamation-triangle" /></template>
 		</Message>
+		<Message
+			v-if="bulkError"
+			severity="error"
+			closable
+			class="list-error"
+			@close="bulkError = null"
+		>
+			<div class="bulk-error">
+				<div class="bulk-error__title">{{ bulkError.title }}</div>
+				<div
+					v-for="(line, i) in bulkError.lines"
+					:key="i"
+					class="bulk-error__line"
+				>{{ line }}</div>
+			</div>
+		</Message>
+
+		<div v-if="showBulkBar" class="bulk-bar">
+			<div class="bulk-bar__summary">
+				<span class="bulk-count">{{ selectedRows.length }} selected</span>
+				<span v-if="selectedDraftRows.length" class="bulk-hint">
+					{{ selectedDraftRows.length }} draft
+				</span>
+				<span v-if="selectedSubmittedRows.length" class="bulk-hint">
+					{{ selectedSubmittedRows.length }} submitted
+				</span>
+			</div>
+			<div class="bulk-bar__actions">
+				<Button
+					v-if="canBulkEdit"
+					label="Edit"
+					icon="pi pi-pencil"
+					size="small"
+					severity="secondary"
+					outlined
+					:disabled="!selectedRows.length || !!bulkActing"
+					:loading="bulkActing === 'edit' || bulkEditLoading"
+					@click="openBulkEditDialog"
+				/>
+				<Button
+					v-if="isSubmittable && canSubmit(doctype)"
+					:label="`Submit (${selectedDraftRows.length})`"
+					icon="pi pi-arrow-right"
+					size="small"
+					:disabled="!selectedDraftRows.length || !!bulkActing"
+					:loading="bulkActing === 'submit'"
+					@click="onBulkSubmit"
+				/>
+				<Button
+					v-if="isSubmittable && canCancel(doctype)"
+					:label="`Cancel (${selectedSubmittedRows.length})`"
+					icon="pi pi-ban"
+					size="small"
+					severity="danger"
+					outlined
+					:disabled="!selectedSubmittedRows.length || !!bulkActing"
+					:loading="bulkActing === 'cancel'"
+					@click="onBulkCancel"
+				/>
+				<Button
+					icon="pi pi-times"
+					severity="secondary"
+					text
+					rounded
+					size="small"
+					aria-label="Clear selection"
+					:disabled="!!bulkActing"
+					@click="clearSelection"
+				/>
+			</div>
+		</div>
 
 		<!-- Table -->
 		<DataTable
 			:value="rows"
+			v-model:selection="selectedRows"
 			:loading="loading"
 			dataKey="name"
 			class="mgk-table"
 			:rowHover="true"
+			:rowClass="rowClass"
 			@row-click="onRowClick"
 		>
+			<Column
+				v-if="showBulkSelection"
+				selectionMode="multiple"
+				headerStyle="width: 42px"
+				bodyStyle="width: 42px; text-align: center"
+			/>
 			<Column field="name" header="Name" :sortable="true">
 				<template #body="{ data }">
 					<span class="mgk-mono">{{ data.name }}</span>
@@ -139,6 +218,8 @@
 					<span v-if="col.type === 'Date'">{{ formatDate(data[col.field]) }}</span>
 					<span v-else-if="col.type === 'Datetime'">{{ formatDate(data[col.field]) }}</span>
 					<span v-else-if="col.type === 'Currency'">{{ formatNumber(data[col.field]) }}</span>
+					<!-- Q1: a Link column shows the human name, not the code. -->
+					<span v-else-if="col.isLink && data[col.field]">{{ linkName(col, data) }}</span>
 					<span v-else>{{ data[col.field] ?? "—" }}</span>
 				</template>
 			</Column>
@@ -146,6 +227,7 @@
 			<Column v-if="isSubmittable || isWorkflow" header="Status" :style="{ width: '130px' }">
 				<template #body="{ data }">
 					<Tag
+						class="list-status"
 						:value="statusLabel(data)"
 						:severity="rowSeverity(data)"
 						rounded
@@ -153,10 +235,27 @@
 				</template>
 			</Column>
 
+			<!-- Q8: persistent "this row opens" affordance (tablets have no hover). -->
+			<Column :style="{ width: '36px' }" bodyStyle="text-align:center;padding-left:0;padding-right:0">
+				<template #body>
+					<i class="pi pi-chevron-right row-chevron" />
+				</template>
+			</Column>
+
 			<template #empty>
 				<div class="mgk-empty">
 					<i class="pi pi-inbox" />
-					<p class="mgk-empty__text">No records found</p>
+					<p class="mgk-empty__text">
+						{{ hasAnyFilter ? "No records match the current filters" : "No records found" }}
+					</p>
+					<!-- Q14: on a truly empty (unfiltered) list, offer the first create. -->
+					<Button
+						v-if="doctype && canCreate(doctype) && !hasAnyFilter"
+						:label="`Create the first ${registry?.label || doctype}`"
+						icon="pi pi-plus"
+						size="small"
+						@click="onNew"
+					/>
 				</div>
 			</template>
 		</DataTable>
@@ -183,6 +282,142 @@
 			:model-value="advFilters"
 			@apply="onApplyFilters"
 		/>
+
+		<Dialog
+			v-model:visible="showBulkEditDialog"
+			header="Bulk Edit"
+			modal
+			class="bulk-edit-dialog"
+			:style="{ width: 'min(560px, calc(100vw - 32px))' }"
+		>
+			<div class="bulk-edit-form">
+				<div class="bulk-edit-selected">
+					<span class="bulk-count">{{ selectedRows.length }} selected</span>
+					<span v-if="selectedCancelledRows.length" class="bulk-hint">
+						{{ selectedCancelledRows.length }} cancelled
+					</span>
+				</div>
+
+				<div class="bulk-edit-field">
+					<label class="field-label" for="bulk-edit-field">Field</label>
+					<Select
+						id="bulk-edit-field"
+						v-model="bulkEditSelectedKey"
+						:options="bulkEditFieldOptions"
+						optionLabel="label"
+						optionValue="key"
+						:loading="bulkEditLoading"
+						placeholder="Select field"
+						filter
+						class="fld"
+						fluid
+					/>
+				</div>
+
+				<div v-if="bulkEditSelectedField" class="bulk-edit-field">
+					<label class="field-label" for="bulk-edit-value">Value</label>
+
+					<Textarea
+						v-if="bulkEditInputKind === 'textarea'"
+						id="bulk-edit-value"
+						v-model="bulkEditValue"
+						rows="3"
+						autoResize
+						class="fld"
+					/>
+
+					<InputNumber
+						v-else-if="bulkEditInputKind === 'number'"
+						id="bulk-edit-value"
+						v-model="bulkEditValue"
+						:minFractionDigits="bulkNumberFractions.min"
+						:maxFractionDigits="bulkNumberFractions.max"
+						class="fld"
+						fluid
+					/>
+
+					<DatePicker
+						v-else-if="bulkEditInputKind === 'date'"
+						inputId="bulk-edit-value"
+						:modelValue="toDateObj(bulkEditValue)"
+						@update:modelValue="bulkEditValue = fromDateObj($event, false)"
+						dateFormat="dd-mm-yy"
+						showIcon
+						iconDisplay="input"
+						class="fld"
+						fluid
+					/>
+
+					<DatePicker
+						v-else-if="bulkEditInputKind === 'datetime'"
+						inputId="bulk-edit-value"
+						:modelValue="toDateObj(bulkEditValue)"
+						@update:modelValue="bulkEditValue = fromDateObj($event, true)"
+						dateFormat="dd-mm-yy"
+						showTime
+						hourFormat="24"
+						showIcon
+						iconDisplay="input"
+						class="fld"
+						fluid
+					/>
+
+					<div v-else-if="bulkEditInputKind === 'check'" class="fld-check">
+						<ToggleSwitch
+							inputId="bulk-edit-value"
+							:modelValue="!!bulkEditValue"
+							@update:modelValue="bulkEditValue = $event ? 1 : 0"
+						/>
+						<span class="check-label">{{ bulkEditValue ? "Yes" : "No" }}</span>
+					</div>
+
+					<Select
+						v-else-if="bulkEditInputKind === 'select'"
+						id="bulk-edit-value"
+						v-model="bulkEditValue"
+						:options="bulkEditSelectOptions"
+						showClear
+						placeholder="Select value"
+						class="fld"
+						fluid
+					/>
+
+					<LinkField
+						v-else-if="bulkEditInputKind === 'link'"
+						v-model="bulkEditValue"
+						:target-doctype="bulkEditSelectedField.options"
+						class="fld"
+					/>
+
+					<InputText
+						v-else
+						id="bulk-edit-value"
+						v-model="bulkEditValue"
+						class="fld"
+					/>
+
+					<p v-if="bulkEditValueIsEmpty" class="bulk-edit-help">
+						Empty value will clear this field where validation allows.
+					</p>
+				</div>
+			</div>
+			<template #footer>
+				<Button
+					label="Cancel"
+					severity="secondary"
+					text
+					:disabled="bulkEditApplying"
+					@click="showBulkEditDialog = false"
+				/>
+				<Button
+					:label="bulkEditApplyLabel"
+					icon="pi pi-check"
+					:disabled="!bulkEditSelectedField || bulkEditLoading || bulkEditApplying"
+					:loading="bulkEditApplying"
+					@click="onBulkEditApply"
+				/>
+			</template>
+		</Dialog>
 	</div>
 </template>
 
@@ -201,12 +436,23 @@ import Tab from "primevue/tab"
 import Tag from "primevue/tag"
 import Paginator from "primevue/paginator"
 import Message from "primevue/message"
+import Dialog from "primevue/dialog"
+import Select from "primevue/select"
+import Textarea from "primevue/textarea"
+import InputNumber from "primevue/inputnumber"
+import DatePicker from "primevue/datepicker"
+import ToggleSwitch from "primevue/toggleswitch"
 import { useDocList } from "@/composables/useDocList"
 import { usePermissions } from "@/composables/usePermissions"
+import { useLinkTitles } from "@/composables/useLinkTitles"
+import { useAppConfirm } from "@/composables/useConfirm"
+import { useAppToast } from "@/composables/useToast"
 import { getRegistryByRoute, WORKFLOW_SEVERITY } from "@/config/doctypes"
-import { getMeta, getCount, callMethod } from "@/api/client"
+import { getFieldLabel } from "@/config/fields"
+import { getMeta, getCount, callMethod, submitDoc, cancelDoc, getBulkEditFields, bulkUpdateField, errorLines } from "@/api/client"
 import ColumnCustomizerModal from "@/components/ColumnCustomizerModal.vue"
 import FilterPanel from "@/components/FilterPanel.vue"
+import LinkField from "@/components/LinkField.vue"
 
 const props = defineProps({
 	docRoute: { type: String, required: true },
@@ -214,12 +460,18 @@ const props = defineProps({
 
 const router = useRouter()
 const route = useRoute()
-const { canCreate, isAdmin, hasRole } = usePermissions()
+const { canCreate, canWrite, canSubmit, canCancel, isAdmin, hasRole } = usePermissions()
+const linkTitles = useLinkTitles()
+const confirm = useAppConfirm()
+const toast = useAppToast()
 
 const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
-const isSubmittable = computed(() => registry.value?.isSubmittable || false)
 const isWorkflow = computed(() => registry.value?.isWorkflow || false)
+const meta = shallowRef(null)            // parent DocType meta (docs[0]), cached per route
+const isSubmittable = computed(
+	() => !isWorkflow.value && (registry.value?.isSubmittable || Number(meta.value?.is_submittable) === 1),
+)
 const workflowStates = computed(() => registry.value?.workflowStates || [])
 const dateTabField = computed(() => registry.value?.dateTabs || null)
 
@@ -237,6 +489,96 @@ const showColumnsModal = ref(false)
 const showFilterPanel = ref(false)
 const advFilters = ref([]) // active interactive filters (Frappe tuples)
 const filterChips = ref([]) // display labels aligned 1:1 with advFilters
+const selectedRows = ref([])
+const bulkActing = ref(null)
+const bulkError = ref(null)
+const showBulkEditDialog = ref(false)
+const bulkEditLoading = ref(false)
+const bulkEditApplying = ref(false)
+const bulkEditFieldsFor = ref("")
+const bulkEditFields = ref([])
+const bulkEditSelectedKey = ref("")
+const bulkEditValue = ref(null)
+
+const selectedDraftRows = computed(() =>
+	selectedRows.value.filter((row) => Number(row.docstatus) === 0),
+)
+const selectedSubmittedRows = computed(() =>
+	selectedRows.value.filter((row) => Number(row.docstatus) === 1),
+)
+const selectedCancelledRows = computed(() =>
+	selectedRows.value.filter((row) => Number(row.docstatus) === 2),
+)
+
+const bulkEditFieldOptions = computed(() =>
+	bulkEditFields.value.map((field) => ({
+		...field,
+		label: field.is_child_field
+			? field.label
+			: (getFieldLabel(doctype.value, field.fieldname) || field.label || field.fieldname),
+	})),
+)
+const bulkEditSelectedField = computed(() =>
+	bulkEditFieldOptions.value.find((field) => field.key === bulkEditSelectedKey.value) || null,
+)
+const bulkEditInputKind = computed(() => bulkInputKind(bulkEditSelectedField.value))
+const bulkEditSelectOptions = computed(() => {
+	const field = bulkEditSelectedField.value
+	if (!field || field.fieldtype !== "Select") return []
+	return String(field.options || "")
+		.split("\n")
+		.map((option) => option.trim())
+		.filter(Boolean)
+})
+const bulkNumberFractions = computed(() => {
+	const fieldtype = bulkEditSelectedField.value?.fieldtype
+	if (fieldtype === "Int" || fieldtype === "Long Int") return { min: 0, max: 0 }
+	if (fieldtype === "Currency") return { min: 2, max: 2 }
+	if (fieldtype === "Percent") return { min: 0, max: 2 }
+	return { min: 0, max: 6 }
+})
+const bulkEditValueIsEmpty = computed(() =>
+	bulkEditValue.value === null || bulkEditValue.value === undefined || bulkEditValue.value === "",
+)
+const bulkEditApplyLabel = computed(() =>
+	`Update ${selectedRows.value.length} ${plural(selectedRows.value.length, "record")}`,
+)
+
+function bulkInputKind(field) {
+	if (!field) return "text"
+	const ft = field.fieldtype
+	if (["Text", "Long Text", "Code", "Text Editor", "Markdown Editor", "HTML Editor", "JSON", "Geolocation", "Signature"].includes(ft)) {
+		return "textarea"
+	}
+	if (["Int", "Long Int", "Float", "Percent", "Currency", "Duration", "Rating"].includes(ft)) return "number"
+	if (ft === "Date") return "date"
+	if (ft === "Datetime") return "datetime"
+	if (ft === "Check") return "check"
+	if (ft === "Select") return "select"
+	if (ft === "Link") return "link"
+	return "text"
+}
+
+function defaultBulkValue(field) {
+	if (!field) return ""
+	if (field.fieldtype === "Check") return 0
+	if (field.fieldtype === "Select") {
+		const options = String(field.options || "")
+			.split("\n")
+			.map((option) => option.trim())
+			.filter(Boolean)
+		if (/status/i.test(field.fieldname || field.label || "")) return options[0] || ""
+	}
+	return ""
+}
+
+watch(bulkEditSelectedKey, () => {
+	bulkEditValue.value = defaultBulkValue(bulkEditSelectedField.value)
+})
+
+function clearSelection() {
+	selectedRows.value = []
+}
 
 function colType(ft) {
 	if (ft === "Date") return "Date"
@@ -253,10 +595,16 @@ const eligibleColumns = computed(() => {
 		if (NON_LISTABLE.has(f.fieldtype)) continue
 		out.push({
 			field: f.fieldname,
-			label: f.label || f.fieldname,
+			// Q18: SPA label override (supplier → "Job-worker") must reach the list
+			// column HEADER too, not just detail/form — else the same field reads
+			// differently across screens. modalColumns inherits this label.
+			label: getFieldLabel(doctype.value, f.fieldname) || f.label || f.fieldname,
 			type: colType(f.fieldtype),
 			fieldtype: f.fieldtype,
 			in_list_view: !!f.in_list_view,
+			// Q1: Link columns resolve to a human name (target from meta options).
+			isLink: f.fieldtype === "Link",
+			linkTarget: f.fieldtype === "Link" ? (f.options || "") : "",
 		})
 	}
 	return out
@@ -320,6 +668,7 @@ async function onColumnsSaved() {
 	showColumnsModal.value = false
 	const dt = doctype.value
 	if (!dt || !listState.value) return
+	clearSelection()
 	userColumns.value = await getUserColumns(dt)
 	const prev = listState.value
 	const next = useDocList(dt, {
@@ -407,7 +756,6 @@ const baseFilterLabel = computed(() => {
 // statusTabs holds the rendered tabs: [{ label, value, count }]. For status
 // mode `value` is the status string (or null for All); for docstatus mode it
 // is the docstatus number-as-string ("0"/"1"/"2", or null for All).
-const meta = shallowRef(null)            // parent DocType meta (docs[0]), cached per route
 const statusOptions = ref([])            // ordered, non-blank Select options of the `status` field
 const tabMode = ref(null)
 const statusTabs = ref([])
@@ -490,6 +838,13 @@ async function initList() {
 	lastSearched = ""
 	advFilters.value = []
 	filterChips.value = []
+	clearSelection()
+	bulkError.value = null
+	showBulkEditDialog.value = false
+	bulkEditFieldsFor.value = ""
+	bulkEditFields.value = []
+	bulkEditSelectedKey.value = ""
+	bulkEditValue.value = null
 
 	// Parse the route-query base filter up front so the very first fetch carries
 	// it — seed it as the list's defaultFilters.
@@ -691,6 +1046,8 @@ watch(
 	() => [route.query.filters, route.query.status],
 	() => {
 		if (!doctype.value || !listState.value) return
+		clearSelection()
+		bulkError.value = null
 		const next = parseRouteFilters()
 		// Drop the previous route-base fields we own, unless the new base also
 		// sets them (setFilter will overwrite those below).
@@ -734,6 +1091,14 @@ const accessDenied = computed(() => {
 	const m = String(errorMsg.value || "")
 	return /insufficient permission|do not have|does not have|not permitted/i.test(m)
 })
+const canBulkEdit = computed(() => doctype.value && !accessDenied.value && canWrite(doctype.value))
+const hasSubmitCancelBulkAction = computed(
+	() => doctype.value && isSubmittable.value && !accessDenied.value && (canSubmit(doctype.value) || canCancel(doctype.value)),
+)
+const showBulkSelection = computed(
+	() => doctype.value && !accessDenied.value && (canBulkEdit.value || hasSubmitCancelBulkAction.value),
+)
+const showBulkBar = computed(() => showBulkSelection.value && selectedRows.value.length > 0)
 const totalCount = computed(() => {
 	const c = listState.value?.totalCount.value
 	return typeof c === "number" ? c : 0
@@ -747,6 +1112,8 @@ const page = computed(() => listState.value?.page.value || 1)
 function onTabChange(key) {
 	activeTab.value = key
 	if (!listState.value) return
+	clearSelection()
+	bulkError.value = null
 	const tab = statusTabs.value.find((t) => tabValueKey(t.value) === key)
 	const value = tab ? tab.value : null
 	if (tabMode.value === "status") {
@@ -765,6 +1132,8 @@ function onTabChange(key) {
 async function onDateTabChange(value) {
 	activeDateTab.value = value
 	if (!listState.value) return
+	clearSelection()
+	bulkError.value = null
 	if (dateTabField.value) {
 		const range = getDateRange(value)
 		if (range) {
@@ -797,6 +1166,8 @@ function onSearch() {
 	const q = searchQuery.value.trim()
 	if (q === lastSearched) return // unchanged → skip a redundant fetch
 	lastSearched = q
+	clearSelection()
+	bulkError.value = null
 	if (q) {
 		listState.value.setOrFilters(
 			searchableFields.value.map((f) => [f, "like", `%${q}%`])
@@ -828,6 +1199,8 @@ onBeforeUnmount(() => {
 // the labels so each can be cleared individually.
 function applyAdvFilters() {
 	if (!listState.value) return
+	clearSelection()
+	bulkError.value = null
 	listState.value.setAdvancedFilters(advFilters.value)
 	listState.value.fetch()
 }
@@ -848,10 +1221,16 @@ function clearAdvFilters() {
 }
 
 function onPage(e) {
-	if (listState.value) listState.value.setPage(e.page + 1)
+	if (listState.value) {
+		clearSelection()
+		bulkError.value = null
+		listState.value.setPage(e.page + 1)
+	}
 }
 
 function onRowClick(e) {
+	const target = e?.originalEvent?.target
+	if (target?.closest?.(".p-checkbox, .p-selection-column, button, a, input, textarea, select")) return
 	const name = e?.data?.name
 	if (name) router.push(`/${props.docRoute}/${encodeURIComponent(name)}`)
 }
@@ -872,7 +1251,196 @@ function openListInDesk() {
 	}
 }
 
+function plural(n, singular, pluralWord = `${singular}s`) {
+	return n === 1 ? singular : pluralWord
+}
+
+function bulkFailureLines(failures) {
+	const lines = []
+	for (const f of failures.slice(0, 8)) {
+		const msg = f.message || errorLines(f.error).join(" ") || f.error?.message || "Failed"
+		lines.push(`${f.name}: ${msg}`)
+	}
+	if (failures.length > 8) lines.push(`${failures.length - 8} more failed`)
+	return lines
+}
+
+async function refreshAfterBulk() {
+	clearSelection()
+	if (listState.value) await listState.value.fetch()
+	if (tabMode.value) await loadCounts()
+}
+
+async function loadBulkEditFields() {
+	const dt = doctype.value
+	if (!dt) return []
+	if (bulkEditFieldsFor.value === dt && bulkEditFields.value.length) return bulkEditFields.value
+
+	bulkEditLoading.value = true
+	try {
+		const fields = await getBulkEditFields(dt)
+		if (dt !== doctype.value) return []
+		bulkEditFields.value = fields
+		bulkEditFieldsFor.value = dt
+		const preferred = fields.find((field) => /status/i.test(field.fieldname || field.label || ""))
+		const selected = preferred || fields[0]
+		bulkEditSelectedKey.value = selected?.key || ""
+		bulkEditValue.value = defaultBulkValue(selected)
+		return fields
+	} catch (error) {
+		const lines = errorLines(error)
+		bulkError.value = { title: "Could not load editable fields", lines: lines.length ? lines : ["Failed"] }
+		toast.error("Could not load fields", lines[0] || error.message || "Failed")
+		return []
+	} finally {
+		bulkEditLoading.value = false
+	}
+}
+
+async function openBulkEditDialog() {
+	if (!selectedRows.value.length) {
+		toast.warn("No documents selected", "Select rows to edit.")
+		return
+	}
+	bulkError.value = null
+	showBulkEditDialog.value = true
+	const fields = await loadBulkEditFields()
+	if (!fields.length && doctype.value) {
+		showBulkEditDialog.value = false
+		toast.warn("No editable fields", "No writable fields are available for your permissions.")
+	}
+}
+
+async function onBulkEditApply() {
+	const field = bulkEditSelectedField.value
+	const dt = doctype.value
+	const docnames = selectedRows.value.map((row) => row.name).filter(Boolean)
+	if (!dt || !field || !docnames.length) return
+
+	bulkActing.value = "edit"
+	bulkEditApplying.value = true
+	bulkError.value = null
+	try {
+		const result = await bulkUpdateField(dt, docnames, field, bulkEditValue.value)
+		const updated = Array.isArray(result?.updated) ? result.updated : []
+		const failures = Array.isArray(result?.failures) ? result.failures : []
+		await refreshAfterBulk()
+		showBulkEditDialog.value = false
+
+		if (failures.length) {
+			const title = updated.length ? "Bulk edit partially failed" : "Bulk edit failed"
+			bulkError.value = { title, lines: bulkFailureLines(failures) }
+			toast.error(title, `${updated.length} updated, ${failures.length} failed`)
+		} else {
+			toast.success("Updated", `${updated.length} ${plural(updated.length, "record")} updated`, 6000)
+		}
+	} catch (error) {
+		const lines = errorLines(error)
+		bulkError.value = { title: "Bulk edit failed", lines: lines.length ? lines : [error.message || "Failed"] }
+		toast.error("Bulk edit failed", lines[0] || error.message || "Failed")
+	} finally {
+		bulkActing.value = null
+		bulkEditApplying.value = false
+	}
+}
+
+async function runBulkAction(action, candidates) {
+	const dt = doctype.value
+	const rowsToActOn = [...candidates]
+	if (!dt || !rowsToActOn.length) return
+	const isSubmitAction = action === "submit"
+	const verb = isSubmitAction ? "submit" : "cancel"
+	const past = isSubmitAction ? "submitted" : "cancelled"
+	bulkActing.value = action
+	bulkError.value = null
+	let ok = 0
+	const failures = []
+	try {
+		for (const row of rowsToActOn) {
+			try {
+				if (isSubmitAction) await submitDoc(dt, row.name)
+				else await cancelDoc(dt, row.name)
+				ok += 1
+			} catch (error) {
+				failures.push({ name: row.name, error })
+			}
+		}
+		await refreshAfterBulk()
+		if (failures.length) {
+			const title = ok ? `Bulk ${verb} partially failed` : `Bulk ${verb} failed`
+			bulkError.value = { title, lines: bulkFailureLines(failures) }
+			toast.error(title, `${ok} ${past}, ${failures.length} failed`)
+		} else {
+			toast.success(
+				isSubmitAction ? "Submitted" : "Cancelled",
+				`${ok} ${plural(ok, "document")} ${past}`,
+				6000,
+			)
+		}
+	} finally {
+		bulkActing.value = null
+	}
+}
+
+function onBulkSubmit() {
+	const rowsToActOn = selectedDraftRows.value
+	if (!rowsToActOn.length) {
+		toast.warn("No draft documents", "Select draft rows to submit.")
+		return
+	}
+	const count = rowsToActOn.length
+	confirm.require({
+		header: `Submit ${count} ${plural(count, "document")}`,
+		message: `Submit ${count} selected draft ${registry.value?.label || doctype.value} ${plural(count, "document")}? This runs server validations and posts stock movements where applicable.`,
+		acceptLabel: "Submit",
+		acceptClass: "p-button-primary",
+		accept: () => runBulkAction("submit", rowsToActOn),
+	})
+}
+
+function onBulkCancel() {
+	const rowsToActOn = selectedSubmittedRows.value
+	if (!rowsToActOn.length) {
+		toast.warn("No submitted documents", "Select submitted rows to cancel.")
+		return
+	}
+	const count = rowsToActOn.length
+	confirm.require({
+		header: `Cancel ${count} ${plural(count, "document")}`,
+		message: `Cancel ${count} selected submitted ${registry.value?.label || doctype.value} ${plural(count, "document")}? This can reverse stock movements and other submitted effects.`,
+		acceptLabel: "Cancel Documents",
+		acceptClass: "p-button-danger",
+		rejectLabel: "Keep",
+		accept: () => runBulkAction("cancel", rowsToActOn),
+	})
+}
+
 // ── formatting + status helpers ──
+function toDateObj(val) {
+	if (!val) return null
+	if (val instanceof Date) return val
+	const [datePart, timePart] = String(val).split(" ")
+	const [y, m, d] = datePart.split("-").map(Number)
+	if (!y || !m || !d) return null
+	let hh = 0, mm = 0, ss = 0
+	if (timePart) {
+		const [h, mi, se] = timePart.split(":").map(Number)
+		hh = h || 0
+		mm = mi || 0
+		ss = se || 0
+	}
+	const obj = new Date(y, m - 1, d, hh, mm, ss)
+	return Number.isNaN(obj.getTime()) ? null : obj
+}
+
+function fromDateObj(d, withTime) {
+	if (!d) return ""
+	const pad = (n) => String(n).padStart(2, "0")
+	const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+	if (!withTime) return date
+	return `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 function formatDate(val) {
 	if (!val) return "—"
 	const datePart = String(val).split(" ")[0]
@@ -901,6 +1469,41 @@ function rowSeverity(row) {
 	if (isWorkflow.value && row.workflow_state) return WORKFLOW_SEVERITY[row.workflow_state] || "warn"
 	return statusSeverity(row.docstatus)
 }
+
+// Q4: a 4px coloured left bar per row (green submitted / red cancelled pop above
+// a neutral draft) so the lifecycle stage reads at a glance.
+function rowClass(row) {
+	if (!isSubmittable.value && !isWorkflow.value) return ""
+	const sev = rowSeverity(row)
+	return sev === "success" ? "row-good" : sev === "danger" ? "row-danger" : "row-warn"
+}
+
+// ── Q1: resolve Link cells to human names ──
+function linkName(col, row) {
+	const val = row[col.field]
+	if (!val) return "—"
+	const sibling = row[`${col.field}_name`]
+	return linkTitles.linkParts(col.linkTarget, val, sibling).primary
+}
+// Batch-resolve the loaded rows' Link columns (skips already-cached values).
+function primeListLinks() {
+	const cols = listColumns.value.filter((c) => c.isLink && c.linkTarget)
+	if (!cols.length || !rows.value.length) return
+	const pairs = []
+	for (const row of rows.value) {
+		for (const c of cols) {
+			const v = row[c.field]
+			if (v && !row[`${c.field}_name`]) pairs.push({ doctype: c.linkTarget, name: v })
+		}
+	}
+	if (pairs.length) linkTitles.prime(pairs)
+}
+watch(rows, primeListLinks)
+
+// Q14: only offer "Create the first …" when the empty list isn't just filtered.
+const hasAnyFilter = computed(
+	() => hasBaseFilter.value || advFilters.value.length > 0 || !!searchQuery.value.trim(),
+)
 </script>
 
 <style scoped>
@@ -1000,6 +1603,116 @@ function rowSeverity(row) {
 	margin: 0;
 }
 
+.bulk-error__title {
+	font-weight: 700;
+	margin-bottom: 4px;
+}
+
+.bulk-error__line {
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.bulk-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius);
+	background: var(--mgk-card);
+}
+
+.bulk-bar__summary,
+.bulk-bar__actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.bulk-count {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--mgk-ink);
+}
+
+.bulk-hint {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--mgk-muted);
+	background: var(--mgk-slate-50);
+	border: 1px solid var(--mgk-line);
+	border-radius: 999px;
+	padding: 2px 8px;
+}
+
+:deep(.mgk-table .p-selection-column),
+:deep(.mgk-table .p-checkbox) {
+	cursor: default;
+}
+
+.bulk-edit-form {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding-top: 2px;
+}
+
+.bulk-edit-selected {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.bulk-edit-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.field-label {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--mgk-ink-2);
+}
+
+.fld {
+	width: 100%;
+}
+
+.fld-check {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 34px;
+}
+
+.check-label {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--mgk-ink-2);
+}
+
+.bulk-edit-help {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--mgk-muted);
+}
+
+@media (max-width: 720px) {
+	.bulk-bar {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.bulk-bar__summary,
+	.bulk-bar__actions {
+		flex-wrap: wrap;
+	}
+}
+
 /* Active base-filter chip (implicit URL filter). Slate pill + a clear ✕. */
 .base-filter-row {
 	display: flex;
@@ -1079,5 +1792,33 @@ function rowSeverity(row) {
 
 .chip-clear i {
 	font-size: 10px;
+}
+
+/* ════════════ UX quick-wins (2026-06-01) ════════════ */
+
+/* Q4: status is the anchor — bolder tag + a 4px coloured left bar per row. */
+.list-status.p-tag {
+	font-size: 12px;
+	font-weight: 700;
+}
+:deep(.mgk-table .p-datatable-tbody > tr.row-good > td:first-child) {
+	box-shadow: inset 4px 0 0 0 var(--mgk-success);
+}
+:deep(.mgk-table .p-datatable-tbody > tr.row-danger > td:first-child) {
+	box-shadow: inset 4px 0 0 0 var(--mgk-danger);
+}
+:deep(.mgk-table .p-datatable-tbody > tr.row-warn > td:first-child) {
+	box-shadow: inset 4px 0 0 0 var(--mgk-muted-2);
+}
+
+/* Q8: trailing chevron affordance, brightening on row hover. */
+.row-chevron {
+	color: var(--mgk-muted-2);
+	font-size: 12px;
+	transition: color 0.12s, transform 0.12s;
+}
+:deep(.mgk-table .p-datatable-tbody > tr:hover) .row-chevron {
+	color: var(--mgk-accent);
+	transform: translateX(2px);
 }
 </style>

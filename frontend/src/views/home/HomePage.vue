@@ -25,7 +25,18 @@
 					</div>
 					<div class="q-body">
 						<div class="q-label">{{ q.label }}</div>
-						<div class="q-count">{{ formatCount(q) }}</div>
+						<!-- Q14: loading (spinner) / failed (— + retry) / value are
+						     visually distinct so a flaky-network "—" never reads as 0. -->
+						<div class="q-count">
+							<i v-if="countState(q) === 'loading'" class="pi pi-spin pi-spinner q-spin" />
+							<template v-else-if="countState(q) === 'error'">
+								<span class="q-dash">—</span>
+								<span class="q-retry" @click.stop="retryQueue(q)">
+									<i class="pi pi-refresh" /> Retry
+								</span>
+							</template>
+							<template v-else>{{ q.count }}</template>
+						</div>
 						<div class="q-sub">{{ q.sub }}</div>
 					</div>
 					<i class="pi pi-arrow-right q-arrow" />
@@ -101,9 +112,24 @@ const greeting = computed(() => {
 // ── My Work Today queues ──
 const visibleQueues = computed(() => queueVisible())
 
-function formatCount(q) {
-	if (q.error || q.count === null || q.count === undefined) return "—"
-	return q.count
+// Q14: a queue card is in one of three states. During loadCounts a queue has
+// count=null + error=false (loading); a failed query sets error=true; success
+// sets a numeric count. This lets the card show a spinner vs a retryable "—" vs
+// the real number, instead of one ambiguous "—" for both pending and failed.
+function countState(q) {
+	if (q.error) return "error"
+	if (q.count === null || q.count === undefined) return "loading"
+	return "value"
+}
+
+// Q14: reset the clicked card to the loading state BEFORE refetching, so it shows
+// the spinner during the retry instead of lingering on "— Retry" (countState
+// tests error first). loadCounts re-queries all queues; only this one flips to
+// loading immediately.
+function retryQueue(q) {
+	q.error = false
+	q.count = null
+	loadCounts()
 }
 
 // Whole card deep-links to the filtered list. Filters travel as a JSON-encoded
@@ -268,6 +294,29 @@ const visibleShortcuts = computed(() =>
 .q-sub {
 	font-size: 12px;
 	color: var(--mgk-muted);
+}
+
+/* Q14: queue count states — spinner while loading, retryable dash on failure. */
+.q-spin {
+	font-size: 18px;
+	color: var(--mgk-muted);
+}
+.q-dash {
+	color: var(--mgk-muted-2);
+}
+.q-retry {
+	margin-left: 10px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--mgk-accent-700);
+	cursor: pointer;
+	vertical-align: middle;
+}
+.q-retry:hover {
+	text-decoration: underline;
+}
+.q-retry i {
+	font-size: 11px;
 }
 
 .q-arrow {

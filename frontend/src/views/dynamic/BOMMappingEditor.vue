@@ -58,17 +58,20 @@
 		<nav class="crumbs">
 			<a @click="goHome">Home</a>
 			<span class="sep">/</span>
-			<a v-if="ipdName" @click="goIpd">{{ ipdName }}</a>
+			<a v-if="ipdName" @click="goIpd">{{ ipdLabel }}</a>
 			<a v-else @click="goMappingList">Item BOM Attribute Mapping</a>
 			<span class="sep">/</span>
 			<span class="crumb-cur mgk-mono">{{ id }}</span>
 		</nav>
 
-		<!-- Header -->
+		<!-- Header (Q2: produced item is the hero; the mapping code is a chip). -->
 		<div class="detail-head">
 			<div class="id-block">
+				<div class="doc-hero">
+					Item BOM Mapping<span v-if="itemLabel"> · {{ itemLabel }}</span>
+				</div>
+				<div class="doc-sub">Item BOM based on attribute mapping</div>
 				<div class="doc-id mgk-mono">{{ id }}</div>
-				<div class="doc-title">Item BOM based on attribute mapping</div>
 			</div>
 			<div class="head-actions">
 				<Button
@@ -436,8 +439,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue"
-import { useRouter } from "vue-router"
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
+import { useRouter, onBeforeRouteLeave } from "vue-router"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -450,6 +453,7 @@ import Tooltip from "primevue/tooltip"
 import { callMethod, getDoc } from "@/api/client"
 import { useDoc } from "@/composables/useDoc"
 import { useAppToast } from "@/composables/useToast"
+import { useAppConfirm } from "@/composables/useConfirm"
 import { usePermissions } from "@/composables/usePermissions"
 
 const vTooltip = Tooltip
@@ -460,6 +464,7 @@ const props = defineProps({
 
 const router = useRouter()
 const toast = useAppToast()
+const confirm = useAppConfirm()
 const { isAdmin, hasRole } = usePermissions()
 
 const DOCTYPE = "Item BOM Attribute Mapping"
@@ -488,6 +493,31 @@ const ipdName = ref(null)   // owning IPD (for the breadcrumb), best-effort
 // saved `values` from the last load — re-reconciled whenever the attribute
 // selection changes so already-saved combinations survive a rebuild.
 const savedValues = ref([])
+
+// Q6: unsaved-changes guard — a deep watch flags the editable model dirty once
+// armed (after load + grid rebuild settle). resetDirty brackets load(); persist
+// re-loads (which re-arms clean).
+const isDirty = ref(false)
+const dirtyArmed = ref(false)
+watch(
+	[item, bomItem, data, itemAttrs, bomAttrs],
+	() => { if (dirtyArmed.value) isDirty.value = true },
+	{ deep: true },
+)
+async function armDirty() {
+	await nextTick()
+	dirtyArmed.value = true
+}
+function beforeUnloadGuard(e) {
+	if (isDirty.value) { e.preventDefault(); e.returnValue = "" }
+}
+// Q2/Q3: human labels. The produced item's name IS human (Item is autonamed from
+// name1), so itemLabel is just item.value. The owning IPD is hash-autonamed with
+// no title_field, so its breadcrumb label is the IPD's `item` (fetched in
+// fetchOwningIpd), falling back to the IPD code until it resolves.
+const ipdItem = ref("")
+const ipdLabel = computed(() => (ipdName.value ? (ipdItem.value || ipdName.value) : ""))
+const itemLabel = computed(() => item.value || "")
 
 // ── attribute selectors (mirror the Desk item_attributes / bom_item_attributes
 //    grids). The full attribute pool per side comes from get_attributes(item);
@@ -551,6 +581,8 @@ async function load() {
 	}
 	loading.value = true
 	loadError.value = null
+	dirtyArmed.value = false
+	isDirty.value = false
 	try {
 		const doc = await getDoc(DOCTYPE, props.id)
 		item.value = doc.item || ""
@@ -576,6 +608,8 @@ async function load() {
 	} finally {
 		loading.value = false
 	}
+	// Q6: arm dirty tracking after load + grid rebuild settle.
+	armDirty()
 }
 
 // Full attribute pool per side (mirror the Desk set_query → get_item_attributes
@@ -725,6 +759,18 @@ async function fetchOwningIpd() {
 		const row = (rows || [])[0]
 		if (row && row.parenttype === "Item Production Detail") {
 			ipdName.value = row.parent
+			// Q3: the IPD is hash-named — fetch its produced item so the breadcrumb
+			// shows a human name instead of the hash.
+			try {
+				const ipd = await callMethod("frappe.client.get_value", {
+					doctype: "Item Production Detail",
+					filters: { name: ipdName.value },
+					fieldname: "item",
+				})
+				ipdItem.value = ipd?.item || ""
+			} catch (_) {
+				ipdItem.value = ""
+			}
 		}
 	} catch (_) {
 		ipdName.value = null
@@ -1010,9 +1056,27 @@ function onKeydown(e) {
 onMounted(() => {
 	load()
 	window.addEventListener("keydown", onKeydown)
+	window.addEventListener("beforeunload", beforeUnloadGuard)
 })
 onBeforeUnmount(() => {
 	window.removeEventListener("keydown", onKeydown)
+	window.removeEventListener("beforeunload", beforeUnloadGuard)
+})
+
+// Q6: confirm before leaving with unsaved mapping edits.
+onBeforeRouteLeave((to, from, next) => {
+	if (isDirty.value) {
+		confirm.require({
+			header: "Discard unsaved changes?",
+			message: "You have unsaved changes to this BOM mapping. Leave without saving?",
+			icon: "pi pi-exclamation-triangle",
+			acceptLabel: "Leave",
+			acceptClass: "p-button-danger",
+			rejectLabel: "Stay",
+			accept: () => { isDirty.value = false; next() },
+			reject: () => next(false),
+		})
+	} else next()
 })
 
 // ── navigation ──
@@ -1190,9 +1254,21 @@ function navItem(name) {
 	flex-direction: column;
 	gap: 3px;
 }
-.doc-id {
-	font-size: 18px;
+/* Q2: hero is the produced item; the mapping code drops to a small mono chip. */
+.doc-hero {
+	font-size: 20px;
+	font-weight: 700;
 	letter-spacing: -0.01em;
+	color: var(--mgk-ink);
+	line-height: 1.2;
+}
+.doc-sub {
+	font-size: 13px;
+	color: var(--mgk-muted);
+}
+.doc-id {
+	font-size: 12px;
+	color: var(--mgk-muted);
 }
 .doc-title {
 	font-size: 13px;
@@ -1236,13 +1312,13 @@ function navItem(name) {
 	border-radius: var(--radius);
 	overflow: hidden;
 }
-/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
+/* Section heads share the Bright Workshop band (light tint; mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
 	padding: 10px 16px;
-	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+	background: var(--mgk-accent-50); border-bottom: 1px solid var(--mgk-line);
 }
 .panel-head::before {
 	content: "";
@@ -1264,7 +1340,7 @@ function navItem(name) {
 /* The panel-meta sub-label on the attr heads reads as a right-aligned count pill. */
 .panel-head .panel-meta {
 	margin-left: auto;
-	background: rgba(255, 255, 255, 0.22);
+	background: #fff;
 	color: var(--mgk-accent-ink);
 	font-size: 11px;
 	font-weight: 600;
