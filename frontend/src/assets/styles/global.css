@@ -156,10 +156,15 @@
 .dark .p-popover,
 .dark .p-popover-content,
 .dark .p-tieredmenu,
+.dark .p-dialog,
 .dark .p-card {
 	background: var(--mgk-card);
 	color: var(--mgk-ink);
 	border-color: var(--mgk-line);
+}
+.dark .p-paginator {
+	background: transparent;
+	color: var(--mgk-ink);
 }
 
 /* DataTable: pin the row dividers + table frame to the line token. Aura leaves
