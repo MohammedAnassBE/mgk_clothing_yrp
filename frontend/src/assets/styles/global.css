@@ -148,6 +148,24 @@
 .dark .p-tabpanels {
 	background: transparent;
 }
+/* Inner TEXT of menus / selects / options keeps a dark color (it's a child of
+   the box, so the box's color override doesn't reach it) — force it light, but
+   keep placeholders muted. This fixes dark-on-dark menu items + the chosen
+   Select value ("Orange") in dark. */
+.dark .p-menu-item-link,
+.dark .p-menu-item-label,
+.dark .p-tieredmenu .p-menu-item-label,
+.dark .p-select-label,
+.dark .p-multiselect-label,
+.dark .p-select-option,
+.dark .p-multiselect-option,
+.dark .p-autocomplete-option {
+	color: var(--mgk-ink);
+}
+.dark .p-select-label.p-placeholder,
+.dark .p-multiselect-label.p-placeholder {
+	color: var(--mgk-muted-2);
+}
 .dark .p-select-overlay,
 .dark .p-multiselect-overlay,
 .dark .p-autocomplete-overlay,
