@@ -917,8 +917,6 @@ const headerLine = computed(() => {
 	if (!d) return ""
 	const bits = []
 	if (d.item) bits.push(d.item)
-	if (d.tech_pack_version) bits.push("Tech " + d.tech_pack_version)
-	if (d.pattern_version) bits.push("Pattern " + d.pattern_version)
 	return bits.join(" · ")
 })
 

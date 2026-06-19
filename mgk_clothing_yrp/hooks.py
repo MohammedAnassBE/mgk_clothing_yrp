@@ -190,6 +190,18 @@ get_website_user_home_page = "mgk_clothing_yrp.www_home.get_website_user_home_pa
 # 	"Task": "mgk_clothing_yrp.custom.task.CustomTaskMixin"
 # }
 
+# Override Controller Class
+# ------------------------------
+#
+# Per-row yarn process costing: MGKWorkOrder subclasses yrp's Work Order
+# controller and overrides set_receivable_process_costs so item-less (mgk_items)
+# yarn WOs cost each receivable by its own yarn item's Process Cost. Non-yarn
+# WOs defer to base behaviour.
+
+override_doctype_class = {
+	"Work Order": "mgk_clothing_yrp.overrides.work_order_class.MGKWorkOrder",
+}
+
 # Overriding Methods
 # ------------------------------
 
@@ -203,6 +215,23 @@ override_whitelisted_methods = {
 
 fixtures = [
 	{"dt": "Custom Field", "filters": [["module", "=", "MGK Clothing YRP"]]},
+	{
+		"dt": "Property Setter",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"Work Order-item-reqd",
+					"Work Order-item-hidden",
+					"Work Order-production_detail-hidden",
+					"Item Production Detail-tech_pack_version-hidden",
+					"Item Production Detail-pattern_version-hidden",
+					"Work Order-main-field_order",
+				],
+			]
+		],
+	},
 ]
 
 # Document Events
@@ -221,6 +250,7 @@ doc_events = {
 doctype_js = {
 	"Purchase Order": "public/js/purchase_order_mgk.js",
 	"Work Order": "public/js/work_order_mgk.js",
+	"Item Production Detail": "public/js/item_production_detail_mgk.js",
 }
 #
 # each overriding function accepts a `data` argument;

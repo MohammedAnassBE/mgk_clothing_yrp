@@ -99,7 +99,7 @@ const GROUPS = [
 		group: "Production",
 		roles: ["Production Manager", "System Manager"],
 		items: [
-			{ doctype: "Work Order", icon: "pi pi-bars", dateTabs: "wo_date", listFields: [
+			{ doctype: "Work Order", icon: "pi pi-bars", dateTabs: "wo_date", tabMode: "status", listFields: [
 				{ field: "item", label: "Item" },
 				{ field: "supplier", label: "Job-worker" },
 				{ field: "process_name", label: "Process" },
@@ -188,6 +188,13 @@ for (const g of GROUPS) {
 			isSubmittable: SUBMITTABLE.has(it.doctype),
 			isWorkflow: it.doctype in WORKFLOW,
 			workflowStates: WORKFLOW[it.doctype] || null,
+			// OPT-IN tab-mode override. When set ('status' | 'docstatus' | 'workflow'),
+			// DynamicListPage.loadMetaAndColumns() honors it BEFORE the automatic
+			// workflow > submittable > status > all priority. Used by Work Order, which
+			// is submittable (so it would default to docstatus tabs) but whose lifecycle
+			// is actually driven by its many-valued `status` Select field — Submit/Cancel
+			// still work via the detail-page buttons.
+			tabMode: it.tabMode || null,
 			dateTabs: it.dateTabs || null,
 			listFields: it.listFields || null,
 			note: it.note || null,

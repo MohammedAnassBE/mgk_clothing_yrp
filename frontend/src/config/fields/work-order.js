@@ -44,14 +44,14 @@ const detailGroups = [
 	{
 		label: "Schedule",
 		fields: [
-			"wo_date", "planned_start_date", "planned_end_date", "expected_delivery_date",
+			"wo_date", "planned_start_date", "planned_end_date", "planned_quantity", "expected_delivery_date",
 			"start_date", "end_date", "first_dc_date", "last_dc_date", "first_grn_date", "last_grn_date",
 		],
 	},
 	{
 		label: "Quantities",
 		fields: [
-			"total_quantity", "planned_quantity",
+			"total_quantity",
 			"total_no_of_pieces_delivered", "total_no_of_pieces_received", "wo_colours",
 		],
 	},
@@ -93,6 +93,7 @@ const formOrder = [
 	"delivery_location_name",
 	"planned_start_date",
 	"planned_end_date",
+	"planned_quantity",
 	"expected_delivery_date",
 	"supplier_type",
 	"rework_type",
@@ -100,7 +101,6 @@ const formOrder = [
 	"supplier_address_details",
 	"delivery_address",
 	"delivery_address_details",
-	"planned_quantity",
 	"comments",
 ]
 
@@ -112,11 +112,16 @@ const formOrder = [
 //   "empty", and the strings are non-empty), so they'd leak into the New
 //   WO form as disabled controls — distracting and against the U4 audit
 //   intent. Listed here explicitly.
+// - comments: dropped from the regular form-field grid so it can be re-rendered
+//   as the VERY LAST element of the WO form — below the mgk_items grid and the
+//   deliverables/receivables pivots (DocDetail renders a dedicated WO comments
+//   block after all child tables). Mirrors the Desk's bottom-of-form placement.
 const hideFormFields = [
 	"includes_packing",
 	"open_status",
 	"is_delivered",
 	"status",
+	"comments",
 ]
 
 // Empty-party handler used by the address fields below: returns no suggestions

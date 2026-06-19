@@ -14,9 +14,26 @@
 
 			<!-- Perm-gated DocType groups -->
 			<div v-for="grp in sidebarGroups" :key="grp.group" class="nav-group">
-				<span v-if="!collapsed" class="nav-group-label">{{ grp.group }}</span>
+				<!-- Section header: a toggle button when the sidebar is expanded so the
+				     user can collapse/expand this section; collapse state is per-user
+				     and persisted server-side via useSidebarCollapse. Independent of the
+				     whole-sidebar `collapsed` prop (the label is hidden in that mode). -->
+				<button
+					v-if="!collapsed"
+					type="button"
+					class="nav-group-label"
+					:aria-expanded="!isCollapsed(grp.group)"
+					@click="toggleSection(grp.group)"
+				>
+					<span class="nav-group-text">{{ grp.group }}</span>
+					<i
+						class="pi pi-chevron-down nav-group-chevron"
+						:class="{ 'is-collapsed': isCollapsed(grp.group) }"
+					/>
+				</button>
 				<router-link
 					v-for="item in grp.items"
+					v-show="collapsed || !isCollapsed(grp.group)"
 					:key="item.route"
 					:to="`/${item.route}`"
 					class="nav-item"
@@ -45,6 +62,7 @@
 import { computed } from "vue"
 import { usePermissions } from "@/composables/usePermissions"
 import { getSidebarGroups } from "@/config/doctypes"
+import { useSidebarCollapse } from "@/composables/useSidebarCollapse"
 
 defineProps({ collapsed: Boolean })
 defineEmits(["toggle"])
@@ -54,6 +72,11 @@ const { canRead } = usePermissions()
 // Live-perm gate: only show items the user can read. Admin sees everything;
 // DocTypes not installed (e.g. Workstation) resolve canRead → false and drop.
 const sidebarGroups = computed(() => getSidebarGroups((dt) => canRead(dt)))
+
+// Per-user, server-persisted collapse state for each sidebar SECTION. Loaded
+// once; toggling a section flips it and saves (debounced). This is independent
+// of the whole-sidebar `collapsed` prop (icon-only mode).
+const { isCollapsed, toggleSection } = useSidebarCollapse()
 </script>
 
 <style scoped>
@@ -106,13 +129,44 @@ const sidebarGroups = computed(() => getSidebarGroups((dt) => canRead(dt)))
 }
 
 .nav-group-label {
-	display: block;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	width: 100%;
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--mgk-muted-2);
 	padding: 8px 12px 6px;
+	/* reset native button chrome — this is a styled section header toggle */
+	background: transparent;
+	border: 0;
+	text-align: left;
+	cursor: pointer;
+	font-family: inherit;
+}
+
+.nav-group-label:hover {
+	color: var(--mgk-ink);
+}
+
+.nav-group-text {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.nav-group-chevron {
+	font-size: 10px;
+	flex-shrink: 0;
+	transition: transform 0.15s ease;
+}
+
+/* Collapsed section → chevron points right (rotated from its default down). */
+.nav-group-chevron.is-collapsed {
+	transform: rotate(-90deg);
 }
 
 .nav-item {

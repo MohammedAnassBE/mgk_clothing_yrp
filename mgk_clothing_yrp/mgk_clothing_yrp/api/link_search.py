@@ -88,15 +88,21 @@ def link_search(doctype, txt="", filters=None, page_length=20):
 	match_fields = _match_fields(meta, label_field)
 	txt = (txt or "").strip()
 
-	like = f"%{txt}%"
-	or_filters = [["name", "like", like]] + [[f, "like", like] for f in match_fields]
 	# Fetch name + the label field (when there is a distinct human title).
 	fields = ["name"] + ([label_field] if label_field else [])
+
+	# Empty txt → return the top page_length records (Frappe-desk parity): honor
+	# the AND `filters` only, no OR text matching, sorted by modified desc. A
+	# non-empty txt adds the OR-across name + match fields below.
+	or_filters = None
+	if txt:
+		like = f"%{txt}%"
+		or_filters = [["name", "like", like]] + [[f, "like", like] for f in match_fields]
 
 	rows = frappe.get_list(
 		doctype,
 		filters=filters,
-		or_filters=or_filters if txt else None,
+		or_filters=or_filters,
 		fields=fields,
 		limit_page_length=int(page_length or 20),
 		order_by="modified desc",

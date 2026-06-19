@@ -10,6 +10,13 @@
  * the user from picking an existing shared mapping for the Attributes
  * table, since base yrp's `Item._ensure_attribute_mappings_exist`
  * auto-creates one on save.
+ *
+ * `boolLabels`: humanise the new `is_yarn_item` Check (desk-side addition,
+ * 2026-06-18) so it reads as a clear yes/no on the form rather than the
+ * raw "Is Yarn Item: No" double-take. The field is meta-driven, so it
+ * renders automatically in EDIT/CREATE as a toggle; it is intentionally
+ * NOT in hideFormFields so users can set it. IPD's `yarn_item` link search
+ * filters on this flag (see config/fields/item-production-detail.js).
  */
 const hideFormFields = [
 	"weight_per_unit",
@@ -20,7 +27,12 @@ const readOnlyChildFields = {
 	"Item Item Attribute": ["mapping"],
 }
 
+const boolLabels = {
+	is_yarn_item: { on: "Yarn item", off: "Not a yarn item" },
+}
+
 export default {
 	hideFormFields,
 	readOnlyChildFields,
+	boolLabels,
 }

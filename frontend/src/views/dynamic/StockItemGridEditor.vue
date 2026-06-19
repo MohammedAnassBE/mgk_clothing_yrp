@@ -63,7 +63,7 @@
 		<!-- ── Existing logical items (grouped pivot view) ── -->
 		<div v-if="groups.length" class="grid-groups">
 			<div v-for="(group, gi) in groups" :key="'g-' + gi" class="grid-group">
-				<DataTable :value="group.items" class="mgk-table pivot-dt" :rowHover="false">
+				<DataTable :value="group.items" class="mgk-table pivot-dt" :rowHover="false" :tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }">
 					<Column header="#" :style="{ width: '40px' }">
 						<template #body="{ index }">{{ index + 1 }}</template>
 					</Column>
@@ -1123,6 +1123,9 @@ defineExpose({ getItems, loadData, hasItems })
 	width: 100%;
 }
 :deep(.cell-num-input) {
+	/* fill the cell — PrimeVue's fluid sets the inner input to width:1% which
+	   collapses to ~26px on our block-display host; force full width. */
+	width: 100%;
 	text-align: center;
 }
 .cell-ro {

@@ -890,7 +890,30 @@ async function loadMetaAndColumns(dt) {
 		const statusField = (parent?.fields || []).find(
 			(f) => f.fieldname === "status"
 		)
-		if (isWorkflow.value) {
+		// Read the `status` Select options from meta (used by status-mode tabs). On
+		// this site that resolves to the yrp Work Order's actual option list, so the
+		// tabs always match the live field — no hardcoding.
+		const readStatusOptions = () =>
+			statusField && statusField.fieldtype === "Select"
+				? (statusField.options || "")
+						.split("\n")
+						.map((o) => o.trim())
+						.filter((o) => o.length > 0)
+				: []
+		// OPT-IN override: a registry `tabMode` ('status' | 'docstatus' | 'workflow')
+		// wins over the automatic workflow > submittable > status > all priority. This
+		// lets a submittable doctype (e.g. Work Order) drive its tab strip from the
+		// many-valued `status` Select field instead of the 3-state docstatus, while
+		// Submit/Cancel keep working via the detail-page buttons.
+		const override = registry.value?.tabMode || null
+		if (override === "status") {
+			tabMode.value = "status"
+			statusOptions.value = readStatusOptions()
+		} else if (override === "docstatus") {
+			tabMode.value = "docstatus"
+		} else if (override === "workflow") {
+			tabMode.value = "workflow"
+		} else if (isWorkflow.value) {
 			// Workflow-managed → workflow_state tabs (Draft / Approval Pending /
 			// Approved / Rejected / Expired). docstatus would collapse the three
 			// docstatus-0 states (Draft + Approval Pending + Rejected) into one tab.
@@ -904,10 +927,7 @@ async function loadMetaAndColumns(dt) {
 			tabMode.value = "docstatus"
 		} else if (statusField && statusField.fieldtype === "Select") {
 			tabMode.value = "status"
-			statusOptions.value = (statusField.options || "")
-				.split("\n")
-				.map((o) => o.trim())
-				.filter((o) => o.length > 0)
+			statusOptions.value = readStatusOptions()
 		} else {
 			// No status field and not submittable → still show a single All tab.
 			tabMode.value = "all"

@@ -26,6 +26,8 @@ import purchaseOrder from "./purchase-order.js"
 import goodsReceivedNote from "./goods-received-note.js"
 import inspectionEntry from "./inspection-entry.js"
 import item from "./item.js"
+import itemProductionDetail from "./item-production-detail.js"
+import itemMasterTemplate from "./item-master-template.js"
 
 const FIELD_CONFIGS = {
 	"Work Order": workOrder,
@@ -35,6 +37,8 @@ const FIELD_CONFIGS = {
 	"Goods Received Note": goodsReceivedNote,
 	"Inspection Entry": inspectionEntry,
 	"Item": item,
+	"Item Production Detail": itemProductionDetail,
+	"Item Master Template": itemMasterTemplate,
 }
 
 /**

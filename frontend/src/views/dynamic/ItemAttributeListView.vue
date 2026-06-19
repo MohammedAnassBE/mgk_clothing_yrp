@@ -142,6 +142,10 @@ const vTooltip = Tooltip
 
 const props = defineProps({
 	itemName: { type: String, required: true },
+	// Host DocType whose __onload.attr_list we read and whose mappings we write.
+	// "Item" by default; "Item Master Template" shares the identical attr_list
+	// onload contract, so the same editor serves both.
+	doctype: { type: String, default: "Item" },
 })
 
 const toast = useAppToast()
@@ -182,7 +186,7 @@ async function load() {
 	editingIdx.value = -1
 	draftValues.value = []
 	try {
-		const doc = await getDocWithOnload("Item", props.itemName)
+		const doc = await getDocWithOnload(props.doctype, props.itemName)
 		const arr = doc?.__onload?.attr_list
 		attrList.value = Array.isArray(arr) ? arr : []
 	} catch (e) {

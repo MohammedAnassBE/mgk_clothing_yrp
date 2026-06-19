@@ -60,7 +60,7 @@
 			:key="row.key"
 			class="grn-group"
 		>
-			<DataTable :value="row.splits" class="mgk-table grn-dt" :rowHover="false" dataKey="key">
+			<DataTable :value="row.splits" class="mgk-table grn-dt" :rowHover="false" dataKey="key" :tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }">
 				<!-- S.No (rowspan-style: only shown on the first split) -->
 				<Column header="#" :style="{ width: '44px' }">
 					<template #body="{ index }">
@@ -554,6 +554,9 @@ defineExpose({ loadData, getItems, hasItems })
 	width: 100%;
 }
 :deep(.cell-num-input) {
+	/* fill the cell — PrimeVue's fluid sets the inner input to width:1% which
+	   collapses to ~26px on our block-display host; force full width. */
+	width: 100%;
 	text-align: right;
 }
 .cell-ro {

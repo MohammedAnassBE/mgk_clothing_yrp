@@ -1,0 +1,68 @@
+[
+ {
+  "doctype": "Property Setter",
+  "name": "Work Order-item-reqd",
+  "is_system_generated": 1,
+  "doctype_or_field": "DocField",
+  "doc_type": "Work Order",
+  "field_name": "item",
+  "property": "reqd",
+  "property_type": "Check",
+  "value": "0"
+ },
+ {
+  "doctype": "Property Setter",
+  "name": "Work Order-item-hidden",
+  "is_system_generated": 1,
+  "doctype_or_field": "DocField",
+  "doc_type": "Work Order",
+  "field_name": "item",
+  "property": "hidden",
+  "property_type": "Check",
+  "value": "1"
+ },
+ {
+  "doctype": "Property Setter",
+  "name": "Work Order-production_detail-hidden",
+  "is_system_generated": 1,
+  "doctype_or_field": "DocField",
+  "doc_type": "Work Order",
+  "field_name": "production_detail",
+  "property": "hidden",
+  "property_type": "Check",
+  "value": "1"
+ },
+ {
+  "doctype": "Property Setter",
+  "name": "Item Production Detail-tech_pack_version-hidden",
+  "is_system_generated": 1,
+  "doctype_or_field": "DocField",
+  "doc_type": "Item Production Detail",
+  "field_name": "tech_pack_version",
+  "property": "hidden",
+  "property_type": "Check",
+  "value": "1"
+ },
+ {
+  "doctype": "Property Setter",
+  "name": "Item Production Detail-pattern_version-hidden",
+  "is_system_generated": 1,
+  "doctype_or_field": "DocField",
+  "doc_type": "Item Production Detail",
+  "field_name": "pattern_version",
+  "property": "hidden",
+  "property_type": "Check",
+  "value": "1"
+ },
+ {
+  "doctype": "Property Setter",
+  "name": "Work Order-main-field_order",
+  "is_system_generated": 0,
+  "doctype_or_field": "DocType",
+  "doc_type": "Work Order",
+  "field_name": "",
+  "property": "field_order",
+  "property_type": "Text",
+  "value": "[\"is_rework\", \"naming_series\", \"status\", \"edit_wo_date\", \"wo_date\", \"supplier\", \"supplier_name\", \"is_delivered\", \"is_manual_entry\", \"includes_packing\", \"column_break_wrym\", \"is_internal_unit\", \"parent_wo\", \"process_name\", \"terms_and_condition\", \"item\", \"production_detail\", \"delivery_location\", \"delivery_location_name\", \"open_status\", \"close_reason\", \"close_other_reason\", \"close_remarks\", \"closed_by\", \"approved_by\", \"rejection_reason\", \"section_break_tmhn\", \"planned_start_date\", \"planned_end_date\", \"planned_quantity\", \"expected_delivery_date\", \"process_cost\", \"column_break_ahbf\", \"start_date\", \"end_date\", \"supplier_type\", \"rework_type\", \"address_and_contact_section\", \"supplier_address\", \"supplier_address_details\", \"column_break_ztqp\", \"delivery_address\", \"delivery_address_details\", \"work_order_tracking_section\", \"work_order_tracking_logs\", \"section_break_oufa\", \"deliverables\", \"deliverable_items\", \"deliverable_details\", \"section_break_qtip\", \"receivables\", \"receivable_items\", \"receivable_details\", \"section_break_axzz\", \"amended_from\", \"total_quantity\", \"work_order_calculated_items\", \"completed_items_json\", \"incompleted_items_json\", \"wo_delivered_completed_json\", \"wo_delivered_incompleted_json\", \"work_order_excess_usage_items\", \"section_break_lgsu\", \"column_break_ocbe\", \"first_dc_date\", \"last_dc_date\", \"wo_colours\", \"column_break_uwsv\", \"first_grn_date\", \"last_grn_date\", \"total_no_of_pieces_delivered\", \"total_no_of_pieces_received\", \"reduce_stock_entry\", \"update_stock_entry\", \"section_break_fewo\", \"column_break_klzv\", \"received_types_json\", \"work_order_track_pieces\", \"comments\", \"summary_tab\", \"wo_summary_html\"]"
+ }
+]
