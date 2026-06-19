@@ -60,6 +60,62 @@
 	--ctrl-h: 38px;              /* touch target floor — meets ~40px principle */
 	--ctrl-pad: 8px 11px;
 	--ctrl-radius: var(--radius-sm);
+
+	/* ── Type scale (single source — replaces scattered 11/12.5/13/14.5/16/20px) ── */
+	--fs-2xs: 11px;   /* uppercase micro-labels */
+	--fs-xs:  12px;   /* sub-captions, chips */
+	--fs-sm:  13px;   /* secondary body, table cells */
+	--fs-base:14px;   /* body default */
+	--fs-md:  15px;
+	--fs-lg:  16px;   /* value-as-hero */
+	--fs-xl:  20px;   /* doc hero title */
+	--fs-2xl: 24px;   /* page title */
+
+	color-scheme: light;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Dark "Bright Workshop" — activated by `.dark` on <html> (useTheme).
+   Overriding the --mgk-* token layer flips every bespoke surface (sidebar,
+   topbar, home cards, detail/.mgk-card, panels, empty-states) at once; PrimeVue
+   components flip via theme.js colorScheme.dark. Status/teal Tag tints adapt
+   through the --mgk-accent-50 / --mgk-success-50 / … overrides below.
+   ───────────────────────────────────────────────────────────────────────── */
+.dark {
+	/* Surfaces — deep cool slate */
+	--mgk-bg:        #0B1220;   /* page */
+	--mgk-card:      #0F1A2A;   /* panels / cards */
+	--mgk-slate-50:  #1B2636;   /* secondary surface (header bands, hover rows) */
+
+	/* Text — light on dark */
+	--mgk-ink:       #F1F5F9;   /* primary value text */
+	--mgk-ink-2:     #CBD5E1;   /* secondary headings */
+	--mgk-muted:     #94A3B8;   /* labels / hints */
+	--mgk-muted-2:   #64748B;   /* disabled / subtle */
+
+	/* Lines */
+	--mgk-line:      #2A3647;
+
+	/* Accent — brighter teal for dark contrast */
+	--mgk-accent:    #2BB0A3;
+	--mgk-accent-50: rgba(45, 176, 163, 0.16);  /* teal wash on dark (bands, badges) */
+	--mgk-accent-600:#2BB0A3;
+	--mgk-accent-700:#5EC9BE;   /* link / hover — light teal on dark */
+	--mgk-accent-ink:#5EC9BE;   /* title / icon on the dark teal-wash band */
+
+	/* Elevation — deeper shadows on dark */
+	--mgk-shadow:    rgba(0, 0, 0, 0.40);
+	--mgk-shadow-md: rgba(0, 0, 0, 0.55);
+
+	/* Status — lighter inks + translucent tints for dark bg */
+	--mgk-success:    #34D399;
+	--mgk-success-50: rgba(52, 211, 153, 0.16);
+	--mgk-warn:       #FBBF24;
+	--mgk-warn-50:    rgba(251, 191, 36, 0.16);
+	--mgk-danger:     #FB7185;
+	--mgk-danger-50:  rgba(251, 113, 133, 0.16);
+
+	color-scheme: dark;
 }
 
 * {

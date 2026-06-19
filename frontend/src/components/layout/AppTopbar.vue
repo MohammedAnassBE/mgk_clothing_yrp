@@ -13,11 +13,21 @@
 				</div>
 			</div>
 			<Button
+				:icon="isDark ? 'pi pi-sun' : 'pi pi-moon'"
+				severity="secondary"
+				text
+				rounded
+				:aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'"
+				:title="isDark ? 'Light mode' : 'Dark mode'"
+				@click="toggleTheme"
+			/>
+			<Button
 				icon="pi pi-sign-out"
 				severity="secondary"
 				text
 				rounded
 				aria-label="Log out"
+				title="Log out"
 				@click="onLogout"
 			/>
 		</div>
@@ -29,10 +39,12 @@ import { computed } from "vue"
 import { useRoute } from "vue-router"
 import Button from "primevue/button"
 import { useAuth } from "@/composables/useAuth"
+import { useTheme } from "@/composables/useTheme"
 import { getRegistryByRoute } from "@/config/doctypes"
 
 const route = useRoute()
 const { fullName, logout } = useAuth()
+const { isDark, toggleTheme } = useTheme()
 
 const bootUser = window.frappe?.boot?.user || {}
 const roles = Array.isArray(bootUser.roles) ? bootUser.roles : []
@@ -121,7 +133,9 @@ async function onLogout() {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
-	background: var(--mgk-ink);
+	/* Teal (brand) so initials stay legible in both light and dark — the old
+	   --mgk-ink bg inverted to near-white in dark, hiding white initials. */
+	background: var(--mgk-accent);
 	color: #fff;
 	font-weight: 600;
 	font-size: 12px;

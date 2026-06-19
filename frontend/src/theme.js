@@ -56,6 +56,37 @@ const MgkPreset = definePreset(Aura, {
 					950: "#0B1220",   // --mgk-ink
 				},
 			},
+			// Dark Bright Workshop — activated by `.dark` on <html> (darkModeSelector).
+			// Brighter teal primary for contrast; deep cool-slate surfaces (0 = card
+			// ground, low numbers = backgrounds, high numbers = light text).
+			dark: {
+				primary: {
+					color: "#2BB0A3",        // brighter teal reads on dark
+					inverseColor: "#04241F",
+					hoverColor: "#5EC9BE",
+					activeColor: "#99DDD5",
+				},
+				highlight: {
+					background: "rgba(45, 176, 163, 0.16)",
+					focusBackground: "rgba(45, 176, 163, 0.24)",
+					color: "#5EC9BE",
+					focusColor: "#99DDD5",
+				},
+				surface: {
+					0:   "#0F1A2A",   // component ground (cards, table, dialog)
+					50:  "#16202F",   // row hover
+					100: "#1B2636",   // header band / secondary surface
+					200: "#2A3647",   // borders / lines
+					300: "#3A485C",   // toggle OFF-track
+					400: "#5B6573",
+					500: "#94A3B8",   // muted text
+					600: "#A9B4C2",
+					700: "#C3CDDA",
+					800: "#DCE3EC",
+					900: "#EDF1F6",
+					950: "#F7F9FB",   // brightest text
+				},
+			},
 		},
 	},
 	components: {
@@ -65,53 +96,55 @@ const MgkPreset = definePreset(Aura, {
 			paddingY: "0.5rem",
 			sm: { paddingX: "0.7rem", paddingY: "0.4rem", fontSize: "0.8125rem" },
 			label: { fontWeight: "600" },
-			focusRing: { width: "2px", style: "solid", color: "#0D9488", offset: "2px" },
+			// Token refs so the focus ring tracks the active scheme's primary.
+			focusRing: { width: "2px", style: "solid", color: "{primary.color}", offset: "2px" },
 		},
 		datatable: {
 			headerCell: {
 				padding: "0.6rem 0.875rem",
-				background: "#EEF2F7",                 // slate-50 header band
-				color: "#5B6573",
-				borderColor: "#E2E8F0",
+				background: "{surface.100}",            // slate header band (light) / dark band (dark)
+				color: "{surface.500}",
+				borderColor: "{surface.200}",
 				fontWeight: "600",
 			},
-			bodyCell: { padding: "0.65rem 0.875rem", borderColor: "#E2E8F0" },
-			row: { hoverBackground: "#F6F8FA" },
+			bodyCell: { padding: "0.65rem 0.875rem", borderColor: "{surface.200}" },
+			row: { hoverBackground: "{surface.50}" },
 		},
 		inputtext: {
 			borderRadius: "var(--radius-sm)",
 			paddingX: "0.7rem", paddingY: "0.5rem",
-			borderColor: "#E2E8F0",
-			focusBorderColor: "#0D9488",
+			borderColor: "{surface.200}",
+			focusBorderColor: "{primary.color}",
 		},
-		select:       { borderRadius: "var(--radius-sm)", borderColor: "#E2E8F0", focusBorderColor: "#0D9488" },
+		select:       { borderRadius: "var(--radius-sm)", borderColor: "{surface.200}", focusBorderColor: "{primary.color}" },
 		datepicker:   { borderRadius: "var(--radius-sm)" },
 		inputnumber:  { borderRadius: "var(--radius-sm)" },
-		textarea:     { borderRadius: "var(--radius-sm)", borderColor: "#E2E8F0", focusBorderColor: "#0D9488" },
+		textarea:     { borderRadius: "var(--radius-sm)", borderColor: "{surface.200}", focusBorderColor: "{primary.color}" },
 		toggleswitch: {
-			checkedBackground: "#0D9488",
-			checkedHoverBackground: "#0F827A",
-			background: "#CBD5E1",                       // cool grey OFF-track (kills the tan)
+			checkedBackground: "{primary.color}",
+			checkedHoverBackground: "{primary.hoverColor}",
+			background: "{surface.300}",                 // cool grey OFF-track, adapts per scheme
 		},
 		tabs: {
 			tab: {
 				fontWeight: "500",
-				activeColor: "#0F766E",
-				color: "#5B6573",
+				activeColor: "{primary.color}",
+				color: "{surface.500}",
 				padding: "0.6rem 0.9rem",
 			},
-			activeBar: { height: "2px", background: "#0D9488" },
+			activeBar: { height: "2px", background: "{primary.color}" },
 		},
 		tag: {
 			fontWeight: "600",
 			padding: "0.2rem 0.55rem",
 			borderRadius: "999px",
-			primary:   { background: "#E6F6F4", color: "#0F766E" },
-			info:      { background: "#E6F6F4", color: "#0F766E" },   // fold off-palette blue into teal
+			// Status/teal tints use --mgk-* vars (overridden under .dark in global.css).
+			primary:   { background: "var(--mgk-accent-50)", color: "var(--mgk-accent-ink)" },
+			info:      { background: "var(--mgk-accent-50)", color: "var(--mgk-accent-ink)" },
 			success:   { background: "var(--mgk-success-50)", color: "var(--mgk-success)" },
 			warn:      { background: "var(--mgk-warn-50)",    color: "var(--mgk-warn)" },
 			danger:    { background: "var(--mgk-danger-50)",  color: "var(--mgk-danger)" },
-			secondary: { background: "#EEF2F7", color: "#5B6573" },
+			secondary: { background: "{surface.100}", color: "{surface.500}" },
 		},
 		dialog: {
 			borderRadius: "var(--radius)",
