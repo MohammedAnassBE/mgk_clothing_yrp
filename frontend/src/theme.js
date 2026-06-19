@@ -26,6 +26,19 @@ const MgkPreset = definePreset(Aura, {
 			900: "#134E4A",
 			950: "#032826",
 		},
+		// Pin form-field / content / overlay surfaces to the --mgk-* tokens so
+		// they flip correctly in dark. Aura's defaults reference high surface
+		// levels that our chrome-oriented dark ramp renders LIGHT → white inputs,
+		// cards, and dropdown/menu panels in dark. var() resolves per scheme, so
+		// this is correct in both light and dark.
+		formField: { background: "var(--mgk-card)", color: "var(--mgk-ink)" },
+		content: { background: "var(--mgk-card)", color: "var(--mgk-ink)" },
+		overlay: {
+			select: { background: "var(--mgk-card)", color: "var(--mgk-ink)" },
+			popover: { background: "var(--mgk-card)", color: "var(--mgk-ink)" },
+			modal: { background: "var(--mgk-card)", color: "var(--mgk-ink)" },
+		},
+		list: { option: { color: "var(--mgk-ink)", focusBackground: "var(--mgk-slate-50)" } },
 		colorScheme: {
 			light: {
 				primary: {
@@ -113,13 +126,47 @@ const MgkPreset = definePreset(Aura, {
 		inputtext: {
 			borderRadius: "var(--radius-sm)",
 			paddingX: "0.7rem", paddingY: "0.5rem",
+			background: "var(--mgk-card)",
+			color: "var(--mgk-ink)",
 			borderColor: "{surface.200}",
 			focusBorderColor: "{primary.color}",
 		},
-		select:       { borderRadius: "var(--radius-sm)", borderColor: "{surface.200}", focusBorderColor: "{primary.color}" },
-		datepicker:   { borderRadius: "var(--radius-sm)" },
+		select: {
+			borderRadius: "var(--radius-sm)",
+			background: "var(--mgk-card)",
+			color: "var(--mgk-ink)",
+			borderColor: "{surface.200}",
+			focusBorderColor: "{primary.color}",
+			overlay: { background: "var(--mgk-card)", color: "var(--mgk-ink)", borderColor: "{surface.200}" },
+			option: { color: "var(--mgk-ink)", focusBackground: "var(--mgk-slate-50)" },
+		},
+		datepicker: {
+			borderRadius: "var(--radius-sm)",
+			panel: { background: "var(--mgk-card)", borderColor: "{surface.200}" },
+		},
 		inputnumber:  { borderRadius: "var(--radius-sm)" },
-		textarea:     { borderRadius: "var(--radius-sm)", borderColor: "{surface.200}", focusBorderColor: "{primary.color}" },
+		textarea: {
+			borderRadius: "var(--radius-sm)",
+			background: "var(--mgk-card)",
+			color: "var(--mgk-ink)",
+			borderColor: "{surface.200}",
+			focusBorderColor: "{primary.color}",
+		},
+		autocomplete: {
+			overlay: { background: "var(--mgk-card)", color: "var(--mgk-ink)", borderColor: "{surface.200}" },
+			option: { color: "var(--mgk-ink)", focusBackground: "var(--mgk-slate-50)" },
+		},
+		multiselect: {
+			background: "var(--mgk-card)",
+			borderColor: "{surface.200}",
+			overlay: { background: "var(--mgk-card)", color: "var(--mgk-ink)", borderColor: "{surface.200}" },
+		},
+		menu: {
+			background: "var(--mgk-card)",
+			color: "var(--mgk-ink)",
+			borderColor: "{surface.200}",
+		},
+		popover: { background: "var(--mgk-card)", color: "var(--mgk-ink)", borderColor: "{surface.200}" },
 		toggleswitch: {
 			checkedBackground: "{primary.color}",
 			checkedHoverBackground: "{primary.hoverColor}",
@@ -151,7 +198,14 @@ const MgkPreset = definePreset(Aura, {
 			headerPadding: "1rem 1.25rem",
 			contentPadding: "0 1.25rem 1.25rem",
 		},
-		card: { borderRadius: "var(--radius)", body: { padding: "0" } },
+		// Pin Card surface to the --mgk-card token (white light / #0F1A2A dark).
+		// Aura's default dark Card bg references {surface.900}, which is light in
+		// our ramp (we orient low=dark for the other component overrides) — that
+		// made side-card values light-on-light in dark. Token flips per scheme.
+		card: {
+			root: { background: "var(--mgk-card)", color: "var(--mgk-ink)", borderRadius: "var(--radius)" },
+			body: { padding: "0" },
+		},
 		paginator: { padding: "0.5rem 0.75rem" },
 	},
 })

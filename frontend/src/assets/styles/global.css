@@ -118,6 +118,35 @@
 	color-scheme: dark;
 }
 
+/* ── Dark-mode surfaces for PrimeVue form fields + overlay panels ──
+   Aura's dark component tokens reference high surface levels that our
+   chrome-oriented dark ramp renders LIGHT (white inputs / dropdowns / menus in
+   dark). PrimeVue v4 ships its component CSS inside `@layer primevue`, so these
+   UNLAYERED rules win without !important. Force them to the card surface. */
+.dark .p-inputtext,
+.dark .p-textarea,
+.dark .p-select,
+.dark .p-multiselect,
+.dark .p-autocomplete-input,
+.dark .p-datepicker-input,
+.dark .p-inputnumber-input {
+	background: var(--mgk-card);
+	color: var(--mgk-ink);
+}
+.dark .p-select-overlay,
+.dark .p-multiselect-overlay,
+.dark .p-autocomplete-overlay,
+.dark .p-datepicker-panel,
+.dark .p-menu,
+.dark .p-popover,
+.dark .p-popover-content,
+.dark .p-tieredmenu,
+.dark .p-card {
+	background: var(--mgk-card);
+	color: var(--mgk-ink);
+	border-color: var(--mgk-line);
+}
+
 * {
 	box-sizing: border-box;
 }
