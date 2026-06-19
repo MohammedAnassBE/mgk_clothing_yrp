@@ -565,7 +565,7 @@ defineExpose({ loadData, getItems, hasItems })
 	color: var(--mgk-ink-2);
 }
 .txt-danger {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 
 .grn-rt-add-row {

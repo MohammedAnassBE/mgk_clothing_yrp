@@ -235,7 +235,7 @@ async function submit() {
 	overflow-y: auto;
 }
 .cd-row {
-	border: 1px solid var(--mgk-border, #e5e7eb);
+	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius-sm);
 	padding: 12px 14px;
 }

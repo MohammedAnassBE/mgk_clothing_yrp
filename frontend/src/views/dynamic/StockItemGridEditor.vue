@@ -1206,7 +1206,7 @@ defineExpose({ getItems, loadData, hasItems })
 	font-weight: 600;
 }
 .add-fld .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 
 /* Qty pivot (size cells) */
@@ -1245,7 +1245,7 @@ defineExpose({ getItems, loadData, hasItems })
 	font-weight: 600;
 }
 .qty-single .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 
 .rate-row,

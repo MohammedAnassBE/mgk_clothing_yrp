@@ -4380,7 +4380,7 @@ function stripHtml(s) {
 	width: 100%;
 }
 .form-field .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 	margin-left: 2px;
 }
 .fld-check {
@@ -4659,12 +4659,12 @@ function stripHtml(s) {
 	font-size: 11px;
 }
 .tl-dot.good {
-	border-color: #16a34a;
-	color: #16a34a;
+	border-color: var(--mgk-success);
+	color: var(--mgk-success);
 }
 .tl-dot.danger {
-	border-color: #be123c;
-	color: #be123c;
+	border-color: var(--mgk-danger);
+	color: var(--mgk-danger);
 }
 .tl-dot.info {
 	border-color: var(--mgk-accent);
@@ -4681,10 +4681,10 @@ function stripHtml(s) {
 	padding-bottom: 12px;
 }
 .txt-danger {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 .txt-good {
-	color: #16a34a;
+	color: var(--mgk-success);
 }
 .tab-footnote {
 	margin: 14px 2px 0;

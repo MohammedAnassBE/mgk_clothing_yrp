@@ -323,7 +323,7 @@ defineExpose({ reload: load })
 	width: 100%;
 }
 .txt-good {
-	color: #15803d;
+	color: var(--mgk-success);
 }
 .muted {
 	color: var(--mgk-muted-2);

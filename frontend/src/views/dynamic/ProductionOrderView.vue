@@ -1175,7 +1175,7 @@ function formatNumber(val) {
 	font-weight: 600;
 }
 .fld-wrap .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 .fld-hint {
 	font-size: 11px;
