@@ -7,9 +7,12 @@
 			     dynamic views capture their doctype at setup (useDoc/useDocList),
 			     so reusing the instance across routes would load stale data. -->
 			<router-view v-slot="{ Component }">
-				<component :is="Component" :key="$route.path" />
+				<transition name="route-fade" mode="out-in">
+					<component :is="Component" :key="$route.path" />
+				</transition>
 			</router-view>
 		</main>
+		<CommandPalette />
 	</div>
 </template>
 
@@ -17,6 +20,7 @@
 import { ref, onMounted } from "vue"
 import AppSidebar from "./AppSidebar.vue"
 import AppTopbar from "./AppTopbar.vue"
+import CommandPalette from "@/components/CommandPalette.vue"
 import { useAuth } from "@/composables/useAuth"
 
 const collapsed = ref(false)
@@ -47,5 +51,16 @@ onMounted(() => {
 	overflow-y: auto;
 	padding: 22px 28px 60px;
 	background: var(--mgk-bg);
+}
+
+/* Subtle cross-fade between routes so navigation feels smooth, not a hard cut.
+   Short + opacity-only so it never delays interaction. */
+.route-fade-enter-active,
+.route-fade-leave-active {
+	transition: opacity 0.15s ease;
+}
+.route-fade-enter-from,
+.route-fade-leave-to {
+	opacity: 0;
 }
 </style>
