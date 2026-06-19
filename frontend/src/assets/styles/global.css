@@ -140,6 +140,14 @@
 	background: var(--mgk-card);
 	border-color: var(--mgk-line);
 }
+/* Tabs: the tab strip (.p-tablist) and the tab content panel (.p-tabpanels)
+   default to {surface.900} = light in our dark ramp — that was the white band
+   under the list's status tabs and the white panel the detail cards floated on.
+   Make them transparent so they sit on the dark page (cards keep their own bg). */
+.dark .p-tablist,
+.dark .p-tabpanels {
+	background: transparent;
+}
 .dark .p-select-overlay,
 .dark .p-multiselect-overlay,
 .dark .p-autocomplete-overlay,
