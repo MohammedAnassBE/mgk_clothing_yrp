@@ -147,6 +147,18 @@
 	border-color: var(--mgk-line);
 }
 
+/* DataTable: pin the row dividers + table frame to the line token. Aura leaves
+   these at a default mid-grey (#808080) that reads as harsh white-ish gridlines
+   on the dark theme; cells already use --mgk-line via theme.js. Both schemes. */
+.p-datatable-table,
+.p-datatable-table > tbody > tr,
+.p-datatable-tbody > tr,
+.p-datatable-thead > tr,
+.p-datatable-tbody > tr > td,
+.p-datatable-thead > tr > th {
+	border-color: var(--mgk-line);
+}
+
 * {
 	box-sizing: border-box;
 }
