@@ -1566,9 +1566,11 @@ const hasAnyFilter = computed(
 }
 
 .date-tab {
-	font-size: 12px;
-	min-height: 32px;
-	padding: 6px 12px;
+	display: inline-flex;
+	align-items: center;
+	font-size: var(--fs-xs);
+	min-height: var(--ctrl-h);   /* 38px touch-target floor (was 32px) */
+	padding: 6px 14px;
 	border-radius: 999px;
 	color: var(--mgk-muted);
 	cursor: pointer;

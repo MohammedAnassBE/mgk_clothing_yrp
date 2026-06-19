@@ -18,7 +18,8 @@
 					v-for="q in visibleQueues"
 					:key="q.key"
 					class="queue-card"
-					@click="openQueue(q)"
+					:aria-label="countState(q) === 'error' ? `Retry loading ${q.label}` : q.label"
+					@click="countState(q) === 'error' ? retryQueue(q) : openQueue(q)"
 				>
 					<div class="q-icon" :class="`tone-${q.tone}`">
 						<i :class="q.icon" />
@@ -31,7 +32,7 @@
 							<i v-if="countState(q) === 'loading'" class="pi pi-spin pi-spinner q-spin" />
 							<template v-else-if="countState(q) === 'error'">
 								<span class="q-dash">—</span>
-								<span class="q-retry" @click.stop="retryQueue(q)">
+								<span class="q-retry">
 									<i class="pi pi-refresh" /> Retry
 								</span>
 							</template>
