@@ -82,19 +82,20 @@
    through the --mgk-accent-50 / --mgk-success-50 / … overrides below.
    ───────────────────────────────────────────────────────────────────────── */
 .dark {
-	/* Surfaces — deep cool slate */
-	--mgk-bg:        #0B1220;   /* page */
-	--mgk-card:      #0F1A2A;   /* panels / cards */
-	--mgk-slate-50:  #1B2636;   /* secondary surface (header bands, hover rows) */
+	/* Surfaces — soft dark slate, lifted OFF near-black to cut halation / eye
+	   strain (was #0B1220 near-black). Page < card < bands = gentle elevation. */
+	--mgk-bg:        #1A2230;   /* page */
+	--mgk-card:      #222C3A;   /* panels / cards (elevated above the page) */
+	--mgk-slate-50:  #2A3543;   /* secondary surface (header bands, hover rows) */
 
-	/* Text — light on dark */
-	--mgk-ink:       #F1F5F9;   /* primary value text */
-	--mgk-ink-2:     #CBD5E1;   /* secondary headings */
-	--mgk-muted:     #94A3B8;   /* labels / hints */
-	--mgk-muted-2:   #64748B;   /* disabled / subtle */
+	/* Text — soft off-white, NOT pure white (pure white on dark = halation). */
+	--mgk-ink:       #D8DFE9;   /* primary value text */
+	--mgk-ink-2:     #B0BBC9;   /* secondary headings */
+	--mgk-muted:     #8B98AA;   /* labels / hints */
+	--mgk-muted-2:   #6A7789;   /* disabled / subtle */
 
-	/* Lines */
-	--mgk-line:      #2A3647;
+	/* Lines — soft, low-contrast against the lifted surfaces */
+	--mgk-line:      #323D4C;
 
 	/* Accent — brighter teal for dark contrast */
 	--mgk-accent:    #2BB0A3;
