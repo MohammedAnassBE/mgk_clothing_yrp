@@ -134,6 +134,12 @@
 	background: var(--mgk-card);
 	color: var(--mgk-ink);
 }
+/* Checkbox: unchecked box bg also rides a light surface in dark — pin it dark
+   (the checked/teal state keeps its accent fill from the preset). */
+.dark .p-checkbox-box {
+	background: var(--mgk-card);
+	border-color: var(--mgk-line);
+}
 .dark .p-select-overlay,
 .dark .p-multiselect-overlay,
 .dark .p-autocomplete-overlay,
@@ -158,6 +164,21 @@
 .p-datatable-tbody > tr > td,
 .p-datatable-thead > tr > th {
 	border-color: var(--mgk-line);
+}
+
+/* Dark: Aura's dark DataTable ROW background is {surface.900}, which our
+   chrome-oriented dark ramp renders LIGHT (#EDF1F6) — so rows showed as pale
+   strips with dark text (the "white listview"). Make rows transparent over the
+   dark table surface + light text; light mode is unaffected (rows use surface.0). */
+.dark .p-datatable-tbody > tr {
+	background: transparent;
+	color: var(--mgk-ink);
+}
+.dark .p-datatable-tbody > tr > td {
+	color: var(--mgk-ink);
+}
+.dark .p-datatable-tbody > tr:hover {
+	background: var(--mgk-slate-50);
 }
 
 * {
