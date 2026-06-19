@@ -58,11 +58,8 @@
 			/>
 
 			<div class="head-actions">
-				<!-- ── VIEW mode, draft (docstatus 0) ── -->
+				<!-- ── VIEW mode ── -->
 				<template v-if="mode === 'view' && doc">
-					<!-- Workflow-managed doctypes (Process Cost / Item Price): the
-					     transition buttons REPLACE plain Submit/Cancel (which are
-					     suppressed via isSubmittable=false). Server-authoritative. -->
 					<WorkflowActions
 						v-if="isWorkflow"
 						ref="workflowRef"
@@ -70,11 +67,15 @@
 						:doctype="doctype"
 						@changed="reloadView"
 					/>
+
+					<!-- Draft (docstatus 0): Edit (secondary) + Submit (primary forward). -->
 					<Button
 						v-if="docstatus === 0 && canWrite(doctype)"
 						label="Edit"
 						icon="pi pi-pencil"
 						size="small"
+						severity="secondary"
+						outlined
 						@click="enterEdit"
 					/>
 					<Button
@@ -83,21 +84,70 @@
 						icon="pi pi-arrow-right"
 						iconPos="right"
 						size="small"
+						class="forward-cta"
 						:loading="acting === 'submit'"
 						@click="onSubmit"
 					/>
+					<!-- Work Order: Calculate Deliverables (draft only). -->
 					<Button
-						v-if="docstatus === 0 && canDelete(doctype)"
-						label="Delete"
-						icon="pi pi-trash"
+						v-if="isWorkOrder && docstatus === 0 && !isCreate"
+						label="Calculate Deliverables"
+						icon="pi pi-calculator"
 						size="small"
-						severity="danger"
+						severity="secondary"
 						outlined
-						:loading="acting === 'delete'"
-						@click="onDelete"
+						@click="onCalculateDeliverables"
 					/>
 
-					<!-- VIEW mode, submitted (docstatus 1) -->
+					<!-- Submitted (docstatus 1): ONE primary forward CTA; the remaining
+					     create-next actions collapse into a "More" overflow menu so the
+					     submitted header stops being a wall of equal buttons. forwardActions
+					     keeps the exact per-doctype gating (Convert Stock / Create
+					     DC·GRN·Debit / Create GRN from DC·PO / Create Inspection Entry). -->
+					<span
+						v-if="primaryForward"
+						v-tooltip.bottom="primaryForward.tooltip"
+						class="cta-wrap"
+					>
+						<Button
+							:label="primaryForward.label"
+							:icon="primaryForward.icon"
+							size="small"
+							class="forward-cta"
+							:disabled="primaryForward.disabled"
+							:loading="primaryForward.loadingKey && acting === primaryForward.loadingKey"
+							@click="primaryForward.handler"
+						/>
+					</span>
+
+					<!-- Cancelled (docstatus 2): Amend (primary forward). -->
+					<Button
+						v-if="docstatus === 2 && isSubmittable && canAmend(doctype)"
+						label="Amend"
+						icon="pi pi-clone"
+						size="small"
+						class="forward-cta"
+						:loading="acting === 'amend'"
+						@click="onAmend"
+					/>
+
+					<!-- Overflow: secondary create-next actions + Print + Open in Desk. -->
+					<Button
+						v-if="moreMenuModel.length"
+						type="button"
+						label="More"
+						icon="pi pi-ellipsis-h"
+						iconPos="right"
+						size="small"
+						severity="secondary"
+						outlined
+						aria-haspopup="true"
+						aria-controls="dd_more_menu"
+						@click="(e) => moreMenu.toggle(e)"
+					/>
+					<Menu ref="moreMenu" id="dd_more_menu" :model="moreMenuModel" :popup="true" />
+
+					<!-- Destructive, set apart from the forward CTA. -->
 					<Button
 						v-if="docstatus === 1 && isSubmittable && canCancel(doctype)"
 						label="Cancel"
@@ -108,130 +158,8 @@
 						:loading="acting === 'cancel'"
 						@click="onCancel"
 					/>
-					<!-- Inspection Entry: Convert Stock (approver-gated, post-submit) —
-					     mirrors the Desk button; writes the inspection's SLEs. -->
 					<Button
-						v-if="docstatus === 1 && isInspectionEntry && ieConvert && ieConvert.can_convert"
-						label="Convert Stock"
-						icon="pi pi-sync"
-						size="small"
-						class="forward-cta"
-						:loading="acting === 'convert'"
-						@click="onConvertStock"
-					/>
-
-					<!-- Work Order: Create Delivery Challan / Create GRN — mirrors
-					     production_api work_order.js (Make DC / Make GRN) gated on
-					     docstatus=1. Q10: when the WO isn't Open the buttons render
-					     DISABLED with a tooltip (not hidden) so state ≠ bug. Q11: filled
-					     teal forward CTA, set apart. Q18: full spelled-out labels. -->
-					<span
-						v-if="docstatus === 1 && isWorkOrder && canCreate('Delivery Challan')"
-						v-tooltip.bottom="doc.open_status !== 'Open' ? `This Work Order is ${doc.open_status} — reopen to create deliveries` : ''"
-						class="cta-wrap"
-					>
-						<Button
-							label="Create Delivery Challan"
-							icon="pi pi-send"
-							size="small"
-							class="forward-cta"
-							:disabled="doc.open_status !== 'Open'"
-							@click="onCreateDcFromWo"
-						/>
-					</span>
-					<span
-						v-if="docstatus === 1 && isWorkOrder && canCreate('Goods Received Note')"
-						v-tooltip.bottom="doc.open_status !== 'Open' ? `This Work Order is ${doc.open_status} — reopen to create deliveries` : ''"
-						class="cta-wrap"
-					>
-						<Button
-							label="Create Goods Received Note"
-							icon="pi pi-plus-circle"
-							size="small"
-							class="forward-cta"
-							:disabled="doc.open_status !== 'Open'"
-							@click="onCreateGrnFromWo"
-						/>
-					</span>
-					<!-- Work Order: Create Debit — same gating + styling as Create DC /
-					     Create GRN (submitted + Open). Seeds the Debit's work_order. -->
-					<span
-						v-if="docstatus === 1 && isWorkOrder && canCreate('Debit')"
-						v-tooltip.bottom="doc.open_status !== 'Open' ? `This Work Order is ${doc.open_status} — reopen to create deliveries` : ''"
-						class="cta-wrap"
-					>
-						<Button
-							label="Create Debit"
-							icon="pi pi-minus-circle"
-							size="small"
-							class="forward-cta"
-							:disabled="doc.open_status !== 'Open'"
-							@click="onCreateDebitFromWo"
-						/>
-					</span>
-					<!-- Work Order: Calculate Deliverables - multi-item WO; computes
-					     deliverables/receivables from the mgk_items rows. Action designed next. -->
-					<Button
-						v-if="isWorkOrder && docstatus === 0 && !isCreate"
-						label="Calculate Deliverables"
-						icon="pi pi-calculator"
-						size="small"
-						class="forward-cta"
-						@click="onCalculateDeliverables"
-					/>
-					<!-- Delivery Challan: Create GRN — Q9, closes the chain so a DC no
-					     longer dead-ends. Seeds the parent WO + this DC. -->
-					<Button
-						v-if="docstatus === 1 && isDeliveryChallan && canCreate('Goods Received Note')"
-						label="Create Goods Received Note"
-						icon="pi pi-plus-circle"
-						size="small"
-						class="forward-cta"
-						@click="onCreateGrnFromDc"
-					/>
-					<!-- Purchase Order: Create GRN — mirrors WO's Create GRN. Gated on
-					     submitted state; the GRN create page's autofill takes the rest. -->
-					<Button
-						v-if="docstatus === 1 && isPurchaseOrder && canCreate('Goods Received Note')"
-						label="Create Goods Received Note"
-						icon="pi pi-plus-circle"
-						size="small"
-						class="forward-cta"
-						@click="onCreateGrnFromPo"
-					/>
-					<!-- Goods Received Note: Create Inspection Entry — mirrors the Desk
-					     GRN→IE connection. A submitted, non-rework GRN is inspectable; the
-					     IE create page auto-loads the GRN's items. -->
-					<Button
-						v-if="docstatus === 1 && isGoodsReceivedNote && !doc.is_rework && canCreate('Inspection Entry')"
-						label="Create Inspection Entry"
-						icon="pi pi-verified"
-						size="small"
-						class="forward-cta"
-						@click="onCreateInspectionFromGrn"
-					/>
-
-					<!-- Print is available for every saved document; cancelled-only
-					     actions follow below. -->
-					<Button
-						v-if="!isCreate"
-						label="Print"
-						icon="pi pi-print"
-						size="small"
-						severity="secondary"
-						outlined
-						@click="openPrintDialog"
-					/>
-					<Button
-						v-if="docstatus === 2 && isSubmittable && canAmend(doctype)"
-						label="Amend"
-						icon="pi pi-clone"
-						size="small"
-						:loading="acting === 'amend'"
-						@click="onAmend"
-					/>
-					<Button
-						v-if="docstatus === 2 && canDelete(doctype)"
+						v-if="(docstatus === 0 || docstatus === 2) && canDelete(doctype)"
 						label="Delete"
 						icon="pi pi-trash"
 						size="small"
@@ -258,6 +186,7 @@
 						label="Save"
 						icon="pi pi-check"
 						size="small"
+						class="forward-cta"
 						:loading="saving"
 						@click="onSave"
 					/>
@@ -279,20 +208,11 @@
 						label="Save"
 						icon="pi pi-check"
 						size="small"
+						class="forward-cta"
 						:loading="saving"
 						@click="onSave"
 					/>
 				</template>
-
-				<a
-					v-if="!isCreate && (isAdmin || hasRole('System Manager'))"
-					class="desk-link"
-					:href="deskUrl"
-					target="_blank"
-					rel="noopener"
-				>
-					<i class="pi pi-external-link" /> Open in Desk
-				</a>
 			</div>
 		</div>
 
@@ -1394,6 +1314,7 @@ import Tooltip from "primevue/tooltip"
 import Dialog from "primevue/dialog"
 import Popover from "primevue/popover"
 import Checkbox from "primevue/checkbox"
+import Menu from "primevue/menu"
 import { useDoc } from "@/composables/useDoc"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
@@ -1515,6 +1436,53 @@ const newName = ref("")
 // Inspection Entry "Convert Stock" gate — { can_convert, reason, siblings } from
 // the server (can_convert_stock), or null when not applicable / not allowed.
 const ieConvert = ref(null)
+
+// ── Header action hierarchy ──────────────────────────────────────────────
+// Submitted-state "create next" actions, ordered. The FIRST renders as the one
+// prominent primary CTA; the rest collapse into the "More" overflow menu so the
+// submitted header stops being a wall of equal teal buttons. Gating mirrors the
+// previous per-button v-if conditions exactly.
+const forwardActions = computed(() => {
+	const d = doc.value
+	if (!d || mode.value !== "view" || docstatus.value !== 1) return []
+	const woGated = d.open_status !== "Open"
+	const woTip = woGated
+		? `This Work Order is ${d.open_status} — reopen to create deliveries`
+		: ""
+	const out = []
+	if (isInspectionEntry.value && ieConvert.value && ieConvert.value.can_convert)
+		out.push({ key: "convert", label: "Convert Stock", icon: "pi pi-sync", handler: onConvertStock, loadingKey: "convert", disabled: false, tooltip: "" })
+	if (isWorkOrder.value && canCreate("Delivery Challan"))
+		out.push({ key: "wo-dc", label: "Create Delivery Challan", icon: "pi pi-send", handler: onCreateDcFromWo, disabled: woGated, tooltip: woTip })
+	if (isWorkOrder.value && canCreate("Goods Received Note"))
+		out.push({ key: "wo-grn", label: "Create Goods Received Note", icon: "pi pi-plus-circle", handler: onCreateGrnFromWo, disabled: woGated, tooltip: woTip })
+	if (isWorkOrder.value && canCreate("Debit"))
+		out.push({ key: "wo-debit", label: "Create Debit", icon: "pi pi-minus-circle", handler: onCreateDebitFromWo, disabled: woGated, tooltip: woTip })
+	if (isDeliveryChallan.value && canCreate("Goods Received Note"))
+		out.push({ key: "dc-grn", label: "Create Goods Received Note", icon: "pi pi-plus-circle", handler: onCreateGrnFromDc, disabled: false, tooltip: "" })
+	if (isPurchaseOrder.value && canCreate("Goods Received Note"))
+		out.push({ key: "po-grn", label: "Create Goods Received Note", icon: "pi pi-plus-circle", handler: onCreateGrnFromPo, disabled: false, tooltip: "" })
+	if (isGoodsReceivedNote.value && !d.is_rework && canCreate("Inspection Entry"))
+		out.push({ key: "grn-ie", label: "Create Inspection Entry", icon: "pi pi-verified", handler: onCreateInspectionFromGrn, disabled: false, tooltip: "" })
+	return out
+})
+const primaryForward = computed(() => forwardActions.value[0] || null)
+const secondaryForwards = computed(() => forwardActions.value.slice(1))
+const moreMenu = ref(null)
+// Overflow menu: secondary forward actions + Print + (admin) Open in Desk.
+const moreMenuModel = computed(() => {
+	if (mode.value !== "view" || !doc.value || isCreate.value) return []
+	const items = secondaryForwards.value.map((a) => ({
+		label: a.disabled && a.tooltip ? `${a.label} — reopen WO first` : a.label,
+		icon: a.icon,
+		disabled: a.disabled,
+		command: () => a.handler(),
+	}))
+	items.push({ label: "Print", icon: "pi pi-print", command: () => openPrintDialog() })
+	if (isAdmin.value || hasRole("System Manager"))
+		items.push({ label: "Open in Desk", icon: "pi pi-external-link", url: deskUrl.value, target: "_blank" })
+	return items
+})
 
 const activeTab = ref("details")
 const approvalRef = ref(null)
@@ -4870,7 +4838,9 @@ function stripHtml(s) {
 	display: inline-flex;
 }
 .forward-cta {
-	margin-left: 6px;
+	/* The one filled-teal primary among outlined neighbours — a subtle lift so
+	   the next step reads as the clear call to action. */
+	box-shadow: 0 1px 2px var(--mgk-shadow);
 }
 
 /* Q1: a Link value = human name (normal weight) + muted mono code beside it. */
