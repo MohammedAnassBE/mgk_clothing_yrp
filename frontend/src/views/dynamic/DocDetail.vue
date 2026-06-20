@@ -956,6 +956,7 @@
 						<Tab v-if="isItem && doc.dependent_attribute" value="dependent-attribute">
 							Dependent Attribute
 						</Tab>
+						<Tab v-if="hasAddressContact" value="address-contact">Address & Contact</Tab>
 						<Tab value="linked">
 							Linked Documents
 							<span v-if="linkedTotal" class="tab-badge">{{ linkedTotal }}</span>
@@ -1132,6 +1133,11 @@
 								:item-name="doc.name"
 								:editable="canWrite(doctype)"
 							/>
+						</TabPanel>
+
+						<!-- ADDRESS & CONTACT (party doctypes) -->
+						<TabPanel v-if="hasAddressContact" value="address-contact">
+							<AddressContactTab :party-doctype="doctype" :party-name="doc?.name" />
 						</TabPanel>
 
 						<!-- LINKED DOCUMENTS -->
@@ -1352,6 +1358,7 @@ import processCostConfig from "@/config/fields/process-cost.js"
 // Q10: tooltip directive for gated (disabled-with-reason) action buttons.
 const vTooltip = Tooltip
 import WorkOrderApproval from "./WorkOrderApproval.vue"
+import AddressContactTab from "./AddressContactTab.vue"
 import CalculateDeliverablesModal from "./CalculateDeliverablesModal.vue"
 import StockItemGridEditor from "./StockItemGridEditor.vue"
 import ItemDependentAttributeEditor from "./ItemDependentAttributeEditor.vue"
@@ -1388,6 +1395,7 @@ const dirtyArmed = ref(false)
 
 const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
+const hasAddressContact = computed(() => registry.value?.hasAddressContact || false)
 const isWorkOrder = computed(() => doctype.value === "Work Order")
 const isPurchaseOrder = computed(() => doctype.value === "Purchase Order")
 const isDeliveryChallan = computed(() => doctype.value === "Delivery Challan")

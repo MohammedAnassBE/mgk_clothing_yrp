@@ -151,8 +151,9 @@ const GROUPS = [
 		group: "Parties",
 		roles: "*",
 		items: [
-			{ doctype: "Supplier", icon: "pi pi-building" },
-			{ doctype: "MGK Agent", icon: "pi pi-user" },
+			{ doctype: "Supplier", icon: "pi pi-building", hasAddressContact: true },
+			{ doctype: "Customer", icon: "pi pi-user", hasAddressContact: true },
+			{ doctype: "MGK Agent", icon: "pi pi-user", hasAddressContact: true },
 			{ doctype: "Vendor Bill Delivery Person", icon: "pi pi-id-card" },
 			{ doctype: "Department", icon: "pi pi-th-large" },
 		],
@@ -197,6 +198,7 @@ for (const g of GROUPS) {
 			tabMode: it.tabMode || null,
 			dateTabs: it.dateTabs || null,
 			listFields: it.listFields || null,
+			hasAddressContact: it.hasAddressContact || false,
 			note: it.note || null,
 		})
 	}

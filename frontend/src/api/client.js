@@ -393,6 +393,53 @@ export async function searchAddressForParty(partyDoctype, partyName, txt) {
   return rows.map((row) => ({ name: Array.isArray(row) ? row[0] : row.name }))
 }
 
+/**
+ * List the Addresses linked to a party (Supplier/Customer/MGK Agent/…).
+ * The party relation is the Dynamic Link child table on Address (`links`), so we
+ * query Address with a child-table filter. NOTE: Frappe's `get_address_display_list`
+ * is NOT @frappe.whitelist()'d (server-side only) — calling it over REST 403s — so
+ * this is the correct frontend path. Dedupe by name in case the child join repeats a parent.
+ */
+export async function getAddressList(partyDoctype, partyName) {
+  if (!partyDoctype || !partyName) return []
+  const res = await getList('Address', {
+    fields: [
+      'name', 'address_title', 'address_type', 'address_line1', 'address_line2',
+      'city', 'county', 'state', 'country', 'pincode', 'email_id', 'phone',
+      'is_primary_address', 'is_shipping_address', 'disabled',
+    ],
+    filters: [
+      ['Dynamic Link', 'link_doctype', '=', partyDoctype],
+      ['Dynamic Link', 'link_name', '=', partyName],
+    ],
+    limit_page_length: 0,
+  })
+  const seen = new Set()
+  return (res?.data || []).filter((r) => (seen.has(r.name) ? false : seen.add(r.name)))
+}
+
+/**
+ * List the Contacts linked to a party — same Dynamic Link child-table query.
+ * Contact's top-level email_id/phone/mobile_no are synced from the primary rows
+ * of its email_ids/phone_nos child tables, so they read directly.
+ */
+export async function getContactList(partyDoctype, partyName) {
+  if (!partyDoctype || !partyName) return []
+  const res = await getList('Contact', {
+    fields: [
+      'name', 'first_name', 'last_name', 'full_name', 'designation',
+      'email_id', 'phone', 'mobile_no', 'is_primary_contact',
+    ],
+    filters: [
+      ['Dynamic Link', 'link_doctype', '=', partyDoctype],
+      ['Dynamic Link', 'link_name', '=', partyName],
+    ],
+    limit_page_length: 0,
+  })
+  const seen = new Set()
+  return (res?.data || []).filter((r) => (seen.has(r.name) ? false : seen.add(r.name)))
+}
+
 // ---------------------------------------------------------------------------
 // Workflow helpers for submittable DocTypes
 // ---------------------------------------------------------------------------
