@@ -1,6 +1,16 @@
 <template>
 	<header class="mgk-topbar">
-		<span class="topbar-title">{{ pageTitle }}</span>
+		<div class="topbar-left">
+			<button
+				class="topbar-hamburger"
+				type="button"
+				aria-label="Open navigation menu"
+				@click="$emit('toggle-drawer')"
+			>
+				<i class="pi pi-bars" />
+			</button>
+			<span class="topbar-title">{{ pageTitle }}</span>
+		</div>
 
 		<div class="topbar-right">
 			<!-- Global search / command palette trigger (also ⌘K / Ctrl+K). -->
@@ -54,6 +64,8 @@ import { useAuth } from "@/composables/useAuth"
 import { useTheme } from "@/composables/useTheme"
 import { useCommandPalette } from "@/composables/useCommandPalette"
 import { getRegistryByRoute } from "@/config/doctypes"
+
+defineEmits(["toggle-drawer"])
 
 const route = useRoute()
 const { fullName, logout } = useAuth()
@@ -119,6 +131,34 @@ async function onLogout() {
 	align-items: center;
 	justify-content: space-between;
 	padding: 0 20px;
+}
+
+.topbar-left {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+/* Mobile-only menu button (opens the drawer). */
+.topbar-hamburger {
+	display: none;
+	background: transparent;
+	border: 0;
+	color: var(--mgk-ink-2);
+	font-size: 18px;
+	padding: 6px 8px;
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+}
+.topbar-hamburger:hover {
+	background: var(--mgk-slate-50);
+}
+@media (max-width: 768px) {
+	.topbar-hamburger {
+		display: inline-flex;
+		align-items: center;
+	}
 }
 
 .topbar-title {

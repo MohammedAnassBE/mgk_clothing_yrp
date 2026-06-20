@@ -1,25 +1,28 @@
 <template>
-	<aside class="mgk-sidebar" :class="{ collapsed }">
-		<div class="sidebar-logo" @click="$router.push('/home')">
+	<aside class="mgk-sidebar" :class="{ pinned, 'drawer-open': drawerOpen }">
+		<div class="sidebar-logo" @click="goHome">
 			<div class="logo-mark">MGK</div>
-			<span v-if="!collapsed" class="logo-text">MGK Clothing</span>
+			<span class="logo-text">MGK Clothing</span>
 		</div>
 
 		<nav class="sidebar-nav">
 			<!-- Home (no group label) -->
-			<router-link to="/home" class="nav-item" active-class="active">
+			<router-link to="/home" class="nav-item" active-class="active" @click="$emit('navigate')">
 				<i class="pi pi-th-large nav-icon" />
-				<span v-if="!collapsed">Home</span>
+				<span class="nav-label">Home</span>
 			</router-link>
 
 			<!-- Perm-gated DocType groups -->
-			<div v-for="grp in sidebarGroups" :key="grp.group" class="nav-group">
-				<!-- Section header: a toggle button when the sidebar is expanded so the
-				     user can collapse/expand this section; collapse state is per-user
-				     and persisted server-side via useSidebarCollapse. Independent of the
-				     whole-sidebar `collapsed` prop (the label is hidden in that mode). -->
+			<div
+				v-for="grp in sidebarGroups"
+				:key="grp.group"
+				class="nav-group"
+				:class="{ 'section-collapsed': isCollapsed(grp.group) }"
+			>
+				<!-- Section header: a toggle button (shown only when the rail is
+				     expanded). Collapse state is per-user, persisted server-side via
+				     useSidebarCollapse — independent of the rail's expand state. -->
 				<button
-					v-if="!collapsed"
 					type="button"
 					class="nav-group-label"
 					:aria-expanded="!isCollapsed(grp.group)"
@@ -33,26 +36,33 @@
 				</button>
 				<router-link
 					v-for="item in grp.items"
-					v-show="collapsed || !isCollapsed(grp.group)"
 					:key="item.route"
 					:to="`/${item.route}`"
 					class="nav-item"
 					active-class="active"
 					:title="item.label"
+					@click="$emit('navigate')"
 				>
 					<i :class="[item.icon, 'nav-icon']" />
-					<span v-if="!collapsed">{{ item.label }}</span>
+					<span class="nav-label">{{ item.label }}</span>
 				</router-link>
 			</div>
 		</nav>
 
 		<div class="sidebar-foot">
-			<button class="collapse-btn" :title="collapsed ? 'Expand' : 'Collapse'" @click="$emit('toggle')">
-				<i :class="collapsed ? 'pi pi-angle-right' : 'pi pi-angle-left'" />
+			<!-- Pin keeps the rail expanded (pushes content); persisted in AppLayout. -->
+			<button
+				class="pin-btn"
+				type="button"
+				:title="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
+				:aria-pressed="pinned"
+				@click="$emit('toggle-pin')"
+			>
+				<i :class="pinned ? 'pi pi-angle-left' : 'pi pi-angle-right'" />
 			</button>
-			<span class="spacer" />
-			<a v-if="!collapsed" class="desk-link" href="/app" title="Open Frappe Desk">
-				<i class="pi pi-external-link" /> Desk
+			<a class="desk-link" href="/app" title="Open Frappe Desk">
+				<i class="pi pi-external-link" />
+				<span class="nav-label">Desk</span>
 			</a>
 		</div>
 	</aside>
@@ -60,33 +70,58 @@
 
 <script setup>
 import { computed } from "vue"
+import { useRouter } from "vue-router"
 import { usePermissions } from "@/composables/usePermissions"
 import { getSidebarGroups } from "@/config/doctypes"
 import { useSidebarCollapse } from "@/composables/useSidebarCollapse"
 
-defineProps({ collapsed: Boolean })
-defineEmits(["toggle"])
+defineProps({ pinned: Boolean, drawerOpen: Boolean })
+const emit = defineEmits(["toggle-pin", "navigate"])
 
+const router = useRouter()
 const { canRead } = usePermissions()
 
 // Live-perm gate: only show items the user can read. Admin sees everything;
 // DocTypes not installed (e.g. Workstation) resolve canRead → false and drop.
 const sidebarGroups = computed(() => getSidebarGroups((dt) => canRead(dt)))
 
-// Per-user, server-persisted collapse state for each sidebar SECTION. Loaded
-// once; toggling a section flips it and saves (debounced). This is independent
-// of the whole-sidebar `collapsed` prop (icon-only mode).
+// Per-user, server-persisted collapse state for each sidebar SECTION.
 const { isCollapsed, toggleSection } = useSidebarCollapse()
+
+function goHome() {
+	emit("navigate")
+	router.push("/home")
+}
 </script>
 
 <style scoped>
+/* Slim rail by default; expands to a flyout on hover, or stays open when pinned.
+   Positioned absolutely over the grid's reserved rail column (see AppLayout) so
+   the flyout overlays content instead of reflowing it. */
 .mgk-sidebar {
-	grid-area: sidebar;
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: var(--sidebar-collapsed-width);
 	background: var(--mgk-card);
 	border-right: 1px solid var(--mgk-line);
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+	z-index: 20;
+	overflow: hidden;
+	transition: width 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mgk-sidebar:hover,
+.mgk-sidebar.pinned {
+	width: var(--sidebar-width);
+}
+
+/* Unpinned hover = flyout overlaying content → lift it with a shadow. */
+.mgk-sidebar:not(.pinned):hover {
+	box-shadow: var(--mgk-shadow-pop);
 }
 
 .sidebar-logo {
@@ -97,13 +132,14 @@ const { isCollapsed, toggleSection } = useSidebarCollapse()
 	padding: 0 16px;
 	border-bottom: 1px solid var(--mgk-line);
 	cursor: pointer;
+	flex-shrink: 0;
 }
 
 .logo-mark {
 	width: 28px;
 	height: 28px;
 	border-radius: 7px;
-	background: linear-gradient(135deg, var(--mgk-accent), var(--mgk-accent-700));
+	background: linear-gradient(135deg, var(--mgk-accent), var(--mgk-accent2));
 	color: #fff;
 	font-weight: 700;
 	font-size: 11px;
@@ -115,21 +151,22 @@ const { isCollapsed, toggleSection } = useSidebarCollapse()
 .logo-text {
 	font-weight: 600;
 	letter-spacing: -0.01em;
-	white-space: nowrap;
 }
 
 .sidebar-nav {
 	flex: 1;
 	overflow-y: auto;
-	padding: 12px 8px 24px;
+	overflow-x: hidden;
+	padding: 10px 8px 24px;
 }
 
 .nav-group {
-	padding: 4px 0 6px;
+	padding: 2px 0 4px;
 }
 
 .nav-group-label {
-	display: flex;
+	/* hidden in the slim rail; revealed (display:flex) when expanded */
+	display: none;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
@@ -140,7 +177,6 @@ const { isCollapsed, toggleSection } = useSidebarCollapse()
 	text-transform: uppercase;
 	color: var(--mgk-muted-2);
 	padding: 8px 12px 6px;
-	/* reset native button chrome — this is a styled section header toggle */
 	background: transparent;
 	border: 0;
 	text-align: left;
@@ -164,7 +200,6 @@ const { isCollapsed, toggleSection } = useSidebarCollapse()
 	transition: transform 0.15s ease;
 }
 
-/* Collapsed section → chevron points right (rotated from its default down). */
 .nav-group-chevron.is-collapsed {
 	transform: rotate(-90deg);
 }
@@ -172,8 +207,8 @@ const { isCollapsed, toggleSection } = useSidebarCollapse()
 .nav-item {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	padding: 7px 12px 7px 14px;
+	gap: 11px;
+	padding: 8px 12px;
 	border-radius: var(--radius-sm);
 	color: var(--mgk-ink-2);
 	font-size: 13.5px;
@@ -194,65 +229,105 @@ const { isCollapsed, toggleSection } = useSidebarCollapse()
 }
 
 .nav-icon {
-	width: 16px;
-	font-size: 14px;
+	width: 18px;
+	font-size: 15px;
 	flex-shrink: 0;
 	color: var(--mgk-muted);
+	text-align: center;
 }
 
 .nav-item.active .nav-icon {
 	color: var(--mgk-accent);
 }
 
-.collapsed .nav-group-label,
-.collapsed .nav-item span,
-.collapsed .logo-text {
-	display: none;
+/* Labels: faded out in the slim rail, faded in when expanded (hover/pinned). */
+.nav-label,
+.logo-text {
+	opacity: 0;
+	transition: opacity 0.12s ease;
+	white-space: nowrap;
 }
 
-.collapsed .nav-item {
-	justify-content: center;
-	padding: 9px 0;
+.mgk-sidebar:hover .nav-label,
+.mgk-sidebar:hover .logo-text,
+.mgk-sidebar.pinned .nav-label,
+.mgk-sidebar.pinned .logo-text {
+	opacity: 1;
+}
+
+.mgk-sidebar:hover .nav-group-label,
+.mgk-sidebar.pinned .nav-group-label {
+	display: flex;
+}
+
+/* Collapsed section → hide its items, but only when the rail is expanded
+   (in the slim rail every item shows as a bare icon). */
+.mgk-sidebar:hover .nav-group.section-collapsed .nav-item,
+.mgk-sidebar.pinned .nav-group.section-collapsed .nav-item {
+	display: none;
 }
 
 .sidebar-foot {
 	border-top: 1px solid var(--mgk-line);
-	padding: 10px 12px;
+	padding: 8px;
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 6px;
+	flex-shrink: 0;
 }
 
-.collapse-btn {
+.pin-btn {
 	background: transparent;
 	border: 0;
 	color: var(--mgk-muted);
-	padding: 4px 8px;
+	padding: 6px 9px;
 	border-radius: var(--radius-sm);
 	cursor: pointer;
+	flex-shrink: 0;
 }
 
-.collapse-btn:hover {
+.pin-btn:hover {
 	background: var(--mgk-slate-50);
 	color: var(--mgk-ink);
 }
 
-.spacer {
-	flex: 1;
-}
-
 .desk-link {
-	display: inline-flex;
+	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	color: var(--mgk-muted);
 	font-size: 12.5px;
-	padding: 4px 8px;
+	padding: 6px 9px;
 	border-radius: var(--radius-sm);
 }
 
 .desk-link:hover {
 	background: var(--mgk-slate-50);
 	color: var(--mgk-ink);
+}
+
+/* ── Mobile: off-canvas drawer (no hover-expand) ── */
+@media (max-width: 768px) {
+	.mgk-sidebar {
+		width: var(--sidebar-width);
+		transform: translateX(-100%);
+		transition: transform 0.2s ease;
+		box-shadow: var(--mgk-shadow-pop);
+		z-index: 30;
+	}
+	.mgk-sidebar.drawer-open {
+		transform: translateX(0);
+	}
+	/* Drawer is full-width → always show labels + group headers. */
+	.mgk-sidebar .nav-label,
+	.mgk-sidebar .logo-text {
+		opacity: 1;
+	}
+	.mgk-sidebar .nav-group-label {
+		display: flex;
+	}
+	.mgk-sidebar.drawer-open .nav-group.section-collapsed .nav-item {
+		display: none;
+	}
 }
 </style>
