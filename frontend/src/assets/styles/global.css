@@ -284,9 +284,9 @@ a {
 	color: var(--mgk-accent-700);
 }
 
-/* ── Bright Workshop card system (canonical). NOTE: .mgk-card now uses the airy
-   --mgk-shadow-card; DocDetail .detail-card + HomePage cards still use
-   --mgk-shadow-sm — they adopt --mgk-shadow-card in the component phases (backlog). ── */
+/* ── Bright Workshop card system (canonical). .mgk-card, DocDetail
+   .detail-card/.side-card, and the HomePage stat/recent cards all use the airy
+   --mgk-shadow-card (the Phase-1-review card-shadow divergence is resolved). ── */
 .mgk-card {
 	background: var(--mgk-card);
 	border: 1px solid var(--mgk-line);
@@ -400,4 +400,10 @@ a {
 @keyframes mgk-shimmer {
 	from { background-position: 200% 0; }
 	to { background-position: -200% 0; }
+}
+
+/* Respect reduced-motion: hold the skeleton shimmer still. */
+@media (prefers-reduced-motion: reduce) {
+	.mgk-skel-line,
+	.recent-skel { animation: none; }
 }
