@@ -8,6 +8,7 @@ import App from "./App.vue"
 import MgkPreset from "./theme"
 import { initTheme } from "./composables/useTheme"
 
+import "@fontsource-variable/inter"
 import "primeicons/primeicons.css"
 import "./assets/styles/global.css"
 

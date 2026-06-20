@@ -3,8 +3,16 @@
    holds the page reset, shell layout variables, and a few app-level helpers. */
 
 :root {
+	/* ── Base tokens (partners_api system): 4 colours → opacity-derived neutrals.
+	   New components use rgb(var(--c-*)/<alpha>); the --mgk-* layer below aliases
+	   onto these, so every existing screen is unchanged. ── */
+	--c-primary: 13 148 136;   /* #0D9488 teal — actions / CTAs / active nav / links */
+	--c-accent:  37 99 235;    /* #2563EB royal blue — secondary accent + input focus */
+	--c-ink:     27 34 51;     /* #1B2233 — text / borders via opacity */
+	--c-surface: 247 248 251;  /* #F7F8FB — page ground */
+
 	/* ── Surfaces ── */
-	--mgk-bg:        #F6F8FA;   /* cool near-white page (was warm cream #F4F1EB) */
+	--mgk-bg:        #F7F8FB;   /* cool near-white page (= --c-surface) */
 	--mgk-card:      #FFFFFF;   /* white panels/cards */
 	--mgk-slate-50:  #EEF2F7;   /* secondary surface (table headers, hover rows) */
 
@@ -24,17 +32,21 @@
 	--mgk-accent-700:#0F766E;   /* dark teal — link text, hover (AA ~4.6:1 on white) */
 	--mgk-accent-ink:var(--mgk-accent-700);  /* teal title/icon ON the light (accent-50) header band */
 
+	/* ── Secondary accent: royal blue (input focus + accent CTAs/highlights) ── */
+	--mgk-accent2:     #2563EB;                 /* = rgb(var(--c-accent)) */
+	--mgk-accent2-50:  rgba(37, 99, 235, 0.12);
+
 	/* ── Elevation (cool, not warm) ── */
-	--mgk-shadow:    rgba(15, 23, 42, 0.06);
-	--mgk-shadow-md: rgba(15, 23, 42, 0.10);
+	--mgk-shadow:    rgba(27, 34, 51, 0.06);   /* ink-based, softer */
+	--mgk-shadow-md: rgba(27, 34, 51, 0.10);
 
 	/* ── Sizing ── */
 	--sidebar-width: 232px;
 	--sidebar-collapsed-width: 60px;
 	--topbar-height: 56px;
-	--radius-sm: 6px;    /* was 5px */
-	--radius: 10px;      /* was 8px */
-	--radius-lg: 14px;   /* was 12px */
+	--radius-sm: 9px;    /* controls (buttons/inputs) — partners_api */
+	--radius: 12px;      /* cards / dialogs */
+	--radius-lg: 14px;
 
 	/* ── Spacing scale (replaces 14 ad-hoc gap values) ── */
 	--space-1: 4px;
@@ -45,8 +57,9 @@
 	--space-6: 24px;
 
 	/* ── Shadow scale (replaces inline shadow + the unused -md token) ── */
-	--mgk-shadow-sm: 0 1px 2px var(--mgk-shadow), 0 1px 1px rgba(15, 23, 42, 0.04);
-	--mgk-shadow-pop: 0 4px 12px var(--mgk-shadow-md);   /* dropdowns/dialogs — USES --mgk-shadow-md, resolving the "unused" minor */
+	--mgk-shadow-sm: 0 1px 2px rgba(27,34,51,.05), 0 1px 1px rgba(27,34,51,.04);
+	--mgk-shadow-card: 0 1px 2px rgba(27,34,51,.05), 0 10px 28px rgba(27,34,51,.06);  /* airy card lift (partners_api) */
+	--mgk-shadow-pop: 0 10px 30px rgba(27,34,51,.16);   /* dropdowns / dialogs / toasts */
 
 	/* ── Status colors (single source for all badges/pills) ── */
 	--mgk-success:    #047857;   /* AA on white 4.6:1 */
@@ -103,6 +116,12 @@
 	--mgk-accent-600:#2BB0A3;
 	--mgk-accent-700:#5EC9BE;   /* link / hover — light teal on dark */
 	--mgk-accent-ink:#5EC9BE;   /* title / icon on the dark teal-wash band */
+
+	/* Base-token + royal-blue accent overrides for dark */
+	--c-ink:     216 223 233;   /* #D8DFE9 */
+	--c-surface: 26 34 48;      /* #1A2230 */
+	--mgk-accent2:    #60A5FA;   /* lighter royal blue reads on dark */
+	--mgk-accent2-50: rgba(96, 165, 250, 0.16);
 
 	/* Elevation — deeper shadows on dark */
 	--mgk-shadow:    rgba(0, 0, 0, 0.40);
@@ -212,6 +231,22 @@
 	background: var(--mgk-slate-50);
 }
 
+/* ── Input focus: royal-blue (secondary accent), uniform across PrimeVue inputs.
+   `.p-inputtext:focus` also covers autocomplete / datepicker / number inner
+   inputs (they all carry .p-inputtext). Unlayered → wins over @layer primevue
+   without !important; --mgk-accent2 flips per scheme. ── */
+.p-inputtext:enabled:focus,
+.p-inputtext:focus,
+.p-textarea:enabled:focus,
+.p-autocomplete-input:enabled:focus,
+.p-datepicker-input:enabled:focus,
+.p-inputnumber-input:enabled:focus,
+.p-select.p-focus,
+.p-multiselect.p-focus {
+	border-color: var(--mgk-accent2) !important;
+	box-shadow: 0 0 0 3px var(--mgk-accent2-50) !important;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -223,8 +258,8 @@ body {
 }
 
 body {
-	font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-		"Helvetica Neue", Arial, sans-serif;
+	font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
+		"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 	font-size: 14px;
 	line-height: 1.5;
 	color: var(--mgk-ink);
@@ -254,7 +289,7 @@ a {
 	background: var(--mgk-card);
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius);
-	box-shadow: var(--mgk-shadow-sm);
+	box-shadow: var(--mgk-shadow-card);
 	overflow: hidden;
 }
 .mgk-card__head {
