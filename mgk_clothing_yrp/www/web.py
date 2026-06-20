@@ -23,6 +23,14 @@ import frappe.sessions  # noqa: F401  (ensures get_csrf_token is importable)
 
 no_cache = 1
 
+ASSET_BASE = "/assets/mgk_clothing_yrp/frontend/"
+
+
+def _website_asset(field, fallback):
+	"""Logo / favicon are sourced from Website Settings so an admin controls them
+	without a rebuild; fall back to the bundled MGK asset when the field is empty."""
+	return frappe.db.get_single_value("Website Settings", field) or (ASSET_BASE + fallback)
+
 
 def get_context(context):
 	if frappe.session.user == "Guest":
@@ -34,6 +42,7 @@ def get_context(context):
 
 	context.csrf_token = csrf_token
 	context.boot = get_boot()
+	context.favicon = _website_asset("favicon", "favicon.png")
 	context.no_cache = 1
 	context.no_header = 1
 	context.no_sidebar = 1
@@ -77,5 +86,6 @@ def _resolve_frontend_assets():
 def get_boot():
 	return {
 		"site_name": frappe.local.site,
+		"app_logo": _website_asset("app_logo", "mgk-logo.png"),
 		"user": json.loads(frappe.as_json(frappe.get_user().load_user())),
 	}

@@ -14,7 +14,7 @@ app_license = "mit"
 add_to_apps_screen = [
 	{
 		"name": "mgk_clothing_yrp",
-		"logo": "/assets/mgk_clothing_yrp/frontend/favicon.svg",
+		"logo": "/assets/mgk_clothing_yrp/frontend/favicon.png",
 		"title": "MGK Clothing",
 		"route": "/web",
 	}

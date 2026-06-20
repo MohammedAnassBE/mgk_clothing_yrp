@@ -1,7 +1,9 @@
 <template>
 	<aside class="mgk-sidebar" :class="{ pinned, 'drawer-open': drawerOpen }">
 		<div class="sidebar-logo" @click="goHome">
-			<div class="logo-mark">MGK</div>
+			<div class="logo-mark">
+				<img :src="logoUrl" alt="MGK Clothing" class="logo-img" />
+			</div>
 			<span class="logo-text">MGK Clothing</span>
 		</div>
 
@@ -81,6 +83,10 @@ const emit = defineEmits(["toggle-pin", "navigate"])
 const router = useRouter()
 const { canRead } = usePermissions()
 
+// Logo comes from Website Settings via frappe.boot (admin-controlled); falls back
+// to the bundled MGK logo when the field is unset.
+const logoUrl = window.frappe?.boot?.app_logo || "/assets/mgk_clothing_yrp/frontend/mgk-logo.png"
+
 // Live-perm gate: only show items the user can read. Admin sees everything;
 // DocTypes not installed (e.g. Workstation) resolve canRead → false and drop.
 const sidebarGroups = computed(() => getSidebarGroups((dt) => canRead(dt)))
@@ -136,16 +142,20 @@ function goHome() {
 }
 
 .logo-mark {
-	width: 28px;
-	height: 28px;
+	width: 30px;
+	height: 30px;
 	border-radius: 7px;
-	background: linear-gradient(135deg, var(--mgk-accent), var(--mgk-accent2));
-	color: #fff;
-	font-weight: 700;
-	font-size: 11px;
+	background: #fff;
+	border: 1px solid var(--mgk-line);
 	display: grid;
 	place-items: center;
 	flex-shrink: 0;
+	overflow: hidden;
+}
+.logo-img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
 }
 
 .logo-text {
