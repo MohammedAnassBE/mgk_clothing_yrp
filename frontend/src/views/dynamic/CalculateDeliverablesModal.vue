@@ -207,6 +207,7 @@ async function submit() {
 		const res = await callMethod(`${API}.calculate_deliverables`, {
 			work_order: props.workOrder,
 			rows: JSON.stringify(out),
+			modified: props.modified,
 		})
 		emit("calculated", res || {})
 		emit("update:visible", false)

@@ -117,7 +117,7 @@ export function useDoc(doctype) {
     saving.value = true
     error.value = null
     try {
-      const result = await submitDoc(doctype, name || doc.value?.name)
+      const result = await submitDoc(doctype, name || doc.value?.name, doc.value?.modified)
       doc.value = result
       return result
     } catch (e) {
@@ -132,7 +132,7 @@ export function useDoc(doctype) {
     saving.value = true
     error.value = null
     try {
-      const result = await cancelDoc(doctype, name || doc.value?.name)
+      const result = await cancelDoc(doctype, name || doc.value?.name, doc.value?.modified)
       doc.value = result
       return result
     } catch (e) {

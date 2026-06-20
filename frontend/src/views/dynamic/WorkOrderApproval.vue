@@ -113,6 +113,9 @@ const API = "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order"
 const props = defineProps({
 	name: { type: String, required: true },
 	docstatus: { type: Number, default: 0 },
+	// Loaded `modified` timestamp — forwarded to approve/reject so the backend's
+	// stale-write guard (_guard_not_modified) rejects a concurrent edit.
+	modified: { type: String, default: null },
 })
 
 const emit = defineEmits(["changed", "state"])
@@ -172,7 +175,7 @@ function doApprove() {
 async function performApprove() {
 	acting.value = "approve"
 	try {
-		await callMethod(`${API}.approve`, { work_order: props.name })
+		await callMethod(`${API}.approve`, { work_order: props.name, modified: props.modified })
 		toast.success("Approved", `${props.name} design approved`, 6000)
 		await loadState()
 		emit("changed")
@@ -199,6 +202,7 @@ async function doReject() {
 		await callMethod(`${API}.reject`, {
 			work_order: props.name,
 			reason: rejectReason.value.trim(),
+			modified: props.modified,
 		})
 		toast.success("Rejected", `${props.name} design rejected`, 6000)
 		rejectOpen.value = false

@@ -86,6 +86,11 @@ def _resolve_frontend_assets():
 def get_boot():
 	return {
 		"site_name": frappe.local.site,
+		# Realtime: the /web SPA opens its own socket.io connection to Frappe's
+		# realtime server (default port 9000) for live doc/list updates. Exposed
+		# here so the client builds the URL host-only (window.location.hostname +
+		# this port + "/" + site_name), avoiding the :8003:9000 double-port.
+		"socketio_port": frappe.conf.socketio_port or 9000,
 		"app_logo": _website_asset("app_logo", "mgk-logo.png"),
 		"user": json.loads(frappe.as_json(frappe.get_user().load_user())),
 	}

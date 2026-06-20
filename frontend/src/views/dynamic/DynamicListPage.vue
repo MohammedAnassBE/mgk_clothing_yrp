@@ -52,6 +52,15 @@
 			</div>
 		</div>
 
+		<!-- Realtime: records changed elsewhere while a bulk selection is active.
+		     We don't auto-refresh (that would drop the selection) — offer a manual
+		     refresh pill instead. With no selection, the list refetches silently. -->
+		<div v-if="pendingUpdates" class="rt-pending">
+			<i class="pi pi-bolt" />
+			<span>New updates are available.</span>
+			<button type="button" class="rt-pending__btn" @click="refreshListNow">Refresh</button>
+		</div>
+
 		<!-- Tab strip (meta-derived: status mode / docstatus mode / none — see CUSTOM_UI §6.3) -->
 		<Tabs v-if="tabMode" :value="activeTab" @update:value="onTabChange">
 			<TabList>
@@ -443,6 +452,7 @@ import InputNumber from "primevue/inputnumber"
 import DatePicker from "primevue/datepicker"
 import ToggleSwitch from "primevue/toggleswitch"
 import { useDocList } from "@/composables/useDocList"
+import { useRealtime } from "@/composables/useRealtime"
 import { usePermissions } from "@/composables/usePermissions"
 import { useLinkTitles } from "@/composables/useLinkTitles"
 import { useAppConfirm } from "@/composables/useConfirm"
@@ -808,6 +818,50 @@ function getDateRange(tab) {
 const pageSize = 20
 const listState = shallowRef(null)
 
+// ── Realtime: live list updates (no popup) via Frappe `list_update` ──
+const realtime = useRealtime()
+let listRtDispose = null // disposer for the current doctype subscription
+let listRtTimer = null // debounce timer for coalescing rapid changes
+const pendingUpdates = ref(false) // changes arrived while a bulk selection is active
+
+// Re-run the CURRENT query (preserves filters/tabs/search/sort/pagination) and
+// refresh tab counts. Deliberately a full refetch, NOT an in-place row merge —
+// a changed row may or may not belong to the current filtered/sorted/paged view.
+function refreshListNow() {
+	if (listRtTimer) { clearTimeout(listRtTimer); listRtTimer = null }
+	pendingUpdates.value = false
+	if (listState.value) listState.value.fetch()
+	if (tabMode.value) loadCounts()
+}
+
+// list_update arrived: another user created/changed/removed a record in this
+// doctype. If the user has a bulk selection active, don't yank the table — show
+// a "New updates" pill and refresh once they clear the selection or tap it.
+// Otherwise debounce (500ms) and refetch the current view.
+function onListChanged() {
+	if (selectedRows.value.length > 0) {
+		pendingUpdates.value = true
+		return
+	}
+	if (listRtTimer) clearTimeout(listRtTimer)
+	listRtTimer = setTimeout(() => {
+		listRtTimer = null
+		if (listState.value) listState.value.fetch()
+		if (tabMode.value) loadCounts()
+	}, 500)
+}
+
+function subscribeListRealtime() {
+	if (listRtDispose) { listRtDispose(); listRtDispose = null }
+	pendingUpdates.value = false
+	if (doctype.value) listRtDispose = realtime.onListUpdate(doctype.value, onListChanged)
+}
+
+// When a bulk selection clears, apply any updates that arrived while it was held.
+watch(() => selectedRows.value.length, (n) => {
+	if (n === 0 && pendingUpdates.value) refreshListNow()
+})
+
 // The implicit base the tab counts are scoped to, as a plain {field: value}
 // object suitable for getCount. It folds together (a) the route-query base
 // filter — so counts reflect the deep-linked context — and (b) the date-tab
@@ -824,6 +878,7 @@ function baseFilters() {
 
 async function initList() {
 	if (!doctype.value) {
+		if (listRtDispose) { listRtDispose(); listRtDispose = null }
 		listState.value = null
 		meta.value = null
 		statusOptions.value = []
@@ -869,6 +924,7 @@ async function initList() {
 		pageSize,
 		immediate: true,
 	})
+	subscribeListRealtime()
 	await loadTabCounts(dt)
 }
 
@@ -1211,6 +1267,8 @@ watch(searchQuery, () => {
 
 onBeforeUnmount(() => {
 	if (searchTimer) clearTimeout(searchTimer)
+	if (listRtTimer) { clearTimeout(listRtTimer); listRtTimer = null }
+	if (listRtDispose) { listRtDispose(); listRtDispose = null }
 })
 
 // ── Interactive filter popover (FilterPanel) ──────────────────────────────
@@ -1842,5 +1900,32 @@ const hasAnyFilter = computed(
 :deep(.mgk-table .p-datatable-tbody > tr:hover) .row-chevron {
 	color: var(--mgk-accent);
 	transform: translateX(2px);
+}
+
+/* Realtime "new updates" pill (only while a bulk selection blocks auto-refresh) */
+.rt-pending {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 10px;
+	padding: 6px 12px;
+	font-size: 12.5px;
+	color: var(--mgk-accent);
+	background: var(--mgk-accent-50, rgba(37, 99, 235, 0.08));
+	border: 1px solid var(--mgk-accent);
+	border-radius: var(--radius-sm, 6px);
+}
+.rt-pending__btn {
+	border: none;
+	background: var(--mgk-accent);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 3px 10px;
+	border-radius: 5px;
+	cursor: pointer;
+}
+.rt-pending__btn:hover {
+	filter: brightness(0.95);
 }
 </style>

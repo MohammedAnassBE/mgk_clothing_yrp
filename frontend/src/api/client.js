@@ -22,6 +22,24 @@ function buildQueryString(params) {
   return str ? `?${str}` : ''
 }
 
+/**
+ * Build an Error carrying Frappe's `exc_type` (exception class name) and the
+ * HTTP `status`, so callers can branch deterministically. Use `exc_type` —
+ * NOT the numeric status — to detect conflicts: Frappe maps most
+ * `ValidationError` subclasses (incl. `TimestampMismatchError`) to 417.
+ */
+function makeApiError(message, status, excType) {
+  const err = new Error(message)
+  err.status = status
+  err.exc_type = excType || null
+  return err
+}
+
+/** True when a thrown API error is the stale-write conflict (status-agnostic). */
+export function isConflictError(err) {
+  return err?.exc_type === 'TimestampMismatchError'
+}
+
 async function request(url, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -85,7 +103,10 @@ async function request(url, options = {}) {
     }
     // Strip HTML tags for clean display.
     msg = String(msg).replace(/<[^>]*>/g, '').trim()
-    throw new Error(msg)
+    // Attach `exc_type` (Frappe's exception class name) + status so callers can
+    // branch deterministically — e.g. detect the stale-write conflict via
+    // `exc_type === "TimestampMismatchError"` (HTTP 417) rather than a number.
+    throw makeApiError(msg, response.status, body.exc_type)
   }
 
   if (!response.ok) {
@@ -95,7 +116,11 @@ async function request(url, options = {}) {
           try { return JSON.parse(m).message || m } catch { return m }
         }).join('\n')
       : null
-    throw new Error(serverMessages || body.message || `Request failed with status ${response.status}`)
+    throw makeApiError(
+      serverMessages || body.message || `Request failed with status ${response.status}`,
+      response.status,
+      body.exc_type,
+    )
   }
 
   // 204 No Content
@@ -103,11 +128,12 @@ async function request(url, options = {}) {
 
   const json = await response.json()
 
-  // Frappe wraps errors in exc/exception keys
+  // Frappe wraps errors in exc/exception keys (can arrive with a 200 status on
+  // method calls). Preserve exc_type so conflict detection still works here.
   if (json.exc) {
     const parsed = JSON.parse(json.exc)
     const errorMsg = Array.isArray(parsed) ? parsed.filter(Boolean).join('\n') : String(parsed)
-    throw new Error(errorMsg || 'Server error')
+    throw makeApiError(errorMsg || 'Server error', response.status, json.exc_type)
   }
 
   return json
@@ -446,22 +472,30 @@ export async function getContactList(partyDoctype, partyName) {
 
 /**
  * Submit a document (set docstatus = 1).
+ * Pass the loaded `modified` so Frappe's `check_if_latest()` rejects a stale
+ * submit (`TimestampMismatchError`) instead of silently accepting it as an
+ * `update_after_submit`.
  */
-export async function submitDoc(doctype, name) {
+export async function submitDoc(doctype, name, modified) {
+  const body = { docstatus: 1 }
+  if (modified) body.modified = modified
   const json = await request(
     `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`,
-    { method: 'PUT', body: JSON.stringify({ docstatus: 1 }) },
+    { method: 'PUT', body: JSON.stringify(body) },
   )
   return json.data
 }
 
 /**
  * Cancel a submitted document (set docstatus = 2).
+ * Pass the loaded `modified` so a stale cancel is rejected, not silently applied.
  */
-export async function cancelDoc(doctype, name) {
+export async function cancelDoc(doctype, name, modified) {
+  const body = { docstatus: 2 }
+  if (modified) body.modified = modified
   const json = await request(
     `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`,
-    { method: 'PUT', body: JSON.stringify({ docstatus: 2 }) },
+    { method: 'PUT', body: JSON.stringify(body) },
   )
   return json.data
 }
