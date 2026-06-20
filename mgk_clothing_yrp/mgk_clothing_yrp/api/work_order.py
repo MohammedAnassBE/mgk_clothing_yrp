@@ -10,7 +10,24 @@ from the get_doc/save wrappers so it is unit-testable on an in-memory doc.
 
 import frappe
 from frappe import _
-from frappe.utils import flt, now_datetime
+from frappe.utils import cstr, flt, now_datetime
+
+
+def _guard_not_modified(doc, modified):
+	"""Reject a stale write, mirroring the standard REST PUT's check_if_latest().
+
+	These whitelisted methods load a FRESH doc (`frappe.get_doc`) then `.save()`,
+	which bypasses Frappe's built-in stale-write guard — a freshly-loaded
+	`modified` always equals the DB value, so check_if_latest() never fires. The
+	`/web` client passes the `modified` it originally loaded; if the document has
+	changed since, raise the same error the REST path would (TimestampMismatchError,
+	HTTP 417) so the SPA shows its "Refresh" conflict banner instead of clobbering.
+	"""
+	if modified and cstr(doc.modified) != cstr(modified):
+		frappe.throw(
+			_("{0} was modified after you opened it. Please refresh and try again.").format(doc.name),
+			frappe.TimestampMismatchError,
+		)
 
 
 def get_approver_role(process):
@@ -66,9 +83,10 @@ def _approval_state(wo):
 
 
 @frappe.whitelist()
-def approve(work_order):
+def approve(work_order, modified=None):
 	wo = frappe.get_doc("Work Order", work_order)
 	wo.check_permission("write")
+	_guard_not_modified(wo, modified)
 	if wo.docstatus != 0:
 		frappe.throw(_("Only a draft Work Order can be approved."))
 	_require_role(wo)
@@ -78,11 +96,12 @@ def approve(work_order):
 
 
 @frappe.whitelist()
-def reject(work_order, reason):
+def reject(work_order, reason, modified=None):
 	if not (reason and reason.strip()):
 		frappe.throw(_("A reason is required to reject."))
 	wo = frappe.get_doc("Work Order", work_order)
 	wo.check_permission("write")
+	_guard_not_modified(wo, modified)
 	if wo.docstatus != 0:
 		frappe.throw(_("Only a draft Work Order can be rejected."))
 	_require_role(wo)
@@ -292,16 +311,18 @@ def get_yarn_deliverable_rows(work_order):
 
 
 @frappe.whitelist()
-def calculate_deliverables(work_order, rows):
+def calculate_deliverables(work_order, rows, modified=None):
 	"""Dispatcher: pick the calculation mode from the WO's Process.
 
 	`rows` is a JSON list (str or list already-parsed) of per-split inputs.
 	is_yarn_process -> direct-yarn path; otherwise the matrix mode (TODO).
+	`modified` is the client's loaded timestamp for the stale-write guard.
 	"""
 	rows = frappe.parse_json(rows) if isinstance(rows, str) else rows
 
 	wo = frappe.get_doc("Work Order", work_order)
 	wo.check_permission("write")
+	_guard_not_modified(wo, modified)
 	if wo.docstatus != 0:
 		frappe.throw(_("Calculate Deliverables can only update a draft Work Order."))
 

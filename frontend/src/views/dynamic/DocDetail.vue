@@ -246,6 +246,29 @@
 					:key="i"
 					class="srv-err__line"
 				>{{ line }}</div>
+				<div v-if="serverError.refresh" class="srv-err__actions">
+					<Button label="Refresh" icon="pi pi-refresh" size="small" @click="refreshFromConflict" />
+				</div>
+			</div>
+		</Message>
+
+		<!-- Realtime: another user changed this doc since we opened it. Non-blocking
+		     warn banner; Refresh loads the latest (discards local edits in v1). The
+		     loaded doc.value.modified is NOT advanced until Refresh, so the save
+		     guard keeps working. -->
+		<Message
+			v-if="staleNotice"
+			severity="warn"
+			closable
+			class="form-banner"
+			@close="staleNotice = false"
+		>
+			<div class="srv-err">
+				<div class="srv-err__title">This document was modified by another user.</div>
+				<div class="srv-err__line">Refresh to load the latest version before making changes.</div>
+				<div class="srv-err__actions">
+					<Button label="Refresh" icon="pi pi-refresh" size="small" @click="refreshFromConflict" />
+				</div>
 			</div>
 		</Message>
 
@@ -289,6 +312,7 @@
 			ref="approvalRef"
 			:name="doc.name"
 			:docstatus="Number(doc.docstatus) || 0"
+			:modified="doc.modified"
 			@changed="onApprovalChanged"
 			@state="onApprovalState"
 		/>
@@ -298,6 +322,7 @@
 			v-if="isWorkOrder && doc"
 			v-model:visible="calcDeliverablesOpen"
 			:work-order="doc.name"
+			:modified="doc.modified"
 			:payload="calcDeliverablesPayload"
 			@calculated="onDeliverablesCalculated"
 		/>
@@ -1327,11 +1352,12 @@ import Popover from "primevue/popover"
 import Checkbox from "primevue/checkbox"
 import Menu from "primevue/menu"
 import { useDoc } from "@/composables/useDoc"
+import { useRealtime } from "@/composables/useRealtime"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { useAppToast } from "@/composables/useToast"
 import { useLinkTitles } from "@/composables/useLinkTitles"
-import { searchLink, getMeta, getDocWithOnload, callMethod, getCount, getList, errorLines } from "@/api/client"
+import { searchLink, getMeta, getDocWithOnload, callMethod, getCount, getList, errorLines, isConflictError } from "@/api/client"
 import { getRegistryByRoute, getRegistryByDoctype, WORKFLOW_SEVERITY } from "@/config/doctypes"
 import {
 	getDetailFieldConfig,
@@ -1382,7 +1408,34 @@ const linkTitles = useLinkTitles()
 // Q15: persistent, closable inline banner for the last save/submit/cancel error
 // (the toast vanishes; multi-line stock/validation messages need to stay put
 // while the user fixes them). Cleared on a successful action or manual close.
-const serverError = ref(null) // { title, lines: string[] } | null
+const serverError = ref(null) // { title, lines: string[], refresh?: bool } | null
+
+// ── Realtime: live "document modified by another user" notice ──
+const realtime = useRealtime()
+const staleNotice = ref(false) // another user changed this doc since we loaded
+let rtDispose = null // disposer for the current doc subscription
+let rtSuppressUntil = 0 // ignore doc_update echoes from our OWN writes until this ts
+
+// Call right before a local write so its own doc_update echo doesn't raise a
+// false "modified" notice. We reload after every write (adopting the new
+// `modified`), so a short suppression window is enough.
+function markLocalWrite() {
+	rtSuppressUntil = Date.now() + 3000
+}
+
+// doc_update handler: another user saved this doc. Set a non-blocking flag only —
+// NEVER advance doc.value.modified here, or the save guard (which sends the loaded
+// modified) would send the fresh timestamp and the clobber returns.
+function onDocUpdated(data) {
+	if (!data || !doc.value) return
+	if (Date.now() < rtSuppressUntil) return // our own write echo
+	const incoming = data.modified
+	const have = doc.value.modified
+	// Frappe `modified` is an ISO-ish string → lexicographic compare = chronological.
+	if (incoming && have && String(incoming) > String(have)) {
+		staleNotice.value = true
+	}
+}
 // Q5: the required field that blocked the last save attempt — drives the inline
 // "missing field" banner that complements the toast and lives until resolved.
 const missingField = ref(null) // { label, fieldname } | null
@@ -1971,6 +2024,12 @@ async function loadAll() {
 	const metaReady = loadChildMetas() // awaits loadMeta internally; populates childMetaCache
 	await Promise.all([metaReady, docState.load(props.id)])
 	if (!docState.doc.value) return
+	// Realtime: (re)subscribe to this doc's room for live "modified" notices.
+	// Dispose any prior subscription first (the :key remount usually unmounts us,
+	// but the [docRoute,id] watcher can re-run loadAll without an unmount).
+	if (rtDispose) { rtDispose(); rtDispose = null }
+	staleNotice.value = false
+	rtDispose = realtime.onDocUpdate(doctype.value, props.id, onDocUpdated)
 	// Open on the redesigned Details tab (default) so it's the first impression.
 	// Still hydrate the stock pivots so their child tables render instantly when
 	// the user switches to them.
@@ -2057,6 +2116,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
 	window.removeEventListener("keydown", onShortcut)
 	window.removeEventListener("beforeunload", beforeUnloadGuard)
+	if (rtDispose) { rtDispose(); rtDispose = null }
 })
 
 // Q6: SPA route-leave guard — confirm before navigating away from a dirty
@@ -3078,6 +3138,16 @@ function buildPayload() {
 	if (mode.value === "create" && isPromptNaming.value && newName.value.trim()) {
 		payload.name = newName.value.trim()
 	}
+	// Stale-write guard: send the `modified` the user LOADED so Frappe's
+	// check_if_latest() rejects a concurrent edit (TimestampMismatchError, HTTP
+	// 417) instead of silently overwriting it. Edit only — never on create.
+	// INVARIANT: the realtime layer must NEVER advance doc.value.modified (it only
+	// flags staleNotice); doc.value.modified changes only on Refresh or a
+	// successful save. If that invariant breaks, this guard sends the fresh
+	// timestamp and the clobber returns.
+	if (mode.value === "edit" && doc.value?.modified) {
+		payload.modified = doc.value.modified
+	}
 	return payload
 }
 
@@ -3141,8 +3211,33 @@ async function focusMissingField(fieldname) {
 // pins the full server message in the closable banner so the user can read the
 // (often multi-line) validation/stock error while deciding what to do.
 function showActionError(title, e) {
+	// Stale-write conflict on a high-stakes action (submit/cancel/delete/amend):
+	// surface the friendly Refresh banner rather than the raw server text.
+	if (isConflictError(e)) {
+		serverError.value = {
+			title: "Document changed by someone else",
+			lines: ["This document was changed after you opened it. Refresh to load the latest version, then try again."],
+			refresh: true,
+		}
+		toast.warn("Document changed", "Refresh to get the latest version.")
+		return
+	}
 	serverError.value = { title, lines: errorLines(e) }
 	toast.error(title, e?.message)
+}
+
+// Conflict recovery (v1): discard any local edits and reload the latest doc.
+// Triggered by the Refresh button on the conflict banner. reloadView() clears
+// serverError and re-fetches doc/linked/activity; in form mode we first drop
+// the edit copy and return to view (a field-level merge is out of scope for v1).
+async function refreshFromConflict() {
+	isDirty.value = false
+	staleNotice.value = false
+	if (isFormMode.value) {
+		clearForm()
+		mode.value = "view"
+	}
+	await reloadView()
 }
 
 async function onSave() {
@@ -3164,6 +3259,7 @@ async function onSave() {
 	}
 	missingField.value = null
 	serverError.value = null
+	markLocalWrite()
 	const payload = buildPayload()
 	try {
 		if (mode.value === "create") {
@@ -3198,6 +3294,18 @@ async function onSave() {
 	} catch (e) {
 		// Q15: keep the full (often multi-line) server message visible in a
 		// closable banner — the toast alone vanishes before the user can read it.
+		// Stale-write conflict: another user changed this doc after we loaded it.
+		// Show a friendly banner + Refresh action instead of the raw server text.
+		// Detected via exc_type (status-agnostic), never a numeric HTTP code.
+		if (isConflictError(e)) {
+			serverError.value = {
+				title: "Document changed by someone else",
+				lines: ["This document was changed after you opened it. Refresh to load the latest version, then re-apply your changes."],
+				refresh: true,
+			}
+			toast.warn("Document changed", "Refresh to get the latest version.")
+			return
+		}
 		serverError.value = {
 			title: mode.value === "create" ? "Could not create" : "Could not save",
 			lines: errorLines(e),
@@ -3245,6 +3353,7 @@ function onSubmit() {
 		accept: async () => {
 			acting.value = "submit"
 			try {
+				markLocalWrite()
 				await docState.submit(props.id)
 				toast.success("Submitted", `${props.id} submitted`, 6000)
 				await reloadView()
@@ -3267,6 +3376,7 @@ function onCancel() {
 		accept: async () => {
 			acting.value = "cancel"
 			try {
+				markLocalWrite()
 				await docState.cancel(props.id)
 				toast.success("Cancelled", `${props.id} cancelled`, 6000)
 				await reloadView()
@@ -3368,6 +3478,7 @@ async function onCalculateDeliverables() {
 // receivables are current, re-hydrate the stock pivots that render them, then
 // toast the counts and let the modal close itself.
 async function onDeliverablesCalculated(res) {
+	markLocalWrite()
 	await docState.load(props.id)
 	await hydratePivotsForView()
 	toast.success(
@@ -3526,6 +3637,7 @@ function onConvertStock() {
 }
 
 async function reloadView() {
+	markLocalWrite()
 	// Q15: a successful submit/cancel/approval-change clears any pinned error
 	// banner from a prior failed attempt (else a stale red banner contradicts the
 	// success toast on a retry that worked). reloadView is the chokepoint for those.
@@ -4070,6 +4182,7 @@ function onApprovalState(s) {
 	approvalState.value = s
 }
 async function onApprovalChanged() {
+	markLocalWrite()
 	await docState.load(props.id)
 	docState.loadActivity(props.id)
 }
@@ -4896,5 +5009,8 @@ function stripHtml(s) {
 .srv-err__line {
 	font-size: 12.5px;
 	white-space: pre-wrap;
+}
+.srv-err__actions {
+	margin-top: 8px;
 }
 </style>
