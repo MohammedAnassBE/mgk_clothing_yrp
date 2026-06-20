@@ -7,7 +7,12 @@
 				<p class="home-sub">Here's your floor today.</p>
 			</div>
 
-			<div v-if="primaryCreate" class="home-cta" :class="{ split: moreCreates.length }">
+			<div
+				v-if="primaryCreate"
+				class="home-cta"
+				:class="{ split: moreCreates.length }"
+				@keydown.esc="moreOpen = false"
+			>
 				<button class="cta-primary" @click="goCreate(primaryCreate)">
 					<i class="pi pi-plus" />
 					<span>New {{ primaryCreate.label }}</span>
@@ -95,7 +100,15 @@
 						</template>
 						<template v-else-if="recentRows.length">
 							<tr v-for="r in recentRows" :key="r.name" @click="openRecord(r.name)">
-								<td class="recent-code">{{ r.name }}</td>
+								<td>
+									<router-link
+										v-if="recordPath(r.name)"
+										:to="recordPath(r.name)"
+										class="recent-code"
+										@click.stop
+									>{{ r.name }}</router-link>
+									<span v-else class="recent-code">{{ r.name }}</span>
+								</td>
 								<td>
 									<span class="badge" :class="docStatusClass(r.docstatus)">
 										{{ docStatusLabel(r.docstatus) }}
@@ -115,8 +128,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue"
-import { useRouter } from "vue-router"
+import { computed, onMounted, ref, watch } from "vue"
+import { useRouter, useRoute } from "vue-router"
 import { useAuth } from "@/composables/useAuth"
 import { usePermissions } from "@/composables/usePermissions"
 import { getRegistryByDoctype } from "@/config/doctypes"
@@ -124,6 +137,7 @@ import { useHomeQueues } from "@/composables/useHomeQueues"
 import { getList } from "@/api/client"
 
 const router = useRouter()
+const route = useRoute()
 const { fullName } = useAuth()
 const { canRead, canCreate } = usePermissions()
 const { visibleQueues: queueVisible, loadCounts } = useHomeQueues()
@@ -169,6 +183,8 @@ const quickCreates = computed(() =>
 const primaryCreate = computed(() => quickCreates.value[0] || null)
 const moreCreates = computed(() => quickCreates.value.slice(1))
 const moreOpen = ref(false)
+// Close the overflow menu on any route change (cheap insurance).
+watch(() => route.fullPath, () => { moreOpen.value = false })
 
 function goCreate(qc) {
 	moreOpen.value = false
@@ -178,7 +194,9 @@ function goCreate(qc) {
 // ── Recent records (tabbed; key submittable doctypes so docstatus is meaningful) ──
 const RECENT = ["Work Order", "Purchase Order", "Inspection Entry"]
 const recentTabs = computed(() =>
-	RECENT.filter((dt) => canRead(dt))
+	// Gate on isSubmittable so the docstatus badge can never silently mislabel a
+	// non-submittable doctype as "Draft" if RECENT is edited later.
+	RECENT.filter((dt) => canRead(dt) && getRegistryByDoctype(dt)?.isSubmittable)
 		.map((dt) => ({ doctype: dt, label: dt, route: getRegistryByDoctype(dt)?.route || "" }))
 		.filter((t) => t.route)
 )
@@ -208,9 +226,14 @@ function activeRoute() {
 	return recentTabs.value.find((t) => t.doctype === activeTab.value)?.route || ""
 }
 
+function recordPath(name) {
+	const r = activeRoute()
+	return r ? `/${r}/${encodeURIComponent(name)}` : ""
+}
+
 function openRecord(name) {
-	const route = activeRoute()
-	if (route) router.push(`/${route}/${encodeURIComponent(name)}`)
+	const path = recordPath(name)
+	if (path) router.push(path)
 }
 
 function viewAll() {
