@@ -24,8 +24,12 @@ We port that exact system onto MGK's existing `--mgk-*` token layer, keeping MGK
 - **Frontend-only.** No backend changes — no DocType edits, no Python, no schema/migrations, no API
   changes. Everything happens in `apps/mgk_clothing_yrp/frontend/`. *(User: "changes only in the UI,
   nothing in the back end.")*
-- **No behaviour/logic changes.** The source-bin split logic, ungroup contracts, workflow actions, and
-  data contracts in the heavy editors stay byte-for-byte. We restyle, we do not re-engineer.
+- **No behaviour/logic changes — preserve ALL functionality (user hard rule).** Every existing list-view
+  feature stays: filters, status/date tabs, bulk edit/select, column customizer, search, pagination, sort,
+  link pickers, child columns. Do NOT change how any DocType's data is fetched/rendered — `useDocList`/`useDoc`,
+  `api/client.js` (`getListView`/`getList`/`reportview.get`), field/column derivation, grouped-JSON ↔ flat-row
+  contracts. The source-bin split logic, ungroup contracts, and workflow actions stay byte-for-byte. Restyle
+  markup/CSS only. *(See lessons-learned 2026-06-20.)*
 - **No new features.** ⌘K, dark mode, action hierarchy already exist (on `feat/web-ui-revamp`) — we
   fold them in and elevate, we don't invent new capability.
 - **No dependency churn** beyond adding the Inter webfont (self-hosted) and (optionally) PrimeVue
@@ -35,7 +39,7 @@ We port that exact system onto MGK's existing `--mgk-*` token layer, keeping MGK
 
 | # | Decision | Choice | Rationale |
 |---|---|---|---|
-| D1 | Brand colour | **Teal primary + indigo accent** | Keeps "Bright Workshop" identity + all prior teal work; teal is the *reference's own accent*, so it's design-system-approved. One-token flip to indigo-lead if desired later. |
+| D1 | Brand colour | **Teal primary (buttons/CTAs) + royal-blue accent `#2563EB` (accent role AND input focus)** | User decision against the mockup. Teal stays the "Bright Workshop" action colour; royal blue is the second token, used for accents + input focus border/ring. One-token swap to change either later. |
 | D2 | Font | **Inter** (self-hosted, variable) | The single biggest "polish" lever after spacing. Replaces system-font stack. |
 | D3 | Colour model | **4 tokens + opacity** | `primary`, `accent`, `ink`, `surface`; everything else derived. Kills ad-hoc hex. |
 | D4 | Nav | **Slim hover/pin-expand rail** (68px → 232px) with **module groups preserved**, pin toggle, mobile drawer | Best of both: airy like the reference, but keeps group findability for ~20 doctypes. |
@@ -51,7 +55,7 @@ so opacity-derivation works (`rgb(var(--c-ink)/.56)`):
 ```css
 :root{
   --c-primary: 13 148 136;   /* #0D9488  MGK teal  (hero: CTAs, active nav, links, focus) */
-  --c-accent:  79 70 229;    /* #4F46E5  indigo     (secondary CTAs, highlights, info)    */
+  --c-accent:  37 99 235;    /* #2563EB  royal blue  (accent role + input focus border/ring) */
   --c-ink:     27 34 51;     /* #1B2233  near-black slate (all text/borders via opacity)  */
   --c-surface: 247 248 251;  /* #F7F8FB  cool near-white (page bg)                         */
   --r: 12px;                 /* card radius; controls 9px; badges 999px; modal 16px        */
@@ -136,8 +140,12 @@ All specced to the reference. Implemented as PrimeVue theme overrides (`theme.js
   `primary` filled teal · `accent` filled indigo · `ghost` outline `ink/.14`, hover `ink/.05` · `danger` `#dc2626`.
   Sizes: default `8px×14px·13px`, small `5px×10px·12px`. Loading shows spinner **and** verb ("Saving…").
 - **Badges/Tags:** pill, `token/.12` bg + `token` text, 11.5px/700. Variants: primary, accent, muted, success, warn, danger.
-- **Inputs:** `ink/.03` bg, `ink/.14` border, `9px`; focus → teal border + `primary/.16` ring + white bg.
-  Required-error state → `danger` border + `danger/.12` bg, message under field.
+- **Inputs:** `ink/.03` bg, `ink/.14` border, `9px`; focus → **royal-blue (accent)** border + `accent/.18`
+  ring + white bg. Required-error state → `danger` border + `danger/.12` bg, message under field.
+- **Any surface that can FLOAT over content in dark mode (Dialog, Toast, Menu, the hover-expand rail) MUST
+  use a solid dark surface** (e.g. `#171d2f`; rail `#1b1e2a`), never translucent `white/.04` — translucent
+  floats show the scrim/content through and render text unreadable. Docked surfaces (cards, topbar) may stay
+  `white/.04`. (Mockup bugs, found + fixed during Phase 0; cf. lessons-learned 2026-06-19/06-20.)
 - **Tabs:** underline style — active = teal text + 2px teal underline; inactive `ink/.6`.
 - **Table:** `th` 11px UPPER `ink/.5`; rows separated by `ink/.08` lines; hover `ink/.05`; padding `10–12px`.
 - **Cards:** `#fff`, `1px ink/.10` border, `--r`, `--shadow-card`.
