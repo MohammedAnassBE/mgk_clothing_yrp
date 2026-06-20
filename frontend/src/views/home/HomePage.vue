@@ -1,107 +1,132 @@
 <template>
 	<div class="home">
-		<!-- Greeting — NO site-name chip, NO role chip (plan, 2026-05-25). -->
-		<div class="home-greeting">
-			<h1>{{ greeting }}</h1>
-		</div>
-
-		<!-- My Work Today — live work-queues (CUSTOM_UI §4). Each card deep-links
-		     to its DocType list pre-filtered to the same condition (§6.4). -->
-		<template v-if="visibleQueues.length">
-			<div class="section-head">
-				<h2 class="mgk-section-title">My Work Today</h2>
-				<span class="section-hint">Live counts across your queues</span>
+		<!-- Greeting + primary create CTA (mockup dashboard header) -->
+		<header class="home-head">
+			<div class="home-head__text">
+				<h1 class="home-title">{{ greeting }}</h1>
+				<p class="home-sub">Here's your floor today.</p>
 			</div>
 
-			<div class="queue-grid">
-				<button
-					v-for="q in visibleQueues"
-					:key="q.key"
-					class="queue-card"
-					:aria-label="countState(q) === 'error' ? `Retry loading ${q.label}` : q.label"
-					@click="countState(q) === 'error' ? retryQueue(q) : openQueue(q)"
-				>
-					<div class="q-icon" :class="`tone-${q.tone}`">
-						<i :class="q.icon" />
-					</div>
-					<div class="q-body">
-						<div class="q-label">{{ q.label }}</div>
-						<!-- Q14: loading (spinner) / failed (— + retry) / value are
-						     visually distinct so a flaky-network "—" never reads as 0. -->
-						<div class="q-count">
-							<i v-if="countState(q) === 'loading'" class="pi pi-spin pi-spinner q-spin" />
-							<template v-else-if="countState(q) === 'error'">
-								<span class="q-dash">—</span>
-								<span class="q-retry">
-									<i class="pi pi-refresh" /> Retry
-								</span>
-							</template>
-							<template v-else>{{ q.count }}</template>
-						</div>
-						<div class="q-sub">{{ q.sub }}</div>
-					</div>
-					<i class="pi pi-arrow-right q-arrow" />
+			<div v-if="primaryCreate" class="home-cta" :class="{ split: moreCreates.length }">
+				<button class="cta-primary" @click="goCreate(primaryCreate)">
+					<i class="pi pi-plus" />
+					<span>New {{ primaryCreate.label }}</span>
 				</button>
-			</div>
-		</template>
-
-		<!-- Quick Create — perm-gated pills for the independent, parent-free
-		     creates (CUSTOM_UI §11). -->
-		<template v-if="quickCreates.length">
-			<div class="section-head">
-				<h2 class="mgk-section-title">Quick Create</h2>
-				<span class="section-hint">Start a new document</span>
-			</div>
-
-			<div class="quick-create-row">
 				<button
-					v-for="qc in quickCreates"
-					:key="qc.doctype"
-					class="qc-pill"
-					@click="$router.push(`/${qc.route}/new`)"
+					v-if="moreCreates.length"
+					class="cta-more"
+					aria-label="More create options"
+					:aria-expanded="moreOpen"
+					@click="moreOpen = !moreOpen"
 				>
-					<i :class="qc.icon" />
-					<span>{{ qc.label }}</span>
+					<i class="pi pi-chevron-down" />
 				</button>
-			</div>
-		</template>
-
-		<!-- Jump to — hero shortcut grid (kept). -->
-		<div class="section-head">
-			<h2 class="mgk-section-title">Jump to</h2>
-			<span class="section-hint">Live document lists</span>
-		</div>
-
-		<div class="shortcut-grid">
-			<button
-				v-for="s in visibleShortcuts"
-				:key="s.route"
-				class="shortcut-card"
-				@click="$router.push(`/${s.route}`)"
-			>
-				<div class="s-icon"><i :class="s.icon" /></div>
-				<div class="s-body">
-					<div class="s-title">{{ s.label }}</div>
-					<div class="s-sub">{{ s.sub }}</div>
+				<div v-if="moreOpen" class="cta-backdrop" @click="moreOpen = false" />
+				<div v-if="moreOpen" class="cta-menu">
+					<button
+						v-for="qc in moreCreates"
+						:key="qc.doctype"
+						class="cta-menu__item"
+						@click="goCreate(qc)"
+					>
+						<i :class="qc.icon" />
+						<span>New {{ qc.label }}</span>
+					</button>
 				</div>
-				<i class="pi pi-arrow-right s-arrow" />
+			</div>
+		</header>
+
+		<!-- My Work Today — live queues as big stat cards. Each deep-links to its
+		     DocType list pre-filtered (openQueue); failures show a retryable dash. -->
+		<div v-if="visibleQueues.length" class="stat-grid">
+			<button
+				v-for="q in visibleQueues"
+				:key="q.key"
+				class="stat-card"
+				:aria-label="countState(q) === 'error' ? `Retry loading ${q.label}` : q.label"
+				@click="countState(q) === 'error' ? retryQueue(q) : openQueue(q)"
+			>
+				<i class="pi pi-arrow-right stat-arrow" />
+				<div class="stat-n">
+					<i v-if="countState(q) === 'loading'" class="pi pi-spin pi-spinner stat-spin" />
+					<span v-else-if="countState(q) === 'error'" class="stat-dash">—</span>
+					<template v-else>{{ q.count }}</template>
+				</div>
+				<div class="stat-l">{{ q.label }}</div>
+				<div v-if="countState(q) === 'error'" class="stat-retry">
+					<i class="pi pi-refresh" /> Retry
+				</div>
 			</button>
+		</div>
+
+		<!-- Recent records — tabbed table over the key submittable doctypes. -->
+		<div v-if="recentTabs.length" class="mgk-card recent-card">
+			<div class="recent-bar">
+				<div class="recent-tabs">
+					<button
+						v-for="t in recentTabs"
+						:key="t.doctype"
+						class="recent-tab"
+						:class="{ active: t.doctype === activeTab }"
+						@click="selectTab(t.doctype)"
+					>
+						Recent {{ t.label }}
+					</button>
+				</div>
+				<button class="recent-viewall" @click="viewAll">View all <i class="pi pi-arrow-right" /></button>
+			</div>
+
+			<div class="recent-scroll">
+				<table class="recent-table">
+					<thead>
+						<tr>
+							<th>Code</th>
+							<th>Status</th>
+							<th>Updated</th>
+						</tr>
+					</thead>
+					<tbody>
+						<template v-if="recentLoading">
+							<tr v-for="n in 4" :key="`sk-${n}`" class="recent-skel-row">
+								<td><div class="recent-skel" style="width: 130px" /></td>
+								<td><div class="recent-skel" style="width: 72px" /></td>
+								<td><div class="recent-skel" style="width: 48px" /></td>
+							</tr>
+						</template>
+						<template v-else-if="recentRows.length">
+							<tr v-for="r in recentRows" :key="r.name" @click="openRecord(r.name)">
+								<td class="recent-code">{{ r.name }}</td>
+								<td>
+									<span class="badge" :class="docStatusClass(r.docstatus)">
+										{{ docStatusLabel(r.docstatus) }}
+									</span>
+								</td>
+								<td class="recent-date">{{ fmtDate(r.modified) }}</td>
+							</tr>
+						</template>
+						<tr v-else>
+							<td colspan="3" class="recent-empty">Nothing recent yet</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
 		</div>
 	</div>
 </template>
 
 <script setup>
-import { computed, onMounted } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import { useAuth } from "@/composables/useAuth"
 import { usePermissions } from "@/composables/usePermissions"
 import { getRegistryByDoctype } from "@/config/doctypes"
 import { useHomeQueues } from "@/composables/useHomeQueues"
+import { getList } from "@/api/client"
 
 const router = useRouter()
 const { fullName } = useAuth()
 const { canRead, canCreate } = usePermissions()
-const { queues, visibleQueues: queueVisible, loadCounts } = useHomeQueues()
+const { visibleQueues: queueVisible, loadCounts } = useHomeQueues()
 
 const greeting = computed(() => {
 	const h = new Date().getHours()
@@ -110,325 +135,432 @@ const greeting = computed(() => {
 	return name ? `${part}, ${name}` : `${part}`
 })
 
-// ── My Work Today queues ──
+// ── My Work Today queues (unchanged logic — restyled to stat cards) ──
 const visibleQueues = computed(() => queueVisible())
 
-// Q14: a queue card is in one of three states. During loadCounts a queue has
-// count=null + error=false (loading); a failed query sets error=true; success
-// sets a numeric count. This lets the card show a spinner vs a retryable "—" vs
-// the real number, instead of one ambiguous "—" for both pending and failed.
 function countState(q) {
 	if (q.error) return "error"
 	if (q.count === null || q.count === undefined) return "loading"
 	return "value"
 }
 
-// Q14: reset the clicked card to the loading state BEFORE refetching, so it shows
-// the spinner during the retry instead of lingering on "— Retry" (countState
-// tests error first). loadCounts re-queries all queues; only this one flips to
-// loading immediately.
 function retryQueue(q) {
 	q.error = false
 	q.count = null
 	loadCounts()
 }
 
-// Whole card deep-links to the filtered list. Filters travel as a JSON-encoded
-// array of [field, op, value] triples — DynamicListPage parses `?filters=` into
-// its base filter (ANDs with the tabs + feeds the tab counts).
 function openQueue(q) {
 	if (!q.route) return
 	const encoded = encodeURIComponent(JSON.stringify(q.filters))
 	router.push(`/${q.route}?filters=${encoded}`)
 }
 
-onMounted(() => {
-	// Counts load in parallel; failures degrade to "—" per card.
-	loadCounts()
-})
-
-// ── Quick Create (parent-free, independent creates) ──
+// ── Primary create CTA + overflow (folds in the old Quick Create list) ──
 const QUICK_CREATE = ["Work Order", "Purchase Order", "MGK Agent"]
-
 const quickCreates = computed(() =>
-	QUICK_CREATE.filter((dt) => canCreate(dt)).map((dt) => {
-		const reg = getRegistryByDoctype(dt)
-		return {
-			doctype: dt,
-			label: dt,
-			icon: reg?.icon || "pi pi-plus",
-			route: reg?.route || "",
-		}
-	}).filter((qc) => qc.route)
+	QUICK_CREATE.filter((dt) => canCreate(dt))
+		.map((dt) => {
+			const reg = getRegistryByDoctype(dt)
+			return { doctype: dt, label: dt, icon: reg?.icon || "pi pi-plus", route: reg?.route || "" }
+		})
+		.filter((qc) => qc.route)
 )
+const primaryCreate = computed(() => quickCreates.value[0] || null)
+const moreCreates = computed(() => quickCreates.value.slice(1))
+const moreOpen = ref(false)
 
-// ── Jump-to shortcuts (hero-4, perm-gated) ──
-const SHORTCUTS = [
-	{ doctype: "Work Order", icon: "pi pi-bars", sub: "Towel job-work orders" },
-	{ doctype: "Purchase Order", icon: "pi pi-upload", sub: "Yarn & consumables" },
-	{ doctype: "Goods Received Note", icon: "pi pi-plus-circle", sub: "Receipts against PO / WO" },
-	{ doctype: "Inspection Entry", icon: "pi pi-verified", sub: "Quality inspection queue" },
-]
+function goCreate(qc) {
+	moreOpen.value = false
+	router.push(`/${qc.route}/new`)
+}
 
-const visibleShortcuts = computed(() =>
-	SHORTCUTS.filter((s) => canRead(s.doctype)).map((s) => ({
-		...s,
-		label: s.doctype,
-		route: getRegistryByDoctype(s.doctype)?.route || "",
-	}))
+// ── Recent records (tabbed; key submittable doctypes so docstatus is meaningful) ──
+const RECENT = ["Work Order", "Purchase Order", "Inspection Entry"]
+const recentTabs = computed(() =>
+	RECENT.filter((dt) => canRead(dt))
+		.map((dt) => ({ doctype: dt, label: dt, route: getRegistryByDoctype(dt)?.route || "" }))
+		.filter((t) => t.route)
 )
+const activeTab = ref("")
+const recentRows = ref([])
+const recentLoading = ref(false)
+
+async function selectTab(dt) {
+	activeTab.value = dt
+	recentLoading.value = true
+	recentRows.value = []
+	try {
+		const res = await getList(dt, {
+			fields: ["name", "docstatus", "modified"],
+			order_by: "modified desc",
+			limit_page_length: 6,
+		})
+		recentRows.value = res.data || []
+	} catch (e) {
+		recentRows.value = []
+	} finally {
+		recentLoading.value = false
+	}
+}
+
+function activeRoute() {
+	return recentTabs.value.find((t) => t.doctype === activeTab.value)?.route || ""
+}
+
+function openRecord(name) {
+	const route = activeRoute()
+	if (route) router.push(`/${route}/${encodeURIComponent(name)}`)
+}
+
+function viewAll() {
+	const route = activeRoute()
+	if (route) router.push(`/${route}`)
+}
+
+function docStatusLabel(ds) {
+	return ds === 2 ? "Cancelled" : ds === 1 ? "Submitted" : "Draft"
+}
+function docStatusClass(ds) {
+	return ds === 2 ? "is-cancelled" : ds === 1 ? "is-submitted" : "is-draft"
+}
+function fmtDate(s) {
+	if (!s) return "—"
+	const d = new Date(String(s).replace(" ", "T"))
+	if (isNaN(d.getTime())) return s
+	return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" })
+}
+
+onMounted(() => {
+	loadCounts()
+	if (recentTabs.value.length) selectTab(recentTabs.value[0].doctype)
+})
 </script>
 
 <style scoped>
 .home {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	/* Containment: blank lower region reads as intentional margin, not void. */
-	max-width: 1100px;
+	max-width: 1180px;
 	margin: 0 auto;
 	width: 100%;
 }
 
-.home-greeting h1 {
-	font-size: 22px;
-	font-weight: 600;
-	margin: 0 0 6px;
-	letter-spacing: -0.01em;
-}
-
-/* Helper text stacks directly under the heading (not right-aligned). */
-.section-head {
-	margin: 14px 0 8px;
-}
-
-.section-head h2 {
-	font-size: 14.5px;
-	font-weight: 600;
-	margin: 0;
-}
-
-.section-hint {
-	display: block;
-	margin-top: 2px;
-	padding-left: 13px;   /* aligns under the section-title text past its accent bar */
-	font-size: 11px;
-	color: var(--mgk-muted-2);
-}
-
-/* ── My Work Today queue cards ── */
-.queue-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-	gap: 12px;
-}
-
-.queue-card {
+/* ── Header ── */
+.home-head {
 	display: flex;
 	align-items: flex-start;
-	gap: 12px;
-	background: var(--mgk-card);
-	border: 1px solid var(--mgk-line);
-	border-radius: var(--radius);
-	box-shadow: var(--mgk-shadow-sm);
-	padding: 14px 16px;
-	cursor: pointer;
-	text-align: left;
-	transition: border-color 0.14s, transform 0.14s, box-shadow 0.14s;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 18px;
+	flex-wrap: wrap;
 }
 
-.queue-card:hover {
-	border-color: var(--mgk-accent);
-	transform: translateY(-1px);
-	box-shadow: 0 6px 18px rgba(11, 18, 32, 0.08);
+.home-title {
+	font-size: 20px;
+	font-weight: 800;
+	margin: 0;
+	letter-spacing: -0.02em;
 }
 
-.q-icon {
-	width: 38px;
-	height: 38px;
-	border-radius: 9px;
-	display: grid;
-	place-items: center;
-	font-size: 17px;
+.home-sub {
+	margin: 4px 0 0;
+	font-size: 13px;
+	color: var(--mgk-muted);
+}
+
+.home-cta {
+	position: relative;
+	display: flex;
 	flex-shrink: 0;
 }
 
-/* Tone palette. Teal is the default identity; amber is reserved for genuine
-   alert queues (design approvals pending). The old off-palette blue "info"
-   tone is folded into teal so the home grid reads as one accent system. */
-.q-icon.tone-amber {
-	background: var(--mgk-warn-50);
-	color: var(--mgk-warn);
-}
-
-.q-icon.tone-info,
-.q-icon.tone-emerald {
-	background: var(--mgk-accent-50);
-	color: var(--mgk-accent);
-}
-
-.q-icon.tone-slate {
-	background: var(--mgk-slate-50);
-	color: var(--mgk-ink-2);
-}
-
-.q-body {
-	flex: 1;
-	min-width: 0;
-}
-
-.q-label {
-	font-size: 12.5px;
+.cta-primary {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	background: var(--mgk-accent);
+	color: #fff;
+	border: 0;
+	border-radius: var(--radius-sm);
+	padding: 9px 15px;
+	font-size: 13px;
 	font-weight: 600;
-	color: var(--mgk-muted);
+	cursor: pointer;
+	font-family: inherit;
+	transition: filter 0.14s;
+}
+.cta-primary:hover {
+	filter: brightness(1.07);
+}
+.home-cta.split .cta-primary {
+	border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
 
-.q-count {
-	font-size: 28px;
-	font-weight: 700;
-	line-height: 1.15;
-	color: var(--mgk-accent);
-	letter-spacing: -0.02em;
-	margin: 2px 0;
-}
-
-.q-sub {
+.cta-more {
+	background: var(--mgk-accent);
+	color: #fff;
+	border: 0;
+	border-left: 1px solid rgba(255, 255, 255, 0.25);
+	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+	padding: 0 11px;
+	cursor: pointer;
 	font-size: 12px;
-	color: var(--mgk-muted);
+}
+.cta-more:hover {
+	filter: brightness(1.07);
 }
 
-/* Q14: queue count states — spinner while loading, retryable dash on failure. */
-.q-spin {
+.cta-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+}
+.cta-menu {
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	z-index: 41;
+	min-width: 210px;
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius);
+	box-shadow: var(--mgk-shadow-pop);
+	padding: 6px;
+}
+.cta-menu__item {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	width: 100%;
+	background: transparent;
+	border: 0;
+	border-radius: var(--radius-sm);
+	padding: 8px 10px;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--mgk-ink-2);
+	cursor: pointer;
+	font-family: inherit;
+	text-align: left;
+}
+.cta-menu__item:hover {
+	background: var(--mgk-slate-50);
+}
+.cta-menu__item i {
+	color: var(--mgk-accent);
+	font-size: 13px;
+}
+
+/* ── Stat cards ── */
+.stat-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 14px;
+}
+
+.stat-card {
+	position: relative;
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius);
+	box-shadow: var(--mgk-shadow-card);
+	padding: 16px 18px;
+	text-align: left;
+	cursor: pointer;
+	transition: transform 0.14s, box-shadow 0.14s;
+}
+.stat-card:hover {
+	transform: translateY(-1px);
+	box-shadow: var(--mgk-shadow-pop);
+}
+
+.stat-arrow {
+	position: absolute;
+	top: 16px;
+	right: 16px;
+	color: var(--mgk-muted-2);
+	font-size: 13px;
+	transition: color 0.14s;
+}
+.stat-card:hover .stat-arrow {
+	color: var(--mgk-accent);
+}
+
+.stat-n {
+	font-size: 26px;
+	font-weight: 800;
+	line-height: 1;
+	color: var(--mgk-ink);
+	letter-spacing: -0.02em;
+	min-height: 26px;
+}
+.stat-l {
+	margin-top: 8px;
+	font-size: 12.5px;
+	color: var(--mgk-muted);
+}
+.stat-spin {
 	font-size: 18px;
 	color: var(--mgk-muted);
 }
-.q-dash {
+.stat-dash {
 	color: var(--mgk-muted-2);
 }
-.q-retry {
-	margin-left: 10px;
+.stat-retry {
+	margin-top: 6px;
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--mgk-accent-700);
-	cursor: pointer;
-	vertical-align: middle;
 }
-.q-retry:hover {
-	text-decoration: underline;
-}
-.q-retry i {
+.stat-retry i {
 	font-size: 11px;
 }
 
-.q-arrow {
-	color: var(--mgk-muted-2);
-	margin-top: 2px;
+/* ── Recent records card ── */
+.recent-card {
+	margin-top: 18px;
 }
-
-.queue-card:hover .q-arrow {
-	color: var(--mgk-accent);
-}
-
-/* ── Quick Create pills ── */
-.quick-create-row {
+.recent-bar {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	border-bottom: 1px solid var(--mgk-line);
+	padding: 0 8px 0 6px;
 }
-
-.qc-pill {
+.recent-tabs {
+	display: flex;
+	gap: 2px;
+	overflow-x: auto;
+}
+.recent-tab {
+	padding: 11px 13px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--mgk-muted);
+	background: transparent;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -1px;
+	cursor: pointer;
+	font-family: inherit;
+	white-space: nowrap;
+}
+.recent-tab.active {
+	color: var(--mgk-accent-700);
+	border-bottom-color: var(--mgk-accent);
+}
+.recent-viewall {
 	display: inline-flex;
 	align-items: center;
-	gap: 8px;
-	min-height: 38px;
-	background: var(--mgk-card);
-	border: 1px solid var(--mgk-line);
-	border-radius: var(--radius);
-	padding: 8px 16px;
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--mgk-ink-2);
-	cursor: pointer;
-	transition: border-color 0.14s, background 0.14s;
-}
-
-.qc-pill i {
-	color: var(--mgk-accent);
-	font-size: 13px;
-}
-
-.qc-pill:hover {
-	border-color: var(--mgk-accent);
-	background: var(--mgk-accent-50);
-}
-
-.qc-pill:hover span {
-	text-decoration: underline;
-	text-decoration-color: var(--mgk-accent);
-	text-underline-offset: 3px;
-}
-
-/* ── Jump-to shortcut grid ── */
-.shortcut-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-	gap: 12px;
-}
-
-.shortcut-card {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	background: var(--mgk-card);
-	border: 1px solid var(--mgk-line);
-	border-radius: var(--radius);
-	box-shadow: var(--mgk-shadow-sm);
-	padding: 14px 16px;
-	cursor: pointer;
-	text-align: left;
-	transition: border-color 0.14s, transform 0.14s, box-shadow 0.14s;
-}
-
-.shortcut-card:hover {
-	border-color: var(--mgk-accent);
-	transform: translateY(-1px);
-	box-shadow: 0 6px 18px rgba(11, 18, 32, 0.08);
-}
-
-.s-icon {
-	width: 36px;
-	height: 36px;
-	border-radius: 9px;
-	background: var(--mgk-accent-50);
+	gap: 5px;
+	background: transparent;
+	border: 0;
 	color: var(--mgk-accent-700);
-	display: grid;
-	place-items: center;
-	font-size: 16px;
+	font-size: 12.5px;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+	white-space: nowrap;
 	flex-shrink: 0;
 }
-
-.s-body {
-	flex: 1;
-	min-width: 0;
+.recent-viewall i {
+	font-size: 11px;
+}
+.recent-viewall:hover {
+	text-decoration: underline;
 }
 
-.s-title {
-	font-size: 14px;
-	font-weight: 600;
-	color: var(--mgk-ink);
+.recent-scroll {
+	overflow-x: auto;
 }
-
-.s-sub {
-	font-size: 12px;
+.recent-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+.recent-table th {
+	text-align: left;
+	padding: 9px 16px;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
 	color: var(--mgk-muted);
-	margin-top: 1px;
+	font-weight: 700;
+	border-bottom: 1px solid var(--mgk-line);
+}
+.recent-table td {
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--mgk-line);
+}
+.recent-table tbody tr:last-child td {
+	border-bottom: 0;
+}
+.recent-table tbody tr:not(.recent-skel-row) {
+	cursor: pointer;
+	transition: background 0.12s;
+}
+.recent-table tbody tr:not(.recent-skel-row):hover {
+	background: var(--mgk-slate-50);
+}
+.recent-code {
+	font-weight: 600;
+	color: var(--mgk-accent-700);
+}
+.recent-date {
+	color: var(--mgk-muted);
+}
+.recent-empty {
+	text-align: center;
+	color: var(--mgk-muted);
+	padding: 26px;
 }
 
-.s-arrow {
-	color: var(--mgk-muted-2);
+.badge {
+	display: inline-flex;
+	align-items: center;
+	font-size: 11.5px;
+	font-weight: 700;
+	padding: 3px 9px;
+	border-radius: 999px;
+}
+.badge.is-submitted {
+	color: var(--mgk-success);
+	background: var(--mgk-success-50);
+}
+.badge.is-draft {
+	color: var(--mgk-muted);
+	background: var(--mgk-slate-50);
+}
+.badge.is-cancelled {
+	color: var(--mgk-danger);
+	background: var(--mgk-danger-50);
 }
 
-.shortcut-card:hover .s-arrow {
-	color: var(--mgk-accent);
+.recent-skel {
+	height: 12px;
+	border-radius: 6px;
+	background: linear-gradient(90deg, var(--mgk-slate-50), var(--mgk-line), var(--mgk-slate-50));
+	background-size: 200% 100%;
+	animation: recent-shimmer 1.2s infinite;
+}
+@keyframes recent-shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+@media (max-width: 768px) {
+	.home-cta {
+		width: 100%;
+	}
+	.cta-primary {
+		flex: 1;
+		justify-content: center;
+	}
 }
 </style>
