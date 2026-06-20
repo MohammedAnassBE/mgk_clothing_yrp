@@ -183,7 +183,7 @@ rail hover/pin → 232px, slides over content with --shadow-rail, group labels f
 ├──────────────────────────────────────┤
 │  main content (pad 16)                │
 └──────────────────────────────────────┘
-☰ → drawer slides in (248px) over a scrim; tap scrim/route-change closes
+☰ → drawer slides in (232px, reuses --sidebar-width) over a scrim; tap scrim / route-change / Esc closes
 ```
 
 ## 10. Screen — Home / Dashboard (`HomePage.vue`) — *matches the reference exactly*

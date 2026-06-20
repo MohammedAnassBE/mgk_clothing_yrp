@@ -5,6 +5,7 @@
 				class="topbar-hamburger"
 				type="button"
 				aria-label="Open navigation menu"
+				:aria-expanded="drawerOpen"
 				@click="$emit('toggle-drawer')"
 			>
 				<i class="pi pi-bars" />
@@ -65,6 +66,7 @@ import { useTheme } from "@/composables/useTheme"
 import { useCommandPalette } from "@/composables/useCommandPalette"
 import { getRegistryByRoute } from "@/config/doctypes"
 
+defineProps({ drawerOpen: Boolean })
 defineEmits(["toggle-drawer"])
 
 const route = useRoute()

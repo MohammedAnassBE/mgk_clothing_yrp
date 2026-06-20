@@ -43,7 +43,7 @@
 
 	/* ── Sizing ── */
 	--sidebar-width: 232px;
-	--sidebar-collapsed-width: 60px;
+	--sidebar-collapsed-width: 68px;   /* slim rail rest width (partners_api) */
 	--topbar-height: 56px;
 	--radius-sm: 9px;    /* controls (buttons/inputs) — partners_api */
 	--radius: 12px;      /* cards / dialogs */

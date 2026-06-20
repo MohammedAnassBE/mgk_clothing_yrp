@@ -267,6 +267,33 @@ function goHome() {
 	display: none;
 }
 
+/* Keyboard parity (spec: expand on hover AND focus). When focus enters the rail
+   it expands and reveals labels — but we do NOT apply the section-collapse hiding
+   here, so a keyboard user can tab through every item (hiding the focused item
+   would blur it). */
+.mgk-sidebar:focus-within {
+	width: var(--sidebar-width);
+}
+.mgk-sidebar:not(.pinned):focus-within {
+	box-shadow: var(--mgk-shadow-pop);
+}
+.mgk-sidebar:focus-within .nav-label,
+.mgk-sidebar:focus-within .logo-text {
+	opacity: 1;
+}
+.mgk-sidebar:focus-within .nav-group-label {
+	display: flex;
+}
+
+/* overflow:hidden on the rail would clip a default focus ring — inset it. */
+.nav-item:focus-visible,
+.pin-btn:focus-visible,
+.desk-link:focus-visible {
+	outline: 2px solid var(--mgk-accent2);
+	outline-offset: -2px;
+	border-radius: var(--radius-sm);
+}
+
 .sidebar-foot {
 	border-top: 1px solid var(--mgk-line);
 	padding: 8px;

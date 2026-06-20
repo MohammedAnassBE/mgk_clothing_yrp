@@ -9,7 +9,7 @@
 			@toggle-pin="togglePin"
 			@navigate="drawerOpen = false"
 		/>
-		<AppTopbar @toggle-drawer="drawerOpen = !drawerOpen" />
+		<AppTopbar :drawer-open="drawerOpen" @toggle-drawer="drawerOpen = !drawerOpen" />
 		<main class="mgk-main">
 			<!-- Key by path so each DocType/record gets a fresh instance — the
 			     dynamic views capture their doctype at setup (useDoc/useDocList),
@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue"
+import { ref, onMounted, onBeforeUnmount } from "vue"
 import AppSidebar from "./AppSidebar.vue"
 import AppTopbar from "./AppTopbar.vue"
 import CommandPalette from "@/components/CommandPalette.vue"
@@ -35,19 +35,43 @@ import { useAuth } from "@/composables/useAuth"
 
 // Rail is slim by default (hover to expand); "pin" keeps it expanded and pushes
 // content. Persisted per-browser so a user's preference survives reloads.
+// localStorage can throw (Safari private mode, sandboxed iframe) — never let that
+// crash the shell mount; persistence just degrades to per-session.
 const PIN_KEY = "mgk.sidebar.pinned"
-const pinned = ref(localStorage.getItem(PIN_KEY) === "1")
+function readPinned() {
+	try {
+		return localStorage.getItem(PIN_KEY) === "1"
+	} catch {
+		return false
+	}
+}
+function writePinned(v) {
+	try {
+		localStorage.setItem(PIN_KEY, v ? "1" : "0")
+	} catch {
+		/* non-fatal — persistence degrades to this session only */
+	}
+}
+
+const pinned = ref(readPinned())
 const drawerOpen = ref(false)
 
 function togglePin() {
 	pinned.value = !pinned.value
-	localStorage.setItem(PIN_KEY, pinned.value ? "1" : "0")
+	writePinned(pinned.value)
+}
+
+// Esc closes the mobile drawer.
+function onKeydown(e) {
+	if (e.key === "Escape" && drawerOpen.value) drawerOpen.value = false
 }
 
 const { checkAuth } = useAuth()
 onMounted(() => {
 	checkAuth()
+	document.addEventListener("keydown", onKeydown)
 })
+onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown))
 </script>
 
 <style scoped>
