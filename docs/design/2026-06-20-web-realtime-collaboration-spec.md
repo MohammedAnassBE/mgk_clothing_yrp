@@ -2,7 +2,7 @@
 
 - **Date:** 2026-06-20
 - **App:** `mgk_clothing_yrp` (the `/web` Vue 3 + PrimeVue SPA, site `mgk_yrp.site:8003`)
-- **Status:** Draft for review
+- **Status:** Implemented & verified (2026-06-20) on branch `feat/web-realtime-collab` — static code review + live two-user e2e on `:8003` both green (hard guard blocks stale save/submit/cancel + `calculate_deliverables`; realtime doc notice + list refresh confirmed).
 - **Author:** Claude (Opus 4.8) for Mohammed Anas
 - **Related:** `2026-06-20-web-ui-polish-spec.md`
 
@@ -192,6 +192,9 @@ The two shared frontend components mean the feature lands on **every doctype at 
 3. **Scope of doctypes** — *Recommended:* enable everywhere (both shared components) since the requirement says "all doctypes." No exclusions. → confirm.
 4. **Conflict recovery** — *Recommended (phase 1):* Refresh discards local edits (user re-applies). A field-level merge/diff is **out of scope** for v1 (large effort). → confirm deferral.
 5. **Custom-method guard (§A1.1) in v1?** — *Recommended:* yes for `calculate_deliverables` (real clobber surface on Work Order); `approve`/`reject` ride along (same 3-line pattern) or defer (approval-state only). → confirm.
+
+### Known follow-up (out of v1 scope)
+- **Bulk list submit/cancel is unguarded.** `DynamicListPage` bulk actions call `submitDoc`/`cancelDoc` per row without a loaded `modified` (the list query doesn't carry it per row). The spec scoped the guard to the detail view; bulk was never guarded (not a regression). To close it later: include `modified` in the bulk fetch fields and thread it per row, or pre-flight each row server-side.
 
 ---
 
