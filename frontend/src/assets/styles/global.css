@@ -32,9 +32,10 @@
 	--mgk-accent-700:#0F766E;   /* dark teal — link text, hover (AA ~4.6:1 on white) */
 	--mgk-accent-ink:var(--mgk-accent-700);  /* teal title/icon ON the light (accent-50) header band */
 
-	/* ── Secondary accent: royal blue (input focus + accent CTAs/highlights) ── */
-	--mgk-accent2:     #2563EB;                 /* = rgb(var(--c-accent)) */
-	--mgk-accent2-50:  rgba(37, 99, 235, 0.12);
+	/* ── Secondary accent: royal blue (input focus + accent CTAs/highlights).
+	   Derived from --c-accent so dark only has to flip that one base token. ── */
+	--mgk-accent2:     rgb(var(--c-accent));
+	--mgk-accent2-50:  rgb(var(--c-accent) / 0.12);
 
 	/* ── Elevation (cool, not warm) ── */
 	--mgk-shadow:    rgba(27, 34, 51, 0.06);   /* ink-based, softer */
@@ -117,11 +118,10 @@
 	--mgk-accent-700:#5EC9BE;   /* link / hover — light teal on dark */
 	--mgk-accent-ink:#5EC9BE;   /* title / icon on the dark teal-wash band */
 
-	/* Base-token + royal-blue accent overrides for dark */
+	/* Base-token overrides for dark — --mgk-accent2 derives from --c-accent */
 	--c-ink:     216 223 233;   /* #D8DFE9 */
 	--c-surface: 26 34 48;      /* #1A2230 */
-	--mgk-accent2:    #60A5FA;   /* lighter royal blue reads on dark */
-	--mgk-accent2-50: rgba(96, 165, 250, 0.16);
+	--c-accent:  96 165 250;    /* #60A5FA lighter royal blue reads on dark */
 
 	/* Elevation — deeper shadows on dark */
 	--mgk-shadow:    rgba(0, 0, 0, 0.40);
@@ -284,7 +284,9 @@ a {
 	color: var(--mgk-accent-700);
 }
 
-/* ── Bright Workshop card system (canonical — mirrors DocDetail .detail-card) ── */
+/* ── Bright Workshop card system (canonical). NOTE: .mgk-card now uses the airy
+   --mgk-shadow-card; DocDetail .detail-card + HomePage cards still use
+   --mgk-shadow-sm — they adopt --mgk-shadow-card in the component phases (backlog). ── */
 .mgk-card {
 	background: var(--mgk-card);
 	border: 1px solid var(--mgk-line);
