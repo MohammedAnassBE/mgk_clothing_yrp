@@ -846,6 +846,12 @@ function onListChanged() {
 	if (listRtTimer) clearTimeout(listRtTimer)
 	listRtTimer = setTimeout(() => {
 		listRtTimer = null
+		// Re-check: the user may have started a bulk selection during the debounce
+		// window — don't yank the table out from under it; defer to the pill.
+		if (selectedRows.value.length > 0) {
+			pendingUpdates.value = true
+			return
+		}
 		if (listState.value) listState.value.fetch()
 		if (tabMode.value) loadCounts()
 	}, 500)

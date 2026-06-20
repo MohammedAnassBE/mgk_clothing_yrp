@@ -113,6 +113,9 @@ const API = "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order"
 const props = defineProps({
 	visible: { type: Boolean, default: false },
 	workOrder: { type: String, required: true },
+	// Loaded `modified` timestamp — forwarded to calculate_deliverables so the
+	// backend's stale-write guard (_guard_not_modified) rejects a concurrent edit.
+	modified: { type: String, default: null },
 	// The get_yarn_deliverable_rows payload (rows, default_wastage, default_excess).
 	payload: { type: Object, default: () => ({}) },
 })
