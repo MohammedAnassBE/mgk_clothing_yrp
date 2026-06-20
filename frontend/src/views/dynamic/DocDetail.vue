@@ -39,12 +39,14 @@
 		<!-- Header -->
 		<div class="detail-head">
 			<div class="id-block">
-				<div class="doc-id mgk-mono">
+				<!-- Q2: the human title is the hero; the serial drops to a small mono
+				     chip below it (or becomes the hero itself when there's no title). -->
+				<div class="doc-hero">
 					<span v-if="isCreate">New {{ registry?.label || doctype }}</span>
-					<span v-else>{{ id }}</span>
+					<span v-else>{{ titleLine || id }}</span>
 				</div>
-				<div v-if="!isCreate && titleLine" class="doc-title">{{ titleLine }}</div>
-				<div v-else-if="mode === 'edit'" class="doc-title edit-hint">Editing</div>
+				<div v-if="!isCreate && titleLine" class="doc-id mgk-mono">{{ id }}</div>
+				<div v-if="mode === 'edit'" class="doc-subtle edit-hint">Editing</div>
 			</div>
 
 			<Tag
@@ -56,11 +58,8 @@
 			/>
 
 			<div class="head-actions">
-				<!-- ── VIEW mode, draft (docstatus 0) ── -->
+				<!-- ── VIEW mode ── -->
 				<template v-if="mode === 'view' && doc">
-					<!-- Workflow-managed doctypes (Process Cost / Item Price): the
-					     transition buttons REPLACE plain Submit/Cancel (which are
-					     suppressed via isSubmittable=false). Server-authoritative. -->
 					<WorkflowActions
 						v-if="isWorkflow"
 						ref="workflowRef"
@@ -68,11 +67,15 @@
 						:doctype="doctype"
 						@changed="reloadView"
 					/>
+
+					<!-- Draft (docstatus 0): Edit (secondary) + Submit (primary forward). -->
 					<Button
 						v-if="docstatus === 0 && canWrite(doctype)"
 						label="Edit"
 						icon="pi pi-pencil"
 						size="small"
+						severity="secondary"
+						outlined
 						@click="enterEdit"
 					/>
 					<Button
@@ -81,21 +84,70 @@
 						icon="pi pi-arrow-right"
 						iconPos="right"
 						size="small"
+						class="forward-cta"
 						:loading="acting === 'submit'"
 						@click="onSubmit"
 					/>
+					<!-- Work Order: Calculate Deliverables (draft only). -->
 					<Button
-						v-if="docstatus === 0 && canDelete(doctype)"
-						label="Delete"
-						icon="pi pi-trash"
+						v-if="isWorkOrder && docstatus === 0 && !isCreate"
+						label="Calculate Deliverables"
+						icon="pi pi-calculator"
 						size="small"
-						severity="danger"
+						severity="secondary"
 						outlined
-						:loading="acting === 'delete'"
-						@click="onDelete"
+						@click="onCalculateDeliverables"
 					/>
 
-					<!-- VIEW mode, submitted (docstatus 1) -->
+					<!-- Submitted (docstatus 1): ONE primary forward CTA; the remaining
+					     create-next actions collapse into a "More" overflow menu so the
+					     submitted header stops being a wall of equal buttons. forwardActions
+					     keeps the exact per-doctype gating (Convert Stock / Create
+					     DC·GRN·Debit / Create GRN from DC·PO / Create Inspection Entry). -->
+					<span
+						v-if="primaryForward"
+						v-tooltip.bottom="primaryForward.tooltip"
+						class="cta-wrap"
+					>
+						<Button
+							:label="primaryForward.label"
+							:icon="primaryForward.icon"
+							size="small"
+							class="forward-cta"
+							:disabled="primaryForward.disabled"
+							:loading="primaryForward.loadingKey && acting === primaryForward.loadingKey"
+							@click="primaryForward.handler"
+						/>
+					</span>
+
+					<!-- Cancelled (docstatus 2): Amend (primary forward). -->
+					<Button
+						v-if="docstatus === 2 && isSubmittable && canAmend(doctype)"
+						label="Amend"
+						icon="pi pi-clone"
+						size="small"
+						class="forward-cta"
+						:loading="acting === 'amend'"
+						@click="onAmend"
+					/>
+
+					<!-- Overflow: secondary create-next actions + Print + Open in Desk. -->
+					<Button
+						v-if="moreMenuModel.length"
+						type="button"
+						label="More"
+						icon="pi pi-ellipsis-h"
+						iconPos="right"
+						size="small"
+						severity="secondary"
+						outlined
+						aria-haspopup="true"
+						aria-controls="dd_more_menu"
+						@click="(e) => moreMenu.toggle(e)"
+					/>
+					<Menu ref="moreMenu" id="dd_more_menu" :model="moreMenuModel" :popup="true" />
+
+					<!-- Destructive, set apart from the forward CTA. -->
 					<Button
 						v-if="docstatus === 1 && isSubmittable && canCancel(doctype)"
 						label="Cancel"
@@ -106,49 +158,8 @@
 						:loading="acting === 'cancel'"
 						@click="onCancel"
 					/>
-
-					<!-- Work Order: Create DC / Create GRN — mirrors production_api
-					     work_order.js (Make DC / Make GRN) gated on docstatus=1 +
-					     open_status="Open". Pre-fills via route query; the create
-					     page's runDocAutofill fires get_work_order_defaults. -->
 					<Button
-						v-if="docstatus === 1 && isWorkOrder && doc.open_status === 'Open' && canCreate('Delivery Challan')"
-						label="Create DC"
-						icon="pi pi-send"
-						size="small"
-						outlined
-						@click="onCreateDcFromWo"
-					/>
-					<Button
-						v-if="docstatus === 1 && isWorkOrder && doc.open_status === 'Open' && canCreate('Goods Received Note')"
-						label="Create GRN"
-						icon="pi pi-plus-circle"
-						size="small"
-						outlined
-						@click="onCreateGrnFromWo"
-					/>
-					<!-- Purchase Order: Create GRN — mirrors WO's Create GRN. Gated on
-					     submitted state; the GRN create page's autofill takes the rest. -->
-					<Button
-						v-if="docstatus === 1 && isPurchaseOrder && canCreate('Goods Received Note')"
-						label="Create GRN"
-						icon="pi pi-plus-circle"
-						size="small"
-						outlined
-						@click="onCreateGrnFromPo"
-					/>
-
-					<!-- VIEW mode, cancelled (docstatus 2) -->
-					<Button
-						v-if="docstatus === 2 && isSubmittable && canAmend(doctype)"
-						label="Amend"
-						icon="pi pi-clone"
-						size="small"
-						:loading="acting === 'amend'"
-						@click="onAmend"
-					/>
-					<Button
-						v-if="docstatus === 2 && canDelete(doctype)"
+						v-if="(docstatus === 0 || docstatus === 2) && canDelete(doctype)"
 						label="Delete"
 						icon="pi pi-trash"
 						size="small"
@@ -175,6 +186,7 @@
 						label="Save"
 						icon="pi pi-check"
 						size="small"
+						class="forward-cta"
 						:loading="saving"
 						@click="onSave"
 					/>
@@ -196,22 +208,80 @@
 						label="Save"
 						icon="pi pi-check"
 						size="small"
+						class="forward-cta"
 						:loading="saving"
 						@click="onSave"
 					/>
 				</template>
-
-				<a
-					v-if="!isCreate && (isAdmin || hasRole('System Manager'))"
-					class="desk-link"
-					:href="deskUrl"
-					target="_blank"
-					rel="noopener"
-				>
-					<i class="pi pi-external-link" /> Open in Desk
-				</a>
 			</div>
 		</div>
+
+		<!-- Q5: required-field-missing banner — complements the toast and stays put
+		     until the user fixes it (long grouped forms scroll the toast'd field
+		     off-screen). -->
+		<Message
+			v-if="missingField"
+			severity="warn"
+			closable
+			class="form-banner"
+			@close="missingField = null"
+		>
+			Required field missing: <b>{{ missingField.label }}</b> — fill it in to save.
+		</Message>
+
+		<!-- Q15: persistent, readable save/submit error. The toast vanishes before
+		     a multi-line stock/validation message can be read; this banner holds
+		     it open while the user fixes the cause. -->
+		<Message
+			v-if="serverError"
+			severity="error"
+			closable
+			class="form-banner"
+			@close="serverError = null"
+		>
+			<div class="srv-err">
+				<div class="srv-err__title">{{ serverError.title }}</div>
+				<div
+					v-for="(line, i) in serverError.lines"
+					:key="i"
+					class="srv-err__line"
+				>{{ line }}</div>
+			</div>
+		</Message>
+
+		<Dialog
+			v-model:visible="printDialogOpen"
+			header="Print"
+			modal
+			class="print-dialog"
+			:style="{ width: 'min(420px, calc(100vw - 32px))' }"
+		>
+			<div class="print-form">
+				<label class="field-label" for="print-format">Print Format</label>
+				<Select
+					id="print-format"
+					v-model="selectedPrintFormat"
+					:options="printFormatOptions"
+					filter
+					class="fld"
+					fluid
+				/>
+			</div>
+			<template #footer>
+				<Button
+					label="Cancel"
+					severity="secondary"
+					text
+					@click="printDialogOpen = false"
+				/>
+				<Button
+					label="Print"
+					icon="pi pi-print"
+					:disabled="!selectedPrintFormat"
+					@click="submitPrintDialog"
+				/>
+			</template>
+		</Dialog>
 
 		<!-- WO design-approval gate banner (Work Order only, never in create) -->
 		<WorkOrderApproval
@@ -223,10 +293,24 @@
 			@state="onApprovalState"
 		/>
 
-		<!-- Loading (doc load, or create-mode meta load) -->
-		<div v-if="loading || (isCreate && metaLoading)" class="state-block">
-			<i class="pi pi-spin pi-spinner" style="font-size: 1.5rem" />
-			<span>Loading…</span>
+		<!-- WO Calculate Deliverables (yarn mode) — draft Work Order only -->
+		<CalculateDeliverablesModal
+			v-if="isWorkOrder && doc"
+			v-model:visible="calcDeliverablesOpen"
+			:work-order="doc.name"
+			:payload="calcDeliverablesPayload"
+			@calculated="onDeliverablesCalculated"
+		/>
+
+		<!-- Loading (doc load, or create-mode meta load) — skeleton mimics the
+		     grouped detail cards instead of a blank flash. -->
+		<div v-if="loading || (isCreate && metaLoading)" class="mgk-detail-skel" aria-busy="true" aria-label="Loading">
+			<div v-for="c in 2" :key="`sk-${c}`" class="mgk-detail-skel__card">
+				<div class="mgk-skel-band" />
+				<div class="mgk-skel-body">
+					<div v-for="i in 4" :key="`sk-${c}-${i}`" class="mgk-skel-line" />
+				</div>
+			</div>
 		</div>
 
 		<!-- Error (load failure) -->
@@ -237,6 +321,36 @@
 		<!-- ════════════════ CREATE / EDIT FORM ════════════════ -->
 		<div v-else-if="isFormMode" class="form-layout">
 			<div class="detail-main form-card">
+				<!-- Prompt-named create: a REQUIRED Name input at the very top of the
+				     form. Prompt-named doctypes (Item Master Template, FG Item Master
+				     Template, …) take the document name from the user; without this the
+				     REST insert has no name and the server rejects the save. Shown ONLY
+				     in create mode for prompt naming — never in edit, never for
+				     series/field/hash-named doctypes. -->
+				<section
+					v-if="mode === 'create' && isPromptNaming"
+					class="mgk-card form-section"
+				>
+					<header class="mgk-card__head">
+						<span class="mgk-card__title">Naming</span>
+					</header>
+					<div class="mgk-card__body form-grid">
+						<div id="field-__newname" class="form-field wide">
+							<label class="field-label" for="fld-__newname">
+								{{ (registry?.label || doctype) }} Name
+								<span class="req">*</span>
+							</label>
+							<InputText
+								id="fld-__newname"
+								v-model="newName"
+								:invalid="!newName.trim()"
+								class="fld"
+							/>
+							<small class="field-help">Required — set a unique name for this document.</small>
+						</div>
+					</div>
+				</section>
+
 				<!-- Field grid (inputs), grouped into titled cards by Section Break
 				     so the edit form mirrors the read-view Details cards. -->
 				<section
@@ -251,6 +365,7 @@
 					<div
 						v-for="f in s.fields"
 						:key="f.fieldname"
+						:id="'field-' + f.fieldname"
 						class="form-field"
 						:class="{ wide: f.wide }"
 					>
@@ -363,7 +478,7 @@
 								@update:modelValue="form[f.fieldname] = $event ? 1 : 0"
 								:disabled="isReadOnly(f)"
 							/>
-							<span class="check-label">{{ form[f.fieldname] ? "Yes" : "No" }}</span>
+							<span class="check-label">{{ checkWord(f) }}</span>
 						</div>
 
 						<!-- Select -->
@@ -405,12 +520,161 @@
 							:disabled="isReadOnly(f)"
 							class="fld"
 						/>
+
+						<!-- Q13: inline help (meta description / SPA override). -->
+						<small v-if="f.help" class="field-help">{{ f.help }}</small>
 					</div>
 					</div>
 				</section>
 
 				<div v-if="!formFields.length" class="empty-inline">
 					No editable fields for this DocType.
+				</div>
+
+				<!-- F4: Work Order mgk_items grid — rendered ABOVE the deliverables /
+				     receivables pivots. Each row pairs an Item link with an Item
+				     Production Detail link whose search is filtered by the row's item
+				     (onMgkItemLinkComplete). Reuses the generic child-grid markup. -->
+				<div
+					v-if="mgkItemsTable"
+					class="child-editor"
+				>
+					<div class="child-editor-head">
+						<h4>{{ mgkItemsTable.label }}</h4>
+						<div class="child-head-actions">
+							<span v-if="!mgkItemsTable.columnsAvailable" class="child-cols-note">
+								columns unavailable — open in Desk
+							</span>
+							<template v-else>
+								<Button
+									label="Columns"
+									icon="pi pi-sliders-h"
+									size="small"
+									severity="secondary"
+									outlined
+									@click="toggleColChooser(mgkItemsTable.fieldname, $event)"
+								/>
+								<Popover :ref="(el) => setColChooserRef(mgkItemsTable.fieldname, el)">
+									<div class="col-chooser">
+										<div class="col-chooser__title">Show columns</div>
+										<div
+											v-for="col in mgkItemsTable.columns"
+											:key="col.fieldname"
+											class="col-chooser__row"
+										>
+											<Checkbox
+												:inputId="'colsel-mgk-' + col.fieldname"
+												:modelValue="isColumnVisible(mgkItemsTable.fieldname, mgkItemsTable.columns, col.fieldname)"
+												binary
+												@update:modelValue="toggleColumn(mgkItemsTable.fieldname, mgkItemsTable.columns, col.fieldname)"
+											/>
+											<label :for="'colsel-mgk-' + col.fieldname">{{ col.label }}</label>
+										</div>
+									</div>
+								</Popover>
+								<Button
+									label="Add Row"
+									icon="pi pi-plus"
+									size="small"
+									severity="secondary"
+									outlined
+									@click="addChildRow(mgkItemsTable)"
+								/>
+							</template>
+						</div>
+					</div>
+
+					<DataTable
+						:value="form[mgkItemsTable.fieldname]"
+						class="mgk-table child-dt edit-dt"
+						:rowHover="false"
+						editMode="cell"
+						resizableColumns
+						columnResizeMode="fixed"
+						:tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }"
+						@cell-edit-complete="onCellEditComplete(mgkItemsTable, $event)"
+						@column-resize-end="onChildColumnResizeEnd(mgkItemsTable.fieldname, mgkItemsTable.columns, $event, reqdFieldnames(mgkItemsTable.columns))"
+					>
+						<Column
+							v-for="col in shownColumns(mgkItemsTable.fieldname, mgkItemsTable.columns, reqdFieldnames(mgkItemsTable.columns))"
+							:key="col.fieldname"
+							:field="col.fieldname"
+							:header="col.label + (col.reqd ? ' *' : '')"
+							:style="{ width: childColWidth(mgkItemsTable.fieldname, col) }"
+						>
+							<template #body="{ data, field }">
+								<span :class="{ 'mgk-mono': col.input === 'link' }">
+									{{ childCellDisplay(data[field], col) }}
+								</span>
+							</template>
+							<template #editor="{ data, field }">
+								<span
+									v-if="col.readonly"
+									:class="{ 'mgk-mono': col.input === 'link' }"
+									class="cell-static"
+								>{{ childCellDisplay(data[field], col) }}</span>
+								<InputNumber
+									v-else-if="col.input === 'number'"
+									v-model="data[field]"
+									:minFractionDigits="col.minFraction"
+									:maxFractionDigits="col.maxFraction"
+									class="cell-input"
+									fluid
+									autofocus
+								/>
+								<AutoComplete
+									v-else-if="col.input === 'link'"
+									v-model="data[field]"
+									:suggestions="childLinkSuggestions"
+									@complete="onMgkItemLinkComplete(col, data, $event)"
+									dropdown
+									completeOnFocus
+									class="cell-input"
+									fluid
+									autofocus
+								/>
+								<InputText
+									v-else
+									v-model="data[field]"
+									class="cell-input"
+									fluid
+									autofocus
+								/>
+							</template>
+						</Column>
+
+						<Column :style="{ width: childActionColWidth }" bodyStyle="text-align:center">
+							<template #body="{ index }">
+								<Button
+									icon="pi pi-trash"
+									text
+									rounded
+									severity="danger"
+									size="small"
+									@click="removeChildRow(mgkItemsTable, index)"
+								/>
+							</template>
+						</Column>
+
+						<template #empty>
+							<div v-if="mgkItemsTable.columnsAvailable" class="mgk-empty">
+								<i class="pi pi-table" />
+								<p class="mgk-empty__text">No rows yet.</p>
+								<Button
+									label="Add Row"
+									icon="pi pi-plus"
+									size="small"
+									severity="secondary"
+									outlined
+									@click="addChildRow(mgkItemsTable)"
+								/>
+							</div>
+							<div v-else class="mgk-empty">
+								<i class="pi pi-table" />
+								<p class="mgk-empty__text">Editing this table isn’t available here — open in Desk.</p>
+							</div>
+						</template>
+					</DataTable>
 				</div>
 
 				<!-- R3a: stock size-pivot editor(s) — grouped item_details path.
@@ -425,7 +689,7 @@
 					<div class="child-editor-head">
 						<h4>{{ pv.label }}</h4>
 						<span class="child-cols-note pivot-note">
-							{{ useGrnSplit ? "received-type split · server resolves variants on save" : "size-pivot · server resolves variants on save" }}
+							{{ isInspectionEntry ? "split each received qty across received types" : useGrnSplit ? "received-type split · server resolves variants on save" : "size-pivot · server resolves variants on save" }}
 						</span>
 					</div>
 					<!-- R3b: GRN against Work Order needs the received-type SPLIT UX
@@ -434,10 +698,19 @@
 					     generic pivot. Both editors expose the same loadData/getItems/
 					     hasItems surface and register into gridRefs identically, so
 					     hydratePivotsForEdit + buildPayload are unchanged. -->
+					<InspectionEntryEditor
+						v-if="isInspectionEntry"
+						:ref="(el) => setGridRef(pv.childField, el)"
+						:docstatus="docstatus"
+						:posting-date="form.posting_date || ''"
+						:editable="true"
+						@change="onGridChange"
+					/>
 					<GRNReceivedTypeEditor
-						v-if="useGrnSplit"
+						v-else-if="useGrnSplit"
 						:ref="(el) => setGridRef(pv.childField, el)"
 						:editable="true"
+						@change="onGridChange"
 					/>
 					<StockItemGridEditor
 						v-else
@@ -450,6 +723,7 @@
 						:show-secondary-toggle="!!pv.showSecondaryToggle"
 						:locked-items="!!pv.lockedItems"
 						:editable="true"
+						@change="onGridChange"
 					/>
 				</div>
 
@@ -461,18 +735,47 @@
 				>
 					<div class="child-editor-head">
 						<h4>{{ ct.label }}</h4>
-						<span v-if="!ct.columnsAvailable" class="child-cols-note">
-							columns unavailable — open in Desk
-						</span>
-						<Button
-							v-else
-							label="Add Row"
-							icon="pi pi-plus"
-							size="small"
-							severity="secondary"
-							outlined
-							@click="addChildRow(ct)"
-						/>
+						<div class="child-head-actions">
+							<span v-if="!ct.columnsAvailable" class="child-cols-note">
+								columns unavailable — open in Desk
+							</span>
+							<template v-else>
+								<Button
+									label="Columns"
+									icon="pi pi-sliders-h"
+									size="small"
+									severity="secondary"
+									outlined
+									@click="toggleColChooser(ct.fieldname, $event)"
+								/>
+								<Popover :ref="(el) => setColChooserRef(ct.fieldname, el)">
+									<div class="col-chooser">
+										<div class="col-chooser__title">Show columns</div>
+										<div
+											v-for="col in ct.columns"
+											:key="col.fieldname"
+											class="col-chooser__row"
+										>
+											<Checkbox
+												:inputId="'colsel-edit-' + ct.fieldname + '-' + col.fieldname"
+												:modelValue="isColumnVisible(ct.fieldname, ct.columns, col.fieldname)"
+												binary
+												@update:modelValue="toggleColumn(ct.fieldname, ct.columns, col.fieldname)"
+											/>
+											<label :for="'colsel-edit-' + ct.fieldname + '-' + col.fieldname">{{ col.label }}</label>
+										</div>
+									</div>
+								</Popover>
+								<Button
+									label="Add Row"
+									icon="pi pi-plus"
+									size="small"
+									severity="secondary"
+									outlined
+									@click="addChildRow(ct)"
+								/>
+							</template>
+						</div>
 					</div>
 
 					<DataTable
@@ -480,13 +783,18 @@
 						class="mgk-table child-dt edit-dt"
 						:rowHover="false"
 						editMode="cell"
+						resizableColumns
+						columnResizeMode="fixed"
+						:tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }"
 						@cell-edit-complete="onCellEditComplete(ct, $event)"
+						@column-resize-end="onChildColumnResizeEnd(ct.fieldname, ct.columns, $event, reqdFieldnames(ct.columns))"
 					>
 						<Column
-							v-for="col in ct.columns"
+							v-for="col in shownColumns(ct.fieldname, ct.columns, reqdFieldnames(ct.columns))"
 							:key="col.fieldname"
 							:field="col.fieldname"
 							:header="col.label + (col.reqd ? ' *' : '')"
+							:style="{ width: childColWidth(ct.fieldname, col) }"
 						>
 							<template #body="{ data, field }">
 								<span :class="{ 'mgk-mono': col.input === 'link' }">
@@ -518,6 +826,7 @@
 									:suggestions="childLinkSuggestions"
 									@complete="onChildLinkComplete(col, $event)"
 									dropdown
+									completeOnFocus
 									class="cell-input"
 									fluid
 									autofocus
@@ -532,7 +841,7 @@
 							</template>
 						</Column>
 
-						<Column :style="{ width: '56px' }" bodyStyle="text-align:center">
+						<Column :style="{ width: childActionColWidth }" bodyStyle="text-align:center">
 							<template #body="{ index }">
 								<Button
 									icon="pi pi-trash"
@@ -566,18 +875,46 @@
 					</DataTable>
 				</div>
 
+				<!-- Work Order: `comments` rendered as the VERY LAST element of the
+				     form — below the mgk_items grid AND the deliverables/receivables
+				     pivots AND any other child tables. `comments` is excluded from the
+				     regular form-field grid (work-order.js hideFormFields) so it lands
+				     here instead of above the tables. Mirrors the Desk's bottom-of-form
+				     placement (Desk uses field_order). Editable Text field. -->
+				<section
+					v-if="woCommentsField"
+					class="mgk-card form-section wo-comments-section"
+				>
+					<header class="mgk-card__head">
+						<span class="mgk-card__title">{{ woCommentsField.label }}</span>
+					</header>
+					<div class="mgk-card__body">
+						<div :id="'field-' + woCommentsField.fieldname" class="form-field wide">
+							<Textarea
+								:id="'fld-' + woCommentsField.fieldname"
+								v-model="form[woCommentsField.fieldname]"
+								:disabled="isReadOnly(woCommentsField)"
+								rows="3"
+								autoResize
+								class="fld"
+							/>
+							<small v-if="woCommentsField.help" class="field-help">{{ woCommentsField.help }}</small>
+						</div>
+					</div>
+				</section>
+
 				<!-- ITEM: Attribute Values card grid — surfaces the actual values
 				     configured per attribute (Stage = Cut/Piece/Pack, …). The
 				     bare child-table tab only shows mapping IDs which the user
 				     can't read. -->
 				<div
-					v-if="isItem && doc && mode === 'edit'"
+					v-if="hasAttributeValuesEditor && doc && mode === 'edit'"
 					class="child-editor"
 				>
 					<div class="child-editor-head">
 						<h4>Attribute Values</h4>
 					</div>
-					<ItemAttributeListView :item-name="doc.name" />
+					<ItemAttributeListView :item-name="doc.name" :doctype="doctype" />
 				</div>
 
 				<!-- ITEM: Dependent Attribute matrix editor — also visible in edit
@@ -607,7 +944,7 @@
 				<Tabs v-model:value="activeTab">
 					<TabList>
 						<Tab value="details">Details</Tab>
-						<Tab v-if="isItem" value="attribute-values">Attribute Values</Tab>
+						<Tab v-if="hasAttributeValuesEditor" value="attribute-values">Attribute Values</Tab>
 						<Tab v-for="ct in childTables" :key="ct.fieldname" :value="ct.fieldname">
 							{{ ct.label }}
 							<span v-if="tabBadge(ct)" class="tab-badge">{{ tabBadge(ct) }}</span>
@@ -645,13 +982,21 @@
 												<div
 													class="field-value"
 													:class="{
-														link: f.isLink,
-														mgkmono: f.isLink,
+														link: f.isLink && !isEmptyValue(doc[f.fieldname]),
 														'is-empty': isEmptyValue(doc[f.fieldname]),
 													}"
 													@click="f.isLink && navigateLink(f, doc[f.fieldname])"
 												>
-													{{ displayValue(doc[f.fieldname], f.type) }}
+													<!-- Q1: Link shows the human name + muted code; plain fields show the
+													     formatted value (Q20 bool words via fieldname). -->
+													<template v-if="f.isLink && !isEmptyValue(doc[f.fieldname])">
+														<span class="lv-name">{{ linkPartsFor(f, doc[f.fieldname]).primary }}</span>
+														<span
+															v-if="linkPartsFor(f, doc[f.fieldname]).code"
+															class="lv-code mgk-mono"
+														>{{ linkPartsFor(f, doc[f.fieldname]).code }}</span>
+													</template>
+													<template v-else>{{ displayValue(doc[f.fieldname], f.type, f.fieldname) }}</template>
 												</div>
 												<label class="field-label">{{ f.label }}</label>
 											</div>
@@ -666,8 +1011,15 @@
 						<TabPanel v-for="ct in childTables" :key="ct.fieldname" :value="ct.fieldname">
 							<!-- #B: stock-grouped child tables show the read-only grouped pivot
 							     (item → attributes → sizes), same as edit mode -->
+							<InspectionEntryEditor
+								v-if="pivotChildFields.has(ct.fieldname) && isInspectionEntry"
+								:editable="false"
+								:docstatus="docstatus"
+								:posting-date="doc?.posting_date || ''"
+								:initial-data="viewGrouped[ct.fieldname] || []"
+							/>
 							<StockItemGridEditor
-								v-if="pivotChildFields.has(ct.fieldname)"
+								v-else-if="pivotChildFields.has(ct.fieldname)"
 								:editable="false"
 								:grouped-field="pivotFor(ct.fieldname)?.groupedField"
 								:value-fields="pivotFor(ct.fieldname)?.valueFields || []"
@@ -675,32 +1027,66 @@
 								:cell-fields="pivotFor(ct.fieldname)?.cellFields || []"
 								:initial-data="viewGrouped[ct.fieldname] || []"
 							/>
-							<DataTable
-								v-else
-								:value="rowsFor(ct)"
-								class="mgk-table child-dt"
-								:rowHover="false"
-								dataKey="name"
-							>
-								<Column
-									v-for="col in ct.columns"
-									:key="col.fieldname"
-									:field="col.fieldname"
-									:header="col.label"
+							<div v-else>
+								<div class="child-view-toolbar">
+									<Button
+										label="Columns"
+										icon="pi pi-sliders-h"
+										size="small"
+										severity="secondary"
+										outlined
+										@click="toggleColChooser(ct.fieldname, $event)"
+									/>
+									<Popover :ref="(el) => setColChooserRef(ct.fieldname, el)">
+										<div class="col-chooser">
+											<div class="col-chooser__title">Show columns</div>
+											<div
+												v-for="col in ct.columns"
+												:key="col.fieldname"
+												class="col-chooser__row"
+											>
+												<Checkbox
+													:inputId="'colsel-view-' + ct.fieldname + '-' + col.fieldname"
+													:modelValue="isColumnVisible(ct.fieldname, ct.columns, col.fieldname)"
+													binary
+													@update:modelValue="toggleColumn(ct.fieldname, ct.columns, col.fieldname)"
+												/>
+												<label :for="'colsel-view-' + ct.fieldname + '-' + col.fieldname">{{ col.label }}</label>
+											</div>
+										</div>
+									</Popover>
+								</div>
+								<DataTable
+									:value="rowsFor(ct)"
+									class="mgk-table child-dt"
+									:rowHover="false"
+									dataKey="name"
+									resizableColumns
+									columnResizeMode="fixed"
+									:tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }"
+									@column-resize-end="onChildColumnResizeEnd(ct.fieldname, ct.columns, $event)"
 								>
-									<template #body="{ data }">
-										<span :class="{ 'mgk-mono': col.isLink }">
-											{{ displayValue(data[col.fieldname], col.type) }}
-										</span>
+									<Column
+										v-for="col in shownColumns(ct.fieldname, ct.columns)"
+										:key="col.fieldname"
+										:field="col.fieldname"
+										:header="col.label"
+										:style="{ width: childColWidth(ct.fieldname, col) }"
+									>
+										<template #body="{ data }">
+											<span :class="{ 'mgk-mono': col.isLink }">
+												{{ displayValue(data[col.fieldname], col.type) }}
+											</span>
+										</template>
+									</Column>
+									<template #empty>
+										<div class="mgk-empty">
+											<i class="pi pi-table" />
+											<p class="mgk-empty__text">No rows.</p>
+										</div>
 									</template>
-								</Column>
-								<template #empty>
-									<div class="mgk-empty">
-										<i class="pi pi-table" />
-										<p class="mgk-empty__text">No rows.</p>
-									</div>
-								</template>
-							</DataTable>
+								</DataTable>
+							</div>
 						</TabPanel>
 
 						<!-- APPROVAL LOG (Work Order) -->
@@ -736,8 +1122,8 @@
 						</TabPanel>
 
 						<!-- ATTRIBUTE VALUES (Item) — Desk AttributeList.vue port -->
-						<TabPanel v-if="isItem" value="attribute-values">
-							<ItemAttributeListView :item-name="doc.name" />
+						<TabPanel v-if="hasAttributeValuesEditor" value="attribute-values">
+							<ItemAttributeListView :item-name="doc.name" :doctype="doctype" />
 						</TabPanel>
 
 						<!-- DEPENDENT ATTRIBUTE (Item, when set) — Desk port -->
@@ -909,7 +1295,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
-import { useRouter } from "vue-router"
+import { useRouter, onBeforeRouteLeave } from "vue-router"
 import Tabs from "primevue/tabs"
 import TabList from "primevue/tablist"
 import Tab from "primevue/tab"
@@ -929,11 +1315,17 @@ import DatePicker from "primevue/datepicker"
 import ToggleSwitch from "primevue/toggleswitch"
 import Select from "primevue/select"
 import AutoComplete from "primevue/autocomplete"
+import Tooltip from "primevue/tooltip"
+import Dialog from "primevue/dialog"
+import Popover from "primevue/popover"
+import Checkbox from "primevue/checkbox"
+import Menu from "primevue/menu"
 import { useDoc } from "@/composables/useDoc"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { useAppToast } from "@/composables/useToast"
-import { searchLink, getMeta, getDocWithOnload, callMethod, getCount } from "@/api/client"
+import { useLinkTitles } from "@/composables/useLinkTitles"
+import { searchLink, getMeta, getDocWithOnload, callMethod, getCount, getList, errorLines } from "@/api/client"
 import { getRegistryByRoute, getRegistryByDoctype, WORKFLOW_SEVERITY } from "@/config/doctypes"
 import {
 	getDetailFieldConfig,
@@ -942,14 +1334,32 @@ import {
 	getHiddenFormFields,
 	getLinkSearchHandler,
 	getReadOnlyChildFields,
+	getFieldLabel,
+	getFieldHelp,
+	getBoolLabels,
 } from "@/config/fields"
+import {
+	ACTION_COL_WIDTH,
+	useVisibleColumns,
+	persistVisibleColumns,
+	resolvedColumnWidth,
+	persistColumnWidth,
+} from "@/composables/useChildTableColumns"
+// Self-contained per-doctype child-column hide rules (NOT registered in
+// config/fields/index.js — consumed directly here via childColumnHiddenBy).
+import processCostConfig from "@/config/fields/process-cost.js"
+
+// Q10: tooltip directive for gated (disabled-with-reason) action buttons.
+const vTooltip = Tooltip
 import WorkOrderApproval from "./WorkOrderApproval.vue"
+import CalculateDeliverablesModal from "./CalculateDeliverablesModal.vue"
 import StockItemGridEditor from "./StockItemGridEditor.vue"
 import ItemDependentAttributeEditor from "./ItemDependentAttributeEditor.vue"
 import ItemAttributeListView from "./ItemAttributeListView.vue"
 import LinkField from "@/components/LinkField.vue"
 import GRNReceivedTypeEditor from "./GRNReceivedTypeEditor.vue"
 import WorkflowActions from "./WorkflowActions.vue"
+import InspectionEntryEditor from "./InspectionEntryEditor.vue"
 
 const props = defineProps({
 	docRoute: { type: String, required: true },
@@ -960,12 +1370,34 @@ const router = useRouter()
 const { canWrite, canCreate, canDelete, canSubmit, canCancel, canAmend, isAdmin, hasRole } = usePermissions()
 const confirm = useAppConfirm()
 const toast = useAppToast()
+const linkTitles = useLinkTitles()
+
+// Q15: persistent, closable inline banner for the last save/submit/cancel error
+// (the toast vanishes; multi-line stock/validation messages need to stay put
+// while the user fixes them). Cleared on a successful action or manual close.
+const serverError = ref(null) // { title, lines: string[] } | null
+// Q5: the required field that blocked the last save attempt — drives the inline
+// "missing field" banner that complements the toast and lives until resolved.
+const missingField = ref(null) // { label, fieldname } | null
+// Q6: edit/create dirty tracking. Set true on the first real user edit; gates the
+// Discard confirm + the route-leave / beforeunload guards so 15 typed cells
+// aren't lost to a mis-tap on a tablet. `dirtyArmed` suppresses the programmatic
+// form-building / autofill mutations so only genuine user edits mark dirty.
+const isDirty = ref(false)
+const dirtyArmed = ref(false)
 
 const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
 const isWorkOrder = computed(() => doctype.value === "Work Order")
 const isPurchaseOrder = computed(() => doctype.value === "Purchase Order")
+const isDeliveryChallan = computed(() => doctype.value === "Delivery Challan")
+const isGoodsReceivedNote = computed(() => doctype.value === "Goods Received Note")
+const isInspectionEntry = computed(() => doctype.value === "Inspection Entry")
 const isItem = computed(() => doctype.value === "Item")
+const isItemMasterTemplate = computed(() => doctype.value === "Item Master Template")
+// Item Master Template shares Item's attribute/mapping shape and the
+// __onload.attr_list contract, so it gets the same Attribute Values editor.
+const hasAttributeValuesEditor = computed(() => isItem.value || isItemMasterTemplate.value)
 const isSubmittable = computed(() => registry.value?.isSubmittable || false)
 const isWorkflow = computed(() => registry.value?.isWorkflow || false)
 
@@ -974,6 +1406,7 @@ const isWorkflow = computed(() => registry.value?.isWorkflow || false)
 const docState = useDoc(doctype.value)
 const doc = docState.doc
 const meta = docState.meta
+const metaBundle = docState.metaBundle
 const loading = docState.loading
 const metaLoading = docState.metaLoading
 const linkedLoading = docState.linkedLoading
@@ -985,7 +1418,76 @@ const error = docState.error
 const isCreate = computed(() => props.id === "new")
 const mode = ref("view")
 const isFormMode = computed(() => mode.value === "edit" || mode.value === "create")
-const acting = ref(null) // "submit" | "cancel" | "delete" | "amend" | null
+const acting = ref(null) // "submit" | "cancel" | "delete" | "amend" | "convert" | null
+
+// Prompt-named doctypes (autoname="prompt" / naming_rule="Set by user", e.g. Item
+// Master Template, FG Item Master Template) require the USER to supply the document
+// name at creation — Frappe's REST insert otherwise throws "Please set Document
+// Name". The Desk shows a name prompt; the SPA didn't, so CREATE silently failed.
+// We surface a required Name input (create mode only) and pass `name` in the insert
+// body. autoname/naming_rule are top-level keys on the getdoctype meta (same source
+// as title_field / default_print_format used elsewhere here). Compared lower-cased
+// so "prompt"/"Prompt" both match.
+const isPromptNaming = computed(() => {
+	const m = meta.value
+	if (!m) return false
+	return (
+		String(m.autoname || "").toLowerCase() === "prompt" ||
+		String(m.naming_rule || "") === "Set by user"
+	)
+})
+// User-supplied document name for prompt-named creates (bound to the Name input).
+const newName = ref("")
+// Inspection Entry "Convert Stock" gate — { can_convert, reason, siblings } from
+// the server (can_convert_stock), or null when not applicable / not allowed.
+const ieConvert = ref(null)
+
+// ── Header action hierarchy ──────────────────────────────────────────────
+// Submitted-state "create next" actions, ordered. The FIRST renders as the one
+// prominent primary CTA; the rest collapse into the "More" overflow menu so the
+// submitted header stops being a wall of equal teal buttons. Gating mirrors the
+// previous per-button v-if conditions exactly.
+const forwardActions = computed(() => {
+	const d = doc.value
+	if (!d || mode.value !== "view" || docstatus.value !== 1) return []
+	const woGated = d.open_status !== "Open"
+	const woTip = woGated
+		? `This Work Order is ${d.open_status} — reopen to create deliveries`
+		: ""
+	const out = []
+	if (isInspectionEntry.value && ieConvert.value && ieConvert.value.can_convert)
+		out.push({ key: "convert", label: "Convert Stock", icon: "pi pi-sync", handler: onConvertStock, loadingKey: "convert", disabled: false, tooltip: "" })
+	if (isWorkOrder.value && canCreate("Delivery Challan"))
+		out.push({ key: "wo-dc", label: "Create Delivery Challan", icon: "pi pi-send", handler: onCreateDcFromWo, disabled: woGated, tooltip: woTip })
+	if (isWorkOrder.value && canCreate("Goods Received Note"))
+		out.push({ key: "wo-grn", label: "Create Goods Received Note", icon: "pi pi-plus-circle", handler: onCreateGrnFromWo, disabled: woGated, tooltip: woTip })
+	if (isWorkOrder.value && canCreate("Debit"))
+		out.push({ key: "wo-debit", label: "Create Debit", icon: "pi pi-minus-circle", handler: onCreateDebitFromWo, disabled: woGated, tooltip: woTip })
+	if (isDeliveryChallan.value && canCreate("Goods Received Note"))
+		out.push({ key: "dc-grn", label: "Create Goods Received Note", icon: "pi pi-plus-circle", handler: onCreateGrnFromDc, disabled: false, tooltip: "" })
+	if (isPurchaseOrder.value && canCreate("Goods Received Note"))
+		out.push({ key: "po-grn", label: "Create Goods Received Note", icon: "pi pi-plus-circle", handler: onCreateGrnFromPo, disabled: false, tooltip: "" })
+	if (isGoodsReceivedNote.value && !d.is_rework && canCreate("Inspection Entry"))
+		out.push({ key: "grn-ie", label: "Create Inspection Entry", icon: "pi pi-verified", handler: onCreateInspectionFromGrn, disabled: false, tooltip: "" })
+	return out
+})
+const primaryForward = computed(() => forwardActions.value[0] || null)
+const secondaryForwards = computed(() => forwardActions.value.slice(1))
+const moreMenu = ref(null)
+// Overflow menu: secondary forward actions + Print + (admin) Open in Desk.
+const moreMenuModel = computed(() => {
+	if (mode.value !== "view" || !doc.value || isCreate.value) return []
+	const items = secondaryForwards.value.map((a) => ({
+		label: a.disabled && a.tooltip ? `${a.label} — reopen WO first` : a.label,
+		icon: a.icon,
+		disabled: a.disabled,
+		command: () => a.handler(),
+	}))
+	items.push({ label: "Print", icon: "pi pi-print", command: () => openPrintDialog() })
+	if (isAdmin.value || hasRole("System Manager"))
+		items.push({ label: "Open in Desk", icon: "pi pi-external-link", url: deskUrl.value, target: "_blank" })
+	return items
+})
 
 const activeTab = ref("details")
 const approvalRef = ref(null)
@@ -1002,8 +1504,95 @@ const childLinkSuggestions = ref([])
 // Gives the edit/create child grids typed columns (esp. in create, no rows).
 const childMetaCache = ref({})
 
+// Q6: a deep watch flags the form dirty on any change once armed. Building the
+// form + the create-from-parent autofill mutate `form` programmatically, so we
+// arm only AFTER those settle (armDirty) and reset on entering a fresh form.
+watch(
+	form,
+	() => {
+		if (dirtyArmed.value) isDirty.value = true
+	},
+	{ deep: true },
+)
+function resetDirty() {
+	dirtyArmed.value = false
+	isDirty.value = false
+}
+async function armDirty() {
+	await nextTick()
+	dirtyArmed.value = true
+}
+// Native browser-close / refresh guard while a form has unsaved edits.
+function beforeUnloadGuard(e) {
+	if (isFormMode.value && isDirty.value) {
+		e.preventDefault()
+		e.returnValue = ""
+	}
+}
+// Q6: stock-pivot grid edits (qty/rate/add/delete row) live in the child editor,
+// not `form`, so the deep form watch never sees them. The grids emit `change` on
+// genuine user edits; mark the record dirty (once armed) so the guards fire.
+function onGridChange() {
+	if (dirtyArmed.value) isDirty.value = true
+}
+
 // docstatus convenience.
 const docstatus = computed(() => Number(doc.value?.docstatus) || 0)
+const printDialogOpen = ref(false)
+const selectedPrintFormat = ref("")
+
+const printFormatOptions = computed(() => {
+	const formats = ["Standard"]
+	const printFormats = Array.isArray(meta.value?.__print_formats)
+		? [...meta.value.__print_formats]
+		: []
+	printFormats
+		.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+		.forEach((pf) => {
+			const name = pf?.name
+			if (!name || formats.includes(name)) return
+			if (String(pf.print_format_type || "").toUpperCase() === "JS") return
+			if (Number(pf.raw_printing) === 1) return
+			formats.push(name)
+		})
+
+	const defaultFormat = meta.value?.default_print_format
+	if (defaultFormat && defaultFormat !== "Standard") {
+		const idx = formats.indexOf(defaultFormat)
+		if (idx >= 0) formats.splice(idx, 1)
+		formats.unshift(defaultFormat)
+	}
+	return formats
+})
+
+function defaultPrintFormat() {
+	return printFormatOptions.value[0] || "Standard"
+}
+
+function openPrintDialog() {
+	selectedPrintFormat.value = selectedPrintFormat.value || defaultPrintFormat()
+	printDialogOpen.value = true
+}
+
+function printViewUrl() {
+	const url = new URL("/printview", window.location.origin)
+	url.searchParams.set("doctype", doctype.value)
+	url.searchParams.set("name", props.id)
+	url.searchParams.set("trigger_print", "1")
+	url.searchParams.set("format", selectedPrintFormat.value || "Standard")
+	url.searchParams.set("no_letterhead", "0")
+	url.searchParams.set("settings", "{}")
+	return url.toString()
+}
+
+function submitPrintDialog() {
+	const opened = window.open(printViewUrl(), "_blank", "noopener")
+	if (!opened) {
+		toast.warn("Pop-up blocked", "Allow pop-ups for this site to open the print page.")
+		return
+	}
+	printDialogOpen.value = false
+}
 
 // System fields we never surface in the Details grid / Quick Info / form.
 const SYSTEM_FIELDS = new Set([
@@ -1058,10 +1647,13 @@ const STOCK_GROUPED_MAP = {
 	}],
 	"Stock Update": [{
 		childField: "stock_update_details", groupedField: "item_details", ungroupKey: "Stock Update",
-		label: "Stock Update Details", valueFields: ["rate", "secondary_qty", "secondary_uom"],
+		label: "Stock Update Details", valueFields: ["secondary_qty", "secondary_uom"],
 		entryFields: ["allow_zero_valuation_rate", "make_qty_zero"],
-		cellFields: [{ name: "rate", label: "Rate", editable: true }],
-		showAllowZeroRate: true,
+		// Rate is auto-valued on the server from the last Stock Ledger Entry
+		// (Stock Update.before_validate -> set_rate_from_last_sle); never
+		// user-entered. So: no editable rate cell, no allow-zero-rate toggle.
+		cellFields: [],
+		showAllowZeroRate: false,
 		showSecondaryToggle: true,
 	}],
 	"Stock Reconciliation": [{
@@ -1139,6 +1731,13 @@ const STOCK_GROUPED_MAP = {
 			],
 		},
 	],
+	// Inspection Entry: grouped `item_details` (Long Text) ↔ flat `items`, edited
+	// via InspectionEntryEditor (source-bin split across Received Types). The
+	// server's before_validate ungroups item_details → items, so buildPayload emits
+	// item_details + an empty items array — the same contract as the other pivots.
+	"Inspection Entry": [
+		{ childField: "items", groupedField: "item_details", label: "Items" },
+	],
 }
 
 // The pivot sections to render for the current doctype (empty ⇒ flat path).
@@ -1175,6 +1774,26 @@ const CONNECTIONS_MAP = {
 			route: "/goods-received-note",
 			filters: (name) => [
 				["against", "=", "Purchase Order"],
+				["against_id", "=", name],
+			],
+		},
+	],
+	// Q9: a Delivery Challan's downstream GRNs (GRN.delivery_challan Link → DC),
+	// so the chain no longer dead-ends at the DC.
+	"Delivery Challan": [
+		{
+			doctype: "Goods Received Note",
+			route: "/goods-received-note",
+			filters: (name) => [["delivery_challan", "=", name]],
+		},
+	],
+	// A Goods Received Note's downstream Inspection Entries (IE.against = GRN).
+	"Goods Received Note": [
+		{
+			doctype: "Inspection Entry",
+			route: "/inspection-entry",
+			filters: (name) => [
+				["against", "=", "Goods Received Note"],
 				["against_id", "=", name],
 			],
 		},
@@ -1281,6 +1900,15 @@ async function hydratePivotsForView() {
 		const loaded = await getDocWithOnload(doctype.value, props.id)
 		const onload = loaded?.__onload || {}
 		const next = {}
+		// Inspection Entry's grouped payload is a flat source-bin list (not the
+		// StockItemGridEditor {items:{values:{pv:{qty}}}} shape), so the padded-
+		// all-zero transform below would mangle it — pass it through raw to
+		// InspectionEntryEditor, which does its own grouping.
+		if (isInspectionEntry.value) {
+			const pv = stockPivots.value[0]
+			viewGrouped.value = { [pv.childField]: onload[pv.groupedField] || [] }
+			return
+		}
 		for (const pv of stockPivots.value) {
 			const grouped = onload[pv.groupedField]
 			const groups = grouped != null ? grouped : []
@@ -1323,9 +1951,17 @@ async function loadAll() {
 	mode.value = "view"
 	activeTab.value = "details"
 	// Meta first (gives field labels + child-table descriptors), then doc.
-	docState.loadMeta()
-	loadChildMetas()
-	await docState.load(props.id)
+	//
+	// EMPTY-META RACE: the view body (and its child-table panels) renders as soon
+	// as `doc` resolves. If `childMetaCache` is still empty at that first paint,
+	// childColumnsFromMeta returns [] and useVisibleColumns would seed a (guarded
+	// against, but still undesirable) empty visible Set. So we load the child
+	// metas IN PARALLEL with the doc but AWAIT BOTH before proceeding — mirroring
+	// the create path — guaranteeing childMetaCache is populated on first paint of
+	// a non-empty childTables. loadMeta and loadChildMetas share one underlying
+	// getdoctype fetch (see loadChildMetas), so this is a single network round-trip.
+	const metaReady = loadChildMetas() // awaits loadMeta internally; populates childMetaCache
+	await Promise.all([metaReady, docState.load(props.id)])
 	if (!docState.doc.value) return
 	// Open on the redesigned Details tab (default) so it's the first impression.
 	// Still hydrate the stock pivots so their child tables render instantly when
@@ -1336,17 +1972,29 @@ async function loadAll() {
 	docState.loadLinked(props.id)
 	docState.loadActivity(props.id)
 	loadConnections()
+	loadIeConvertState()
 }
 
 // The getdoctype bundle is [parentMeta, ...childMetas] keyed by DocType name.
 // useDoc.loadMeta keeps only the parent; we index the child metas here so the
 // edit/create child-table grids get proper, typed columns (esp. in create mode
 // where no rows exist to infer columns from). Fetched once per doctype.
+//
+// DEDUPE: loadChildMetas no longer fires its own getdoctype request. It awaits
+// useDoc.loadMeta() (which DocDetail also calls for the parent meta) and reuses
+// the SAME bundle that call fetched, exposed as docState.metaBundle. loadMeta
+// shares one in-flight promise, so the two former duplicate getdoctype requests
+// per load collapse into one. Falls back to a direct getMeta only if the bundle
+// is somehow unavailable (e.g. loadMeta failed but the endpoint later succeeds).
 const childMetasLoaded = ref(false)
 async function loadChildMetas() {
 	if (childMetasLoaded.value || !doctype.value) return
 	try {
-		const bundle = await getMeta(doctype.value)
+		await docState.loadMeta()
+		let bundle = metaBundle.value
+		if (!Array.isArray(bundle) || !bundle.length) {
+			bundle = await getMeta(doctype.value)
+		}
 		const cache = {}
 		for (const m of bundle) {
 			if (m?.name) cache[m.name] = m
@@ -1394,8 +2042,37 @@ function onShortcut(e) {
 		}
 	}
 }
-onMounted(() => window.addEventListener("keydown", onShortcut))
-onBeforeUnmount(() => window.removeEventListener("keydown", onShortcut))
+onMounted(() => {
+	window.addEventListener("keydown", onShortcut)
+	window.addEventListener("beforeunload", beforeUnloadGuard)
+})
+onBeforeUnmount(() => {
+	window.removeEventListener("keydown", onShortcut)
+	window.removeEventListener("beforeunload", beforeUnloadGuard)
+})
+
+// Q6: SPA route-leave guard — confirm before navigating away from a dirty
+// edit/create form (sidebar tap, breadcrumb, link). Resolves the navigation
+// only if the user confirms; otherwise stays put.
+onBeforeRouteLeave((to, from, next) => {
+	if (isFormMode.value && isDirty.value) {
+		confirm.require({
+			header: "Discard unsaved changes?",
+			message: "You have unsaved changes on this form. Leave without saving?",
+			icon: "pi pi-exclamation-triangle",
+			acceptLabel: "Leave",
+			acceptClass: "p-button-danger",
+			rejectLabel: "Stay",
+			accept: () => {
+				isDirty.value = false
+				next()
+			},
+			reject: () => next(false),
+		})
+	} else {
+		next()
+	}
+})
 
 // ── meta field map ──
 const metaFieldMap = computed(() => {
@@ -1416,7 +2093,11 @@ function inputDescriptor(mf) {
 	const ft = mf.fieldtype
 	const base = {
 		fieldname: mf.fieldname,
-		label: mf.label || humanize(mf.fieldname),
+		// Q18: SPA label override (e.g. supplier → "Job-worker") wins over meta.
+		label: getFieldLabel(doctype.value, mf.fieldname) || mf.label || humanize(mf.fieldname),
+		// Q13: inline help — SPA override first, else the meta description the Desk
+		// shows but /web users never see. Empty string = no help line rendered.
+		help: getFieldHelp(doctype.value, mf.fieldname) || mf.description || "",
 		reqd: !!mf.reqd,
 		readOnly: !!mf.read_only,
 		fieldtype: ft,
@@ -1502,20 +2183,23 @@ const formFields = computed(() => {
 	return out
 })
 
-// Evaluate a Frappe depends_on / mandatory_depends_on expression against the live
-// `form` model. `eval:<js>` runs the JS with `doc` = form; a bare fieldname is
-// truthy when that field is set. A bad/odd expression fails open (shows the field).
-function evalCondition(expr) {
+// Evaluate a Frappe depends_on / mandatory_depends_on expression against a parent
+// state object (`parent`, default the live `form` model). `eval:<js>` runs the JS
+// with `doc` = parent; a bare fieldname is truthy when that field is set. A bad/odd
+// expression fails open (shows the field). View-mode callers pass `doc.value` so
+// the same rule evaluates against the loaded document.
+function evalCondition(expr, parent = form) {
 	const raw = String(expr || "").trim()
 	if (!raw) return true
+	const src = parent || {}
 	if (raw.startsWith("eval:")) {
 		try {
-			return !!Function("doc", `"use strict"; return (${raw.slice(5)});`)(form)
+			return !!Function("doc", `"use strict"; return (${raw.slice(5)});`)(src)
 		} catch (_) {
 			return true
 		}
 	}
-	return !!form[raw]
+	return !!src[raw]
 }
 
 // reqd is the static meta flag OR a currently-satisfied mandatory_depends_on.
@@ -1643,6 +2327,9 @@ function clearForm() {
 
 function buildCreateForm() {
 	clearForm()
+	resetDirty()
+	// Prompt-named create: start with an empty user-supplied name each time.
+	newName.value = ""
 	// Mirror Frappe's `doc.__islocal = 1` for new docs. Several yrp fields
 	// gate on it (e.g. Item.name1's `read_only_depends_on:"eval:!doc.__islocal"`
 	// means "read-only after first save"). Without this set, `!doc.__islocal`
@@ -1665,7 +2352,9 @@ function buildCreateForm() {
 	// DC / Create GRN). Async: trigger the autofill source once everything is
 	// seeded so get_work_order_defaults / get_purchase_order_defaults run and
 	// fill the header + items grid. nextTick lets the editor mount first.
-	applyCreateFormQuery()
+	// Arm dirty-tracking only AFTER the query seed + autofill settle, so a
+	// create-from-parent form doesn't open already "dirty".
+	applyCreateFormQuery().finally(armDirty)
 }
 
 async function applyCreateFormQuery() {
@@ -1692,11 +2381,14 @@ async function applyCreateFormQuery() {
 		await onFieldChanged("work_order")
 	} else if (dt === "Goods Received Note" && form.against_id) {
 		await onFieldChanged("against_id")
+	} else if (dt === "Inspection Entry" && form.against_id) {
+		await onFieldChanged("against_id")
 	}
 }
 
 function buildEditForm() {
 	clearForm()
+	resetDirty()
 	const src = doc.value || {}
 	// Deep copy scalar + child-table values from the doc.
 	for (const [k, v] of Object.entries(src)) {
@@ -1712,6 +2404,8 @@ function buildEditForm() {
 
 async function enterEdit() {
 	if (!doc.value) return
+	serverError.value = null
+	missingField.value = null
 	buildEditForm()
 	mode.value = "edit"
 	// R3a: for stock-pivot doctypes, hydrate each grid from the doc's grouped
@@ -1719,6 +2413,9 @@ async function enterEdit() {
 	// we fetch via getdoc — the same path the Desk uses). Without this the grid
 	// would start empty and saving would wipe the existing rows.
 	if (useStockPivot.value) await hydratePivotsForEdit()
+	// Q6: arm dirty tracking after the form + grids settle (grid hydration is on
+	// the child editor, not `form`, so it never marks dirty).
+	armDirty()
 }
 
 // Fetch the grouped item_details/deliverable_details/receivable_details from the
@@ -1754,6 +2451,16 @@ const editableChildTables = computed(() => {
 			!f.hidden &&
 			!GROUPED_JSON_FIELDS.has(f.fieldname) &&
 			!CHILD_TABLE_EXCLUDE.has(f.fieldname) &&
+			// Honor depends_on on the CHILD-TABLE field itself (e.g. Process'
+			// `process_details` depends_on="eval:doc.is_group == 1"): a table whose
+			// condition is currently false must not render in edit/create. Evaluated
+			// against the live `form`, so toggling the controlling field shows/hides
+			// the grid reactively.
+			(!f.depends_on || evalCondition(f.depends_on, form)) &&
+			// Work Order's mgk_items renders in its OWN dedicated grid placed ABOVE
+			// the deliverables/receivables pivots (see mgkItemsTable). Drop it from
+			// the generic loop so it isn't rendered twice (and below the pivots).
+			!(isWorkOrder.value && f.fieldname === "mgk_items") &&
 			// R3a: stock-pivot doctypes edit these child tables through the grouped
 			// pivot editor, not the flat grid — drop them here for those doctypes only.
 			!pivotFields.has(f.fieldname),
@@ -1774,60 +2481,242 @@ const editableChildTables = computed(() => {
 	return out
 })
 
-// Build the editable columns for a child table: prefer the cached child-DocType
-// meta (typed columns even with no rows — needed for create), then fall back to
-// inferring from existing rows, then a single generic column.
-function childEditColumns(tableField) {
-	const childDt = tableField.options
-	// Per-doctype overrides: columns the parent says must stay read-only even
-	// though the meta marks them editable (e.g. Item.attributes.mapping is
-	// auto-created server-side; the user must not pick it).
+// F4: Work Order's `mgk_items` (MGK Work Order Item: item Link→Item +
+// production_detail Link→Item Production Detail) renders in a DEDICATED flat
+// grid ABOVE the deliverables/receivables pivots. Same descriptor shape as
+// editableChildTables so the existing child-grid markup is reused. Returns null
+// for every other doctype / view mode. The per-row Item Production Detail search
+// is filtered by that row's `item` via onMgkItemLinkComplete.
+const mgkItemsTable = computed(() => {
+	if (!isFormMode.value || !isWorkOrder.value) return null
+	const tf = (meta.value?.fields || []).find(
+		(f) => f.fieldtype === "Table" && f.fieldname === "mgk_items" && !f.hidden,
+	)
+	if (!tf) return null
+	const columns = childEditColumns(tf)
+	return {
+		fieldname: tf.fieldname,
+		label: tf.label || humanize(tf.fieldname),
+		childDoctype: tf.options || "",
+		columns,
+		columnsAvailable: columns.length > 0,
+	}
+})
+
+// Work Order: the `comments` field, excluded from the regular form-field grid
+// (work-order.js hideFormFields) so it renders as the LAST element of the WO
+// form — below the mgk_items grid and the deliverables/receivables pivots. Built
+// via inputDescriptor so its label / help / read-only behaviour matches the rest
+// of the form. Null for every other doctype / view mode.
+const woCommentsField = computed(() => {
+	if (!isFormMode.value || !isWorkOrder.value) return null
+	const mf = metaFieldMap.value.comments
+	if (!mf || mf.hidden) return null
+	return inputDescriptor(mf)
+})
+
+// ════════════════ CHILD-TABLE COLUMNS (fixed width · resize · chooser) ════════
+// Shared across all three child-table render sites (mgk_items grid, the generic
+// editableChildTables edit grids, the view-mode childTables tabs):
+//   • FIXED table layout + per-column explicit width → no expand/shrink on
+//     focus/edit. PrimeVue's columnResizeMode="fixed" + resizableColumns gives
+//     the drag UX, but we DO NOT use stateStorage="local" for widths — PrimeVue
+//     persists widths POSITIONALLY (one CSV restored by nth-child), which corrupts
+//     widths across this table's differing view/edit column sets and after any
+//     visibility toggle. Instead we apply each column's width via :style from a
+//     FIELDNAME-keyed store and capture the user's drags via @column-resize-end.
+//   • A compact "Columns" chooser (Button → Popover with checkboxes) toggles
+//     which columns are visible; the selection persists per user too.
+// The functions below are thin wrappers over the useChildTableColumns composable
+// so the template stays declarative and the three sites share ONE source of truth.
+
+// Width (CSS length) to apply to a column: the user's field-keyed resize override
+// for (this doctype, table, column-fieldname) if present, else the per-fieldtype
+// default. Immune to mode differences and visibility-toggle column-count changes.
+function childColWidth(tableFieldname, col) {
+	return resolvedColumnWidth(doctype.value, tableFieldname, col)
+}
+const childActionColWidth = `${ACTION_COL_WIDTH}px`
+
+// Capture a user resize. PrimeVue's column-resize-end payload is { element, delta }
+// where `element` is the resized header <th> and `delta` is the drag distance in px
+// (no column object is provided). With columnResizeMode="fixed" PrimeVue does NOT
+// itself rewrite cell widths — our :style binding owns them — so the new width is
+// the <th>'s current width + delta. We map the <th> to a fieldname by its index in
+// the header row: these grids render shownColumns (in order) followed by ONE action
+// column, with no leading selection/expander cell, so header index N → shownColumns
+// (..., columns)[N]. The trailing action <th> (index === length) is ignored.
+function onChildColumnResizeEnd(tableFieldname, columns, e, forceFieldnames) {
+	const el = e?.element
+	if (!el || !el.parentElement) return
+	const idx = Array.prototype.indexOf.call(el.parentElement.children, el)
+	if (idx < 0) return
+	// Mirror the rendered column set (incl. the edit grids' forced required
+	// columns) so header index N maps to the same column the user resized.
+	const shown = shownColumns(tableFieldname, columns, forceFieldnames)
+	const col = shown[idx]
+	if (!col?.fieldname) return // out of range (e.g. the trailing action column)
+	const px = el.offsetWidth + (Number(e.delta) || 0)
+	if (px > 0) persistColumnWidth(doctype.value, tableFieldname, col.fieldname, px)
+}
+
+// The reactive visible-column Set for a table (seeded from the persisted
+// selection, else the default-visible set). Keyed by (user, doctype, fieldname).
+function visibleSetFor(tableFieldname, columns) {
+	return useVisibleColumns(doctype.value, tableFieldname, columns)
+}
+// Live parent state a child-column rule evaluates against: the edit `form`
+// (edit/create) or the loaded `doc` (view). Reading these reactive sources makes
+// parent-aware column hides re-evaluate as the controlling field toggles.
+function parentStateForRules() {
+	return isFormMode.value ? form : doc.value || {}
+}
+
+// Per-(doctype) child-column hide rules, declared in a self-contained config and
+// keyed by parent doctype. Each rule maps a child-table fieldname → { columnFn:
+// (parent) => true|false }; returning true HIDES that column. Currently only
+// Process Cost (hide `attribute_value` of `process_cost_values` unless the
+// parent's `depends_on_attribute` is ticked — mirrors Desk).
+const CHILD_COLUMN_RULE_CONFIGS = {
+	[processCostConfig.doctype]: processCostConfig.childColumnRules,
+}
+
+// True ⇒ this child-table column must be HIDDEN for the current parent state.
+// Scoped: only fires for a (doctype, childTable, column) that has a declared rule;
+// everything else falls through (never hidden). Reactive via parentStateForRules.
+function childColumnHiddenBy(tableFieldname, columnFieldname) {
+	const rule = CHILD_COLUMN_RULE_CONFIGS[doctype.value]?.[tableFieldname]?.[columnFieldname]
+	if (typeof rule !== "function") return false
+	try {
+		return !!rule(parentStateForRules())
+	} catch (_) {
+		return false // a misbehaving rule fails open (column shown)
+	}
+}
+
+// Columns actually rendered = the table's columns filtered by its visible Set.
+// EDIT grids pass `forceFieldnames` (the table's REQUIRED fields) so a required
+// cell is always rendered — even when it isn't in_list_view and the user hasn't
+// opted it in — keeping it fillable so save isn't blocked with no way to fill it.
+// The forced columns render in their natural column order (not appended). View
+// grids omit the arg, so this is a no-op there.
+//
+// A declared parent-aware hide rule (childColumnHiddenBy) always wins — even over
+// `forced` — so e.g. Process Cost's `attribute_value` stays hidden while
+// `depends_on_attribute` is off, regardless of in_list_view / required status.
+function shownColumns(tableFieldname, columns, forceFieldnames) {
+	const vis = visibleSetFor(tableFieldname, columns)
+	const forced = forceFieldnames && forceFieldnames.length ? new Set(forceFieldnames) : null
+	return columns.filter(
+		(c) =>
+			!childColumnHiddenBy(tableFieldname, c.fieldname) &&
+			(vis.has(c.fieldname) || (forced && forced.has(c.fieldname))),
+	)
+}
+// Chooser toggle: flip a column's visibility, keeping at least one column shown,
+// then persist the selection for this user.
+function toggleColumn(tableFieldname, columns, fieldname) {
+	const vis = visibleSetFor(tableFieldname, columns)
+	if (vis.has(fieldname)) {
+		if (vis.size <= 1) return // never hide the last column
+		vis.delete(fieldname)
+	} else {
+		vis.add(fieldname)
+	}
+	persistVisibleColumns(doctype.value, tableFieldname, vis)
+}
+function isColumnVisible(tableFieldname, columns, fieldname) {
+	return visibleSetFor(tableFieldname, columns).has(fieldname)
+}
+
+// Per-table refs to the "Columns" chooser Popover instances, keyed by the child
+// table fieldname (a table can appear once per render site, so the fieldname is
+// a unique-enough key within a single mode).
+const colChooserRefs = {}
+function setColChooserRef(fieldname, el) {
+	if (el) colChooserRefs[fieldname] = el
+	else delete colChooserRefs[fieldname]
+}
+function toggleColChooser(fieldname, event) {
+	colChooserRefs[fieldname]?.toggle(event)
+}
+
+// ── Shared child-column derivation (META-DRIVEN — never row-derived) ──────────
+// ONE source of truth for the column set of EVERY child table, used by BOTH the
+// view-mode tabs (childColumns) and the edit grids (childEditColumns). Columns
+// come from the child DocType's META (via the cached getdoctype bundle), so they
+// are present even when the child table has ZERO rows — an empty table renders
+// proper headers instead of a blank column, and the column set never depends on
+// row data.
+//
+// The returned list is the CHOOSER UNIVERSE: every display-worthy field (all
+// non-hidden, non-layout fields), so the user can opt any extra column in. Each
+// column carries the meta flags `in_list_view` / `hidden` / `read_only` / `reqd`
+// so useChildTableColumns' defaultVisibleFieldnames can compute the DEFAULT
+// visible set as: in_list_view fields (field order), else the first 5
+// non-hidden/non-read-only fields. (A user's saved selection still wins.)
+//
+// Each column also carries the edit-cell hints (input/linkTarget/fractions/
+// readonly) so the same objects drive the edit grid without a second pass.
+const CHILD_COL_LAYOUT_TYPES = new Set([
+	"Section Break", "Column Break", "Tab Break", "HTML", "Heading", "Button",
+	"Fold", "Image", "Geolocation", "Signature", "Table", "Table MultiSelect",
+	// Large/structured text fieldtypes: never editable in the flat v1 grid and
+	// pointless as read-only grid columns (they'd surface a wall of code/markup in
+	// a narrow cell). Exclude them from the child-column universe entirely.
+	"Code", "JSON", "Text Editor",
+])
+// Cell input kind for the edit grid: only scalar / link cells are editable in
+// the flat v1 grid; everything else renders as a (read-only) text cell.
+const CHILD_EDITABLE_FIELDTYPES = new Set([
+	"Data", "Small Text", "Int", "Float", "Percent", "Currency", "Link", "Select", "Check",
+])
+
+function childColumnsFromMeta(childDt) {
+	const cmeta = childDt ? childMetaCache.value[childDt] : null
+	if (!cmeta?.fields?.length) return []
 	const readonlySet = getReadOnlyChildFields(doctype.value, childDt)
-	// 1) Prefer child-doctype meta if we have it cached.
-	const cmeta = childMetaCache.value[childDt]
-	if (cmeta?.fields?.length) {
-		const cols = []
-		for (const mf of cmeta.fields) {
-			if (!isEditableChildField(mf)) continue
-			const d = inputDescriptor(mf)
-			cols.push({
-				fieldname: mf.fieldname,
-				label: mf.label || humanize(mf.fieldname),
-				input: childInputKind(d.input),
-				reqd: !!mf.reqd,
-				type: mfTypeToDisplay(mf.fieldtype),
-				isLink: mf.fieldtype === "Link",
-				linkTarget: mf.options || "",
-				minFraction: d.minFraction,
-				maxFraction: d.maxFraction,
-				readonly: readonlySet.has(mf.fieldname),
-			})
-		}
-		if (cols.length) return cols.slice(0, 10)
+	const cols = []
+	for (const mf of cmeta.fields) {
+		// Display-worthy universe: skip layout/system fieldtypes, system/internal
+		// fieldnames, and meta-hidden fields. Everything else is selectable in the
+		// chooser (and a subset is visible by default — see defaultVisibleFieldnames).
+		if (CHILD_COL_LAYOUT_TYPES.has(mf.fieldtype)) continue
+		if (CHILD_HIDDEN.has(mf.fieldname)) continue
+		if (mf.hidden) continue
+		const d = inputDescriptor(mf)
+		const editable = CHILD_EDITABLE_FIELDTYPES.has(mf.fieldtype)
+		cols.push({
+			fieldname: mf.fieldname,
+			label: mf.label || humanize(mf.fieldname),
+			// edit-cell hints
+			input: editable ? childInputKind(d.input) : "text",
+			reqd: !!mf.reqd,
+			type: mfTypeToDisplay(mf.fieldtype),
+			fieldtype: mf.fieldtype, // raw meta type → default column width
+			isLink: mf.fieldtype === "Link",
+			linkTarget: mf.options || "",
+			minFraction: d.minFraction,
+			maxFraction: d.maxFraction,
+			// A field the parent pins read-only, OR a non-editable fieldtype:
+			// render a static cell (no input) so the user can't edit it.
+			readonly: readonlySet.has(mf.fieldname) || !editable,
+			// meta flags consumed by defaultVisibleFieldnames (the DEFAULT visible
+			// set) — NOT a render filter; every column here is chooser-selectable.
+			in_list_view: !!mf.in_list_view,
+			hidden: !!mf.hidden,
+			read_only: !!mf.read_only,
+		})
 	}
-	// 2) Fallback: derive from existing rows on the form/doc.
-	const rows = form[tableField.fieldname] || doc.value?.[tableField.fieldname] || []
-	if (rows.length) {
-		const keys = []
-		for (const k of Object.keys(rows[0])) {
-			if (CHILD_HIDDEN.has(k)) continue
-			const v = rows[0][k]
-			if (v && typeof v === "object") continue
-			keys.push(k)
-		}
-		return keys.slice(0, 10).map((k) => ({
-			fieldname: k,
-			label: humanize(k),
-			input: typeof rows[0][k] === "number" ? "number" : "text",
-			reqd: false,
-			type: null,
-			isLink: false,
-		}))
-	}
-	// 3) No meta, no rows: we have no reliable column definition. Return nothing
-	// rather than guessing a single column — the editor disables "Add Row" and
-	// shows a "columns unavailable" note so we never persist wrong/incomplete data.
-	return []
+	return cols
+}
+
+// EDIT-grid columns for a child table: the shared meta-derived universe. Present
+// even with zero rows (create / empty edit). No meta ⇒ empty list ⇒ the editor
+// disables "Add Row" and points the user to Desk (columnsAvailable=false), so we
+// never persist wrong/incomplete data from guessed columns.
+function childEditColumns(tableField) {
+	return childColumnsFromMeta(tableField.options)
 }
 
 // Child cells only support scalar / link inputs in the flat v1 grid.
@@ -1837,13 +2726,11 @@ function childInputKind(parentInput) {
 	return "text"
 }
 
-function isEditableChildField(mf) {
-	if (META_HIDDEN_FIELDTYPES.has(mf.fieldtype)) return false
-	if (CHILD_HIDDEN.has(mf.fieldname)) return false
-	if (mf.hidden) return false
-	// Only flat scalar / link cells in v1.
-	const ok = ["Data", "Small Text", "Int", "Float", "Percent", "Currency", "Link", "Select", "Check"]
-	return ok.includes(mf.fieldtype)
+// Required child fieldnames (always force-shown in EDIT grids — see shownColumns'
+// `forceFieldnames`) so a required cell stays fillable even when it isn't
+// in_list_view and the user hasn't opted it in. View grids don't need this.
+function reqdFieldnames(columns) {
+	return (columns || []).filter((c) => c.reqd).map((c) => c.fieldname)
 }
 
 function addChildRow(ct) {
@@ -1972,6 +2859,24 @@ async function runDocAutofill(fieldname) {
 		}
 		return
 	}
+	// Inspection Entry mirrors the Desk against_id handler: fetch the source
+	// (GRN / Stock Entry) items as the source-bin grouped payload and load the
+	// split editor. get_initial_payload returns the array directly (no header
+	// dict), so it short-circuits the header-copy path below.
+	if (dt === "Inspection Entry" && (fieldname === "against_id" || fieldname === "against")) {
+		if (!form.against || !form.against_id) return
+		try {
+			const payload = await callMethod(
+				"yrp.yrp.doctype.inspection_entry.inspection_entry.get_initial_payload",
+				{ against: form.against, against_id: form.against_id },
+			)
+			await nextTick()
+			if (gridRefs.items?.loadData) gridRefs.items.loadData(payload || [])
+		} catch (e) {
+			toast.error("Auto-fill failed", e.message)
+		}
+		return
+	}
 	let method = ""
 	let args = null
 	if (dt === "Delivery Challan" && fieldname === "work_order") {
@@ -2052,6 +2957,11 @@ async function onFieldChanged(fieldname) {
 		resetGrnSource()
 		return
 	}
+	if (doctype.value === "Inspection Entry" && fieldname === "against") {
+		form.against_id = ""
+		for (const pv of stockPivots.value) gridRefs[pv.childField]?.loadData?.([])
+		return
+	}
 	await runDocAutofill(fieldname)
 }
 
@@ -2080,6 +2990,34 @@ async function onChildLinkComplete(col, e) {
 	}
 	try {
 		const rows = await searchLink(target, e.query || "")
+		childLinkSuggestions.value = rows.map((r) => r.name)
+	} catch (_) {
+		childLinkSuggestions.value = []
+	}
+}
+
+// F4: row-aware link autocomplete for the Work Order mgk_items grid.
+// `production_detail` (Link → Item Production Detail) is filtered by the row's
+// chosen `item` so the user only sees IPDs for that item; until an item is
+// picked, no suggestions are offered. The `item` column itself uses the default
+// unfiltered Item search. `row` is the live mgk_items row from the #editor slot.
+async function onMgkItemLinkComplete(col, row, e) {
+	const target = col.linkTarget
+	if (!target) {
+		childLinkSuggestions.value = []
+		return
+	}
+	try {
+		let rows
+		if (col.fieldname === "production_detail") {
+			if (!row?.item) {
+				childLinkSuggestions.value = []
+				return
+			}
+			rows = await searchLink(target, e.query || "", { item: row.item })
+		} else {
+			rows = await searchLink(target, e.query || "")
+		}
 		childLinkSuggestions.value = rows.map((r) => r.name)
 	} catch (_) {
 		childLinkSuggestions.value = []
@@ -2123,19 +3061,38 @@ function buildPayload() {
 		// Empty flat child → before_validate clears + rebuilds it from grouped.
 		payload[pv.childField] = []
 	}
+	// Prompt-named create: include the user-supplied name in the insert body.
+	// createDoc POSTs JSON.stringify(payload) to /api/resource/<doctype>, and
+	// Frappe's REST insert honours a provided `name` for autoname="prompt" /
+	// naming_rule="Set by user". Only added in create mode for prompt naming — a
+	// series/field/hash-named doctype's payload is left byte-identical, and edit
+	// mode (where the name already exists) is untouched.
+	if (mode.value === "create" && isPromptNaming.value && newName.value.trim()) {
+		payload.name = newName.value.trim()
+	}
 	return payload
 }
 
+// Returns { label, fieldname } of the first missing required field (fieldname is
+// null for a child-table cell — there's no scroll target on the parent form), or
+// null when everything required is filled. The fieldname drives Q5's scroll+focus.
 function firstMissingRequired() {
 	// 1) Parent fields (only those currently visible — a depends_on-hidden field
 	// is not required).
 	for (const f of visibleFormFields.value) {
-		if (isMissing(f)) return f.label
+		if (isMissing(f)) return { label: f.label, fieldname: f.fieldname }
 	}
 	// 2) Editable child-table rows: any required cell left empty blocks the save
 	// here (inline) instead of letting the server reject the round-trip. The
 	// returned label names the child table + field + row so the toast is actionable.
-	for (const ct of editableChildTables.value) {
+	// The Work Order mgk_items grid renders in its own dedicated grid (dropped from
+	// editableChildTables to avoid double-rendering) but its required cells
+	// (MGK Work Order Item.item / .production_detail) must still be validated here —
+	// validate it alongside the generic edit grids with identical behaviour.
+	const editGrids = mgkItemsTable.value
+		? [mgkItemsTable.value, ...editableChildTables.value]
+		: editableChildTables.value
+	for (const ct of editGrids) {
 		const reqdCols = ct.columns.filter((c) => c.reqd)
 		if (!reqdCols.length) continue
 		const rows = Array.isArray(form[ct.fieldname]) ? form[ct.fieldname] : []
@@ -2143,25 +3100,69 @@ function firstMissingRequired() {
 			for (const col of reqdCols) {
 				const v = rows[i][col.fieldname]
 				if (v === null || v === undefined || v === "") {
-					return `${ct.label} → ${col.label} (row ${i + 1})`
+					return { label: `${ct.label} → ${col.label} (row ${i + 1})`, fieldname: null }
 				}
 			}
+		}
+	}
+	// 3) Inspection Entry: the Desk blocks an empty split grid client-side
+	// ("Add Items to continue"). The IE items live in the editor (not `form`),
+	// so check it here and block inline rather than round-tripping to the server.
+	if (isInspectionEntry.value) {
+		const grid = gridRefs.items
+		if (grid && grid.hasItems && !grid.hasItems()) {
+			return { label: "Items — select a source document so its items load", fieldname: null }
 		}
 	}
 	return null
 }
 
+// Q5: bring the offending field into view and focus its control so the user
+// isn't told "X is required" about a field 3 screens down they can't see.
+async function focusMissingField(fieldname) {
+	if (!fieldname) return
+	await nextTick()
+	const wrap = document.getElementById(`field-${fieldname}`)
+	if (!wrap) return
+	wrap.scrollIntoView({ behavior: "smooth", block: "center" })
+	const input = wrap.querySelector("input, textarea, select, [tabindex]")
+	if (input && typeof input.focus === "function") input.focus()
+}
+
+// Q15: a failed high-stakes action (submit/cancel/delete/amend) both toasts and
+// pins the full server message in the closable banner so the user can read the
+// (often multi-line) validation/stock error while deciding what to do.
+function showActionError(title, e) {
+	serverError.value = { title, lines: errorLines(e) }
+	toast.error(title, e?.message)
+}
+
 async function onSave() {
-	const missing = firstMissingRequired()
-	if (missing) {
-		toast.warn("Missing required field", `“${missing}” is required.`)
+	// Prompt-named create guard: block here with a clear toast rather than letting
+	// the server return "Please set Document Name" after the round-trip. Only fires
+	// for prompt-named doctypes in create mode; non-prompt doctypes skip this.
+	if (mode.value === "create" && isPromptNaming.value && !newName.value.trim()) {
+		missingField.value = { label: `${registry.value?.label || doctype.value} Name`, fieldname: "__newname" }
+		toast.warn("Name is required", "Set a unique name for this document before saving.")
+		focusMissingField("__newname")
 		return
 	}
+	const missing = firstMissingRequired()
+	if (missing) {
+		missingField.value = missing
+		toast.warn("Missing required field", `“${missing.label}” is required.`)
+		focusMissingField(missing.fieldname)
+		return
+	}
+	missingField.value = null
+	serverError.value = null
 	const payload = buildPayload()
 	try {
 		if (mode.value === "create") {
 			const result = await docState.save(payload)
 			const newName = result?.name
+			// Clear dirty BEFORE navigating so the route-leave guard stays silent.
+			isDirty.value = false
 			toast.success("Created", newName ? `${doctype.value} ${newName} created` : "Document created")
 			if (newName) {
 				router.push(`/${props.docRoute}/${encodeURIComponent(newName)}`)
@@ -2170,6 +3171,7 @@ async function onSave() {
 			}
 		} else {
 			await docState.save(payload, props.id)
+			isDirty.value = false
 			toast.success("Saved", `${props.id} updated`)
 			mode.value = "view"
 			await docState.load(props.id)
@@ -2186,11 +3188,22 @@ async function onSave() {
 			loadConnections()
 		}
 	} catch (e) {
+		// Q15: keep the full (often multi-line) server message visible in a
+		// closable banner — the toast alone vanishes before the user can read it.
+		serverError.value = {
+			title: mode.value === "create" ? "Could not create" : "Could not save",
+			lines: errorLines(e),
+		}
 		toast.error("Save failed", e.message)
 	}
 }
 
-function onDiscard() {
+// Q6: actually drop the form. Clears the dirty flag FIRST so the create-mode
+// router.push doesn't re-trigger the route-leave confirm (double prompt).
+function doDiscard() {
+	isDirty.value = false
+	serverError.value = null
+	missingField.value = null
 	if (mode.value === "create") {
 		router.push(`/${props.docRoute}`)
 		return
@@ -2198,6 +3211,21 @@ function onDiscard() {
 	// edit → drop the form copy, back to view.
 	clearForm()
 	mode.value = "view"
+}
+function onDiscard() {
+	if (isDirty.value) {
+		confirm.require({
+			header: "Discard changes?",
+			message: "Discard your unsaved changes on this form?",
+			icon: "pi pi-exclamation-triangle",
+			acceptLabel: "Discard",
+			acceptClass: "p-button-danger",
+			rejectLabel: "Keep editing",
+			accept: doDiscard,
+		})
+		return
+	}
+	doDiscard()
 }
 
 function onSubmit() {
@@ -2210,10 +3238,10 @@ function onSubmit() {
 			acting.value = "submit"
 			try {
 				await docState.submit(props.id)
-				toast.success("Submitted", `${props.id} submitted`)
+				toast.success("Submitted", `${props.id} submitted`, 6000)
 				await reloadView()
 			} catch (e) {
-				toast.error("Submit failed", e.message)
+				showActionError("Submit failed", e)
 			} finally {
 				acting.value = null
 			}
@@ -2232,10 +3260,10 @@ function onCancel() {
 			acting.value = "cancel"
 			try {
 				await docState.cancel(props.id)
-				toast.success("Cancelled", `${props.id} cancelled`)
+				toast.success("Cancelled", `${props.id} cancelled`, 6000)
 				await reloadView()
 			} catch (e) {
-				toast.error("Cancel failed", e.message)
+				showActionError("Cancel failed", e)
 			} finally {
 				acting.value = null
 			}
@@ -2253,10 +3281,10 @@ function onDelete() {
 			acting.value = "delete"
 			try {
 				await docState.remove(props.id)
-				toast.success("Deleted", `${props.id} deleted`)
+				toast.success("Deleted", `${props.id} deleted`, 6000)
 				router.push(`/${props.docRoute}`)
 			} catch (e) {
-				toast.error("Delete failed", e.message)
+				showActionError("Delete failed", e)
 				acting.value = null
 			}
 		},
@@ -2291,15 +3319,95 @@ function onCreateDcFromWo() {
 		},
 	})
 }
-function onCreateGrnFromWo() {
+// Work Order → Create Debit. Mirrors the other create-from-WO handlers; seeds the
+// new Debit's `work_order` so the create page can autofill against it.
+function onCreateDebitFromWo() {
+	if (!doc.value) return
+	router.push({ path: "/debit/new", query: { work_order: doc.value.name } })
+}
+// Calculate Deliverables — multi-item Work Order (yarn mode). Fetches the
+// per-row payload, then opens CalculateDeliverablesModal with the rows. The
+// modal assembles + posts the payload; we refresh the doc + pivots on success.
+const calcDeliverablesOpen = ref(false)
+const calcDeliverablesPayload = ref({})
+
+async function onCalculateDeliverables() {
+	if (!doc.value) return
+	try {
+		const payload = await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.get_yarn_deliverable_rows",
+			{ work_order: doc.value.name },
+		)
+		if (!payload?.is_yarn_process) {
+			toast.warn(
+				"Not a Yarn Process",
+				`The process '${payload?.process_name || ""}' is not a Yarn Process. The matrix calculation mode is not yet available.`,
+			)
+			return
+		}
+		if (!(payload.rows || []).length) {
+			toast.warn("No Items", "Add at least one Item row to this Work Order first.")
+			return
+		}
+		calcDeliverablesPayload.value = payload
+		calcDeliverablesOpen.value = true
+	} catch (e) {
+		toast.error("Calculate Deliverables failed", e.message)
+	}
+}
+
+// After calculate_deliverables succeeds: reload the doc so deliverables /
+// receivables are current, re-hydrate the stock pivots that render them, then
+// toast the counts and let the modal close itself.
+async function onDeliverablesCalculated(res) {
+	await docState.load(props.id)
+	await hydratePivotsForView()
+	toast.success(
+		"Deliverables calculated",
+		`${res?.deliverables ?? 0} deliverable(s) and ${res?.receivables ?? 0} receivable(s).`,
+		6000,
+	)
+}
+async function onCreateGrnFromWo() {
+	if (!doc.value) return
+	const query = {
+		against: "Work Order",
+		against_id: doc.value.name,
+		supplier: doc.value.supplier || "",
+		supplier_address: doc.value.supplier_address || "",
+		posting_date: todayStr(),
+		delivery_date: todayStr(),
+		posting_time: nowTimeStrLocal(),
+		is_rework: doc.value.is_rework ? 1 : 0,
+		includes_packing: doc.value.includes_packing ? 1 : 0,
+	}
+	// Q12: if the WO has exactly ONE submitted Delivery Challan, pre-seed it so
+	// the GRN receives against the obvious DC with no re-pick (a wrong DC → wrong
+	// qty is a real error source). With several, leave blank — the autofill still
+	// scopes items by the WO and the user picks the DC.
+	try {
+		const { data } = await getList("Delivery Challan", {
+			fields: ["name"],
+			filters: [["work_order", "=", doc.value.name], ["docstatus", "=", 1]],
+			limit_page_length: 5,
+		})
+		if (Array.isArray(data) && data.length === 1) query.delivery_challan = data[0].name
+	} catch (_) {
+		/* non-fatal: leave delivery_challan unset */
+	}
+	router.push({ path: "/goods-received-note/new", query })
+}
+// Q9: "Create GRN" on a submitted Delivery Challan — seed against its parent Work
+// Order AND the DC itself, so the GRN receives exactly this challan's items.
+function onCreateGrnFromDc() {
 	if (!doc.value) return
 	router.push({
 		path: "/goods-received-note/new",
 		query: {
 			against: "Work Order",
-			against_id: doc.value.name,
+			against_id: doc.value.work_order || "",
+			delivery_challan: doc.value.name,
 			supplier: doc.value.supplier || "",
-			supplier_address: doc.value.supplier_address || "",
 			posting_date: todayStr(),
 			delivery_date: todayStr(),
 			posting_time: nowTimeStrLocal(),
@@ -2322,6 +3430,21 @@ function onCreateGrnFromPo() {
 		},
 	})
 }
+// "Create Inspection Entry" on a submitted GRN — mirrors the Desk GRN→IE
+// connection. Seeds against=Goods Received Note + against_id; the IE create
+// page's applyCreateFormQuery fires get_initial_payload to load the items.
+function onCreateInspectionFromGrn() {
+	if (!doc.value) return
+	router.push({
+		path: "/inspection-entry/new",
+		query: {
+			against: "Goods Received Note",
+			against_id: doc.value.name,
+			posting_date: todayStr(),
+			posting_time: nowTimeStrLocal(),
+		},
+	})
+}
 
 // deferred: amend flow left as-is by decision — useDoc.amend already routes
 // through the standard Frappe amend (copy → new draft); a rewrite is out of scope.
@@ -2336,10 +3459,57 @@ function onAmend() {
 			try {
 				const result = await docState.amend(props.id)
 				const newName = result?.name
-				toast.success("Amended", newName ? `Draft ${newName} created` : "Amendment created")
+				toast.success("Amended", newName ? `Draft ${newName} created` : "Amendment created", 6000)
 				if (newName) router.push(`/${props.docRoute}/${encodeURIComponent(newName)}`)
 			} catch (e) {
-				toast.error("Amend failed", e.message)
+				showActionError("Amend failed", e)
+			} finally {
+				acting.value = null
+			}
+		},
+	})
+}
+
+// Inspection Entry: fetch the approver-gated "Convert Stock" eligibility for a
+// submitted, not-yet-converted IE (mirrors the Desk's _maybe_add_convert_stock_button).
+async function loadIeConvertState() {
+	ieConvert.value = null
+	if (!isInspectionEntry.value || !doc.value || docstatus.value !== 1) return
+	if (doc.value.is_converted || (doc.value.status || "") === "Cancelled") return
+	try {
+		ieConvert.value = await callMethod(
+			"yrp.yrp.doctype.inspection_entry.inspection_entry.can_convert_stock",
+			{ name: doc.value.name },
+		)
+	} catch (_) {
+		ieConvert.value = null
+	}
+}
+
+function onConvertStock() {
+	if (!doc.value) return
+	const sibs = ieConvert.value?.siblings || []
+	const sibNote = sibs.length
+		? ` Note: ${sibs.length} other Inspection Entr${sibs.length > 1 ? "ies have" : "y has"} already converted stock for ${doc.value.against_id}.`
+		: ""
+	confirm.require({
+		header: "Convert stock?",
+		message: `Convert stock for ${doc.value.name}? This writes the inspection's stock ledger entries (reclassifying received qty into the chosen received types) and cannot be undone.${sibNote}`,
+		icon: "pi pi-exclamation-triangle",
+		acceptLabel: "Convert",
+		acceptClass: "p-button-primary",
+		rejectLabel: "Cancel",
+		accept: async () => {
+			acting.value = "convert"
+			try {
+				await callMethod(
+					"yrp.yrp.doctype.inspection_entry.inspection_entry.convert_stock",
+					{ name: doc.value.name },
+				)
+				toast.success("Stock converted", `${doc.value.name} stock converted`, 6000)
+				await reloadView()
+			} catch (e) {
+				showActionError("Convert failed", e)
 			} finally {
 				acting.value = null
 			}
@@ -2348,6 +3518,11 @@ function onAmend() {
 }
 
 async function reloadView() {
+	// Q15: a successful submit/cancel/approval-change clears any pinned error
+	// banner from a prior failed attempt (else a stale red banner contradicts the
+	// success toast on a retry that worked). reloadView is the chokepoint for those.
+	serverError.value = null
+	missingField.value = null
 	await docState.load(props.id)
 	// See the note in onSave: viewGrouped doesn't refresh from a plain
 	// doc.load, so submit/cancel/amend/approval-change would leave the
@@ -2357,6 +3532,7 @@ async function reloadView() {
 	docState.loadLinked(props.id)
 	docState.loadActivity(props.id)
 	loadConnections()
+	loadIeConvertState()
 	if (isWorkOrder.value && approvalRef.value) approvalRef.value.reload?.()
 	if (isWorkflow.value && workflowRef.value) workflowRef.value.reload?.()
 }
@@ -2406,7 +3582,7 @@ const detailFields = computed(() => {
 			if (mf.read_only && isEmptyForHide(doc.value[mf.fieldname], mf.fieldtype)) continue
 			out.push({
 				fieldname: mf.fieldname,
-				label: mf.label || humanize(mf.fieldname),
+				label: getFieldLabel(doctype.value, mf.fieldname) || mf.label || humanize(mf.fieldname),
 				type: mfTypeToDisplay(mf.fieldtype),
 				isLink: mf.fieldtype === "Link",
 			})
@@ -2448,7 +3624,7 @@ const detailSections = computed(() => {
 				if (mf && META_HIDDEN_FIELDTYPES.has(mf.fieldtype)) continue
 				if (mf?.hidden) continue
 				if (mf?.read_only && isEmptyForHide(doc.value[fn], mf?.fieldtype)) continue
-				const label = (typeof raw === "object" && raw.label) || mf?.label || humanize(fn)
+				const label = getFieldLabel(doctype.value, fn) || (typeof raw === "object" && raw.label) || mf?.label || humanize(fn)
 				const type = (typeof raw === "object" && raw.type) || (mf ? mfTypeToDisplay(mf.fieldtype) : null)
 				fields.push({
 					fieldname: fn,
@@ -2457,7 +3633,9 @@ const detailSections = computed(() => {
 					isLink: type === "Link" || mf?.fieldtype === "Link" || !!linkTypeFor(fn),
 				})
 			}
-			if (fields.length) {
+			// Q16: don't render a card whose every field is empty (e.g. an empty
+			// Notes / Logistics group) — whole cards of em-dashes are pure noise.
+			if (fields.length && !fields.every((fl) => isEmptyValue(doc.value[fl.fieldname]))) {
 				out.push({
 					key: g.key || g.label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
 					label: g.label,
@@ -2491,7 +3669,8 @@ const detailSections = computed(() => {
 		const sections = []
 		let cur = { key: "details", label: null, fields: [] }
 		const flush = () => {
-			if (cur.fields.length) sections.push(cur)
+			// Q16: drop a section whose visible fields are all empty.
+			if (cur.fields.length && !cur.fields.every((fl) => isEmptyValue(doc.value[fl.fieldname]))) sections.push(cur)
 		}
 		for (const mf of meta.value.fields) {
 			if (mf.fieldtype === "Section Break") {
@@ -2506,7 +3685,7 @@ const detailSections = computed(() => {
 			if (mf.read_only && isEmptyForHide(doc.value[mf.fieldname], mf.fieldtype)) continue
 			cur.fields.push({
 				fieldname: mf.fieldname,
-				label: mf.label || humanize(mf.fieldname),
+				label: getFieldLabel(doctype.value, mf.fieldname) || mf.label || humanize(mf.fieldname),
 				type: mfTypeToDisplay(mf.fieldtype),
 				isLink: mf.fieldtype === "Link",
 			})
@@ -2525,12 +3704,26 @@ const detailSections = computed(() => {
 	return fields.length ? [{ key: "details", label: "Details", fields }] : []
 })
 
+// Q1: resolve Link titles whenever the rendered Details fields change (doc load,
+// meta load, save). Cheap — prime() skips already-cached values.
+watch(detailSections, primeDetailLinks, { immediate: true })
+
 // ── Child tables (from meta Table fields) — VIEW mode ──
 const childTables = computed(() => {
 	if (!doc.value) return []
 	const tables = []
+	// Keep a pivot child field even when its meta Table is hidden:1 (e.g.
+	// Inspection Entry's `items`) — it renders via the grouped editor, not the
+	// flat grid, so the hidden flag must not drop it from the view tabs (don't
+	// rely on the bare doc-key fallback below to surface it).
+	const pivotFields = pivotChildFields.value
 	const metaTables = (meta.value?.fields || []).filter(
-		(f) => f.fieldtype === "Table" && !f.hidden && !CHILD_TABLE_EXCLUDE.has(f.fieldname),
+		(f) => f.fieldtype === "Table" && !CHILD_TABLE_EXCLUDE.has(f.fieldname)
+			&& (!f.hidden || pivotFields.has(f.fieldname))
+			// Honor depends_on on the child-table field (view mode): evaluate the
+			// condition against the loaded `doc` so e.g. Process' `process_details`
+			// is hidden when is_group is off and shown when on — matching Desk.
+			&& (!f.depends_on || evalCondition(f.depends_on, doc.value)),
 	)
 	if (metaTables.length) {
 		for (const tf of metaTables) {
@@ -2538,45 +3731,82 @@ const childTables = computed(() => {
 			if (!Array.isArray(rows)) continue
 			tables.push({
 				fieldname: tf.fieldname,
+				// columns are META-DRIVEN (childColumns ignores rows), so an empty
+				// child table still renders its proper headers — never a blank column.
 				label: tf.label || humanize(tf.fieldname),
-				columns: childColumns(rows),
+				columns: childColumns(rows, tf.options),
 			})
 		}
-		// U2: surface the primary content tables (Deliverables/Receivables/Items)
-		// FIRST, ahead of low-traffic logs.
-		const pivotFields = pivotChildFields.value
+		// Work Order: DETERMINISTIC view-tab order — Items → Deliverables →
+		// Receivables FIRST (immediately after the Details tab), then every other
+		// child table in its existing order. We sort by an explicit priority list
+		// (NOT meta field_order, which has proven cache-sensitive). Array.sort is
+		// stable, so non-priority tables keep their relative order. Other doctypes
+		// keep the generic pivot-first ordering below.
+		if (isWorkOrder.value) {
+			const PRIORITY = ["mgk_items", "deliverables", "receivables"]
+			const rank = (fn) => {
+				const i = PRIORITY.indexOf(fn)
+				return i === -1 ? PRIORITY.length : i
+			}
+			tables.sort((a, b) => rank(a.fieldname) - rank(b.fieldname))
+			return tables
+		}
+		// U2: every other doctype — surface the primary content tables
+		// (Deliverables/Receivables/Items) FIRST, ahead of low-traffic logs.
 		if (pivotFields.size) {
 			tables.sort((a, b) => (pivotFields.has(a.fieldname) ? 0 : 1) - (pivotFields.has(b.fieldname) ? 0 : 1))
 		}
 		return tables
 	}
+	// Degenerate fallback — only when the parent meta has NO Table fields at all
+	// (essentially never for a real doctype). With no child-DocType meta to drive
+	// columns we fall back to row-key inference here, since childColumns is meta-only.
 	for (const [k, v] of Object.entries(doc.value)) {
 		if (!Array.isArray(v) || !v.length || typeof v[0] !== "object") continue
-		tables.push({ fieldname: k, label: humanize(k), columns: childColumns(v) })
+		tables.push({ fieldname: k, label: humanize(k), columns: childColumnsFromRows(v) })
 	}
 	return tables
 })
+
+// Row-key column inference — the LAST-RESORT path (no child-DocType meta cached).
+// Used only by the degenerate childTables fallback above. Headers are humanized
+// row keys; fieldtype is guessed from the value so widths/format still resolve.
+// All inferred columns are visible by default (no in_list_view info to filter on).
+function childColumnsFromRows(rows) {
+	if (!rows.length) return []
+	const keys = []
+	for (const k of Object.keys(rows[0])) {
+		if (CHILD_HIDDEN.has(k)) continue
+		const val = rows[0][k]
+		if (val && typeof val === "object") continue
+		keys.push(k)
+	}
+	return keys.slice(0, 8).map((k) => ({
+		fieldname: k,
+		label: humanize(k),
+		type: typeof rows[0][k] === "number" ? "Float" : null,
+		fieldtype: typeof rows[0][k] === "number" ? "Float" : "Data",
+		isLink: false,
+		reqd: false,
+		in_list_view: true,
+		hidden: false,
+		read_only: false,
+	}))
+}
 
 const CHILD_HIDDEN = new Set([
 	"name", "owner", "creation", "modified", "modified_by", "docstatus", "idx",
 	"parent", "parentfield", "parenttype", "doctype", "__islocal", "__unsaved",
 ])
 
-function childColumns(rows) {
-	if (!rows.length) return []
-	const keys = []
-	for (const k of Object.keys(rows[0])) {
-		if (CHILD_HIDDEN.has(k)) continue
-		const v = rows[0][k]
-		if (v && typeof v === "object") continue
-		keys.push(k)
-	}
-	return keys.slice(0, 8).map((k) => ({
-		fieldname: k,
-		label: humanize(k),
-		type: null,
-		isLink: false,
-	}))
+// VIEW-mode columns for a child table — META-DRIVEN (shared with the edit grids),
+// so the columns (and their headers) show even when the table has ZERO rows. The
+// old row-key derivation rendered a blank/empty column for an empty table; this
+// derives the same chooser universe from child meta regardless of row data. The
+// `rows` arg is intentionally ignored (kept for call-site compatibility / intent).
+function childColumns(_rows, childDt) {
+	return childColumnsFromMeta(childDt)
 }
 
 function rowsFor(ct) {
@@ -2590,6 +3820,10 @@ function rowsFor(ct) {
 function tabBadge(ct) {
 	if (pivotChildFields.value.has(ct.fieldname)) {
 		const groups = viewGrouped.value?.[ct.fieldname]
+		// Inspection Entry's grouped payload is a flat source-bin list (no nested
+		// `items`), so badge the source-bin count; the StockItemGridEditor pivots
+		// nest item rows, so sum those.
+		if (isInspectionEntry.value) return Array.isArray(groups) ? groups.length : rowsFor(ct).length
 		if (Array.isArray(groups)) return groups.reduce((n, g) => n + (g.items?.length || 0), 0)
 	}
 	return rowsFor(ct).length
@@ -2748,10 +3982,16 @@ const quickInfo = computed(() => {
 		: detailFields.value.slice(0, 5).map((f) => [f.fieldname, f.label])
 	for (const [fn, label] of pref) {
 		const f = detailFields.value.find((x) => x.fieldname === fn)
-		push(label, f ? displayValue(d[fn], f.type) : d[fn])
+		// Q1: a Link in Quick Info resolves to the human name too (else the WO
+		// Job-worker line shows S-0003 next to the resolved name in the card).
+		const val = f
+			? (f.isLink && !isEmptyValue(d[fn]) ? linkPartsFor(f, d[fn]).primary : displayValue(d[fn], f.type, fn))
+			: d[fn]
+		push(label, val)
 	}
-	push("Created by", shortUser(d.owner))
-	push("Last updated", formatDateTime(d.modified))
+	// Q17: "Created by" / "Last updated" intentionally dropped — they're audit
+	// metadata, available on the Activity tab. Quick Info keeps only the
+	// decision facts (what / how-many / by-when). Status lives in the header tag.
 	return out
 })
 
@@ -2777,9 +4017,41 @@ function navigateDoc(dt, name) {
 }
 function navigateLink(field, value) {
 	if (!value) return
-	const mf = metaFieldMap.value[field.fieldname]
-	const targetDt = mf?.options
+	const targetDt = linkTargetFor(field)
 	if (targetDt) navigateDoc(targetDt, value)
+}
+
+// ── Q1: Link code → human name ───────────────────────────────────────────────
+// The target doctype of a Details Link field (Dynamic Links resolve from their
+// controlling field on the loaded doc).
+function linkTargetFor(field) {
+	const mf = metaFieldMap.value[field.fieldname]
+	if (!mf) return ""
+	return mf.fieldtype === "Dynamic Link" ? (doc.value?.[mf.options] || "") : (mf.options || "")
+}
+// { primary, code } for a Link value: sibling `<field>_name` → resolved title →
+// raw code. `code` is "" when the primary already IS the code (no duplication).
+function linkPartsFor(field, value) {
+	const sibling = doc.value?.[`${field.fieldname}_name`]
+	return linkTitles.linkParts(linkTargetFor(field), value, sibling)
+}
+// Batch-resolve titles for the Details links that lack a `_name` sibling, so
+// codes like `S-0003` / `PC-00007` render as the human name. No-ops for values
+// already cached, so it's cheap to re-run on every (re)load.
+function primeDetailLinks() {
+	if (!doc.value) return
+	const pairs = []
+	for (const s of detailSections.value) {
+		for (const f of s.fields) {
+			if (!f.isLink) continue
+			const val = doc.value[f.fieldname]
+			if (!val) continue
+			if (doc.value[`${f.fieldname}_name`]) continue // sibling already names it
+			const target = linkTargetFor(f)
+			if (target) pairs.push({ doctype: target, name: val })
+		}
+	}
+	if (pairs.length) linkTitles.prime(pairs)
 }
 function goToFirst(group) {
 	if (group.rows[0]) navigateDoc(group.doctype, group.rows[0].name)
@@ -2860,9 +4132,21 @@ function mfTypeToDisplay(ft) {
 	if (ft === "Link") return "Link"
 	return null
 }
-function displayValue(val, type) {
+// Q20: the edit-mode toggle's word — positive labels for negatively-named flags
+// ("Disabled"/"Active") via the field-config override, else plain Yes/No.
+function checkWord(f) {
+	const bl = getBoolLabels(doctype.value, f.fieldname)
+	return form[f.fieldname] ? (bl?.on ?? "Yes") : (bl?.off ?? "No")
+}
+function displayValue(val, type, fieldname) {
 	if (val === null || val === undefined || val === "") return "—"
-	if (type === "Check") return val ? "Yes" : "No"
+	if (type === "Check") {
+		// Q20: positive boolean display — show the effective state ("Active") for
+		// negatively-named flags instead of the double-negative "Disabled: No".
+		const bl = fieldname ? getBoolLabels(doctype.value, fieldname) : null
+		if (bl) return val ? bl.on : bl.off
+		return val ? "Yes" : "No"
+	}
 	if (type === "Date") return formatDate(val)
 	if (type === "Datetime") return formatDateTime(val)
 	if (type === "Currency") return formatNumber(val)
@@ -2971,6 +4255,16 @@ function stripHtml(s) {
 	background: var(--mgk-accent-50);
 }
 
+.print-form {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-top: 2px;
+}
+.print-form .fld {
+	width: 100%;
+}
+
 /* States */
 .state-block {
 	display: flex;
@@ -3059,7 +4353,7 @@ function stripHtml(s) {
 	width: 100%;
 }
 .form-field .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 	margin-left: 2px;
 }
 .fld-check {
@@ -3107,6 +4401,46 @@ function stripHtml(s) {
 	color: var(--mgk-muted);
 	font-style: italic;
 }
+.child-head-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+/* View-mode child-table column chooser bar (no head row to hang it on). */
+.child-view-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: 8px;
+}
+/* "Columns" chooser popover body */
+.col-chooser {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 180px;
+	max-height: 320px;
+	overflow-y: auto;
+	padding: 2px;
+}
+.col-chooser__title {
+	font-size: 11px;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	color: var(--mgk-muted);
+	font-weight: 600;
+	margin-bottom: 2px;
+}
+.col-chooser__row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.col-chooser__row label {
+	font-size: 13px;
+	color: var(--mgk-ink);
+	cursor: pointer;
+	user-select: none;
+}
 .child-cols-note.pivot-note {
 	color: var(--mgk-accent-700);
 	font-style: normal;
@@ -3115,8 +4449,39 @@ function stripHtml(s) {
 .edit-dt :deep(.cell-input) {
 	width: 100%;
 }
+/* PrimeVue's `fluid` sets the InputNumber/AutoComplete inner <input> to
+   width:1% (a flex trick that needs a flex host), but our .cell-input host
+   renders display:block, so the inner input collapses to ~26px and the user
+   can't see the value being typed. Force the inner input to fill the host. */
+.edit-dt :deep(.cell-input input) {
+	width: 100%;
+}
 .edit-dt :deep(.p-datatable-tbody > tr > td) {
 	padding: 6px 10px;
+}
+/* Fixed-layout child tables: clip overflowing cell content so a long value or an
+   in-cell editor can't force a column wider than its set width (the old
+   focus/edit jitter). The editor inputs are width:100% so they fit the cell. */
+.child-dt :deep(.p-datatable-tbody > tr > td),
+.child-dt :deep(.p-datatable-thead > tr > th) {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.child-dt :deep(.p-datatable-tbody > tr > td > span) {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* EDIT grids only: do NOT clip the cell while an in-cell editor (InputNumber /
+   AutoComplete) is mounted — the ellipsis clipping otherwise hides the caret and
+   the just-typed digit until blur (cell still uses the fixed column width, so the
+   layout doesn't jitter — the editor inputs are width:100% and fit the cell).
+   Higher specificity than the .child-dt clip rule above (.edit-dt.child-dt) AND
+   ordered after it, so it wins for edit grids; view-mode .child-dt keeps the clip. */
+.edit-dt.child-dt :deep(.p-datatable-tbody > tr > td) {
+	overflow: visible;
+	text-overflow: clip;
 }
 
 /* Tab badge */
@@ -3148,15 +4513,15 @@ function stripHtml(s) {
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius);
 	overflow: hidden;
-	box-shadow: var(--mgk-shadow-sm);
+	box-shadow: var(--mgk-shadow-card);
 }
 .detail-card__head {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	padding: 10px 16px;
-	/* AA FIX: band runs accent-600 → accent-700 so white title passes 4.6:1 */
-	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+	/* Light band: pale tint + teal title (AA ~4.6:1), header recedes so data leads. */
+	background: var(--mgk-accent-50); border-bottom: 1px solid var(--mgk-line);
 }
 .detail-card__dot {
 	width: 6px;
@@ -3267,12 +4632,12 @@ function stripHtml(s) {
 	font-size: 11px;
 }
 .tl-dot.good {
-	border-color: #16a34a;
-	color: #16a34a;
+	border-color: var(--mgk-success);
+	color: var(--mgk-success);
 }
 .tl-dot.danger {
-	border-color: #be123c;
-	color: #be123c;
+	border-color: var(--mgk-danger);
+	color: var(--mgk-danger);
 }
 .tl-dot.info {
 	border-color: var(--mgk-accent);
@@ -3289,10 +4654,10 @@ function stripHtml(s) {
 	padding-bottom: 12px;
 }
 .txt-danger {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 .txt-good {
-	color: #16a34a;
+	color: var(--mgk-success);
 }
 .tab-footnote {
 	margin: 14px 2px 0;
@@ -3381,7 +4746,7 @@ function stripHtml(s) {
 }
 .side-card {
 	border: 1px solid var(--mgk-line);
-	box-shadow: var(--mgk-shadow-sm);
+	box-shadow: var(--mgk-shadow-card);
 	overflow: hidden;
 }
 /* Band head is full-bleed; the body owns the inset. Matches the Details cards. */
@@ -3443,5 +4808,85 @@ function stripHtml(s) {
 	font-weight: 600;
 	padding: 1px 8px;
 	border-radius: 999px;
+}
+
+/* ════════════ UX quick-wins (2026-06-01) ════════════ */
+
+/* Q2: the human title is the page hero; the serial is a small mono chip. */
+.doc-hero {
+	font-size: 20px;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	color: var(--mgk-ink);
+	line-height: 1.2;
+}
+.id-block .doc-id {
+	font-size: 12px;
+	color: var(--mgk-muted);
+}
+.doc-subtle.edit-hint {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--mgk-accent-700);
+}
+
+/* Q4: status is the visual anchor — bigger, bolder tag (beats .p-tag padding). */
+.head-status.p-tag {
+	font-size: 13px;
+	font-weight: 700;
+	padding: 5px 12px;
+}
+
+/* Q11: the forward action (Create …) is the primary next step, set apart from
+   the danger-styled Cancel beside it. */
+.cta-wrap {
+	display: inline-flex;
+}
+.forward-cta {
+	/* The one filled-teal primary among outlined neighbours — a subtle lift so
+	   the next step reads as the clear call to action. */
+	box-shadow: 0 1px 2px var(--mgk-shadow);
+}
+
+/* Q1: a Link value = human name (normal weight) + muted mono code beside it. */
+.field-value .lv-name {
+	color: inherit;
+}
+.field-value .lv-code {
+	margin-left: 8px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--mgk-muted-2);
+}
+/* Q8: persistent affordance — dotted underline + trailing ↗, no hover needed. */
+.field-value.link .lv-name {
+	text-decoration: underline dotted;
+	text-underline-offset: 2px;
+}
+.field-value.link::after {
+	content: " ↗";
+	font-size: 12px;
+	color: var(--mgk-accent);
+	opacity: 0.85;
+}
+
+/* Q13: inline field help under the input. */
+.field-help {
+	font-size: 11.5px;
+	color: var(--mgk-muted);
+	line-height: 1.35;
+}
+
+/* Q5 + Q15: top-of-content banners (missing field / server error). */
+.form-banner {
+	margin: 0 0 4px;
+}
+.srv-err__title {
+	font-weight: 600;
+	margin-bottom: 2px;
+}
+.srv-err__line {
+	font-size: 12.5px;
+	white-space: pre-wrap;
 }
 </style>

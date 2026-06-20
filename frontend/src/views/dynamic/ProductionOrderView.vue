@@ -233,17 +233,20 @@
 					<div class="header-left">
 						<div class="index-badge">{{ blockIdx + 1 }}</div>
 						<div class="item-selector">
-							<AutoComplete
-								v-model="block.item"
-								:suggestions="itemSuggestions"
-								@complete="searchItem"
+							<!-- Link/search picker (no select chevron). The blank-on-type was
+							     NOT this component — it was an unguarded `block.rows[0]` in the
+							     grid branches above (now guarded), which crashed while
+							     block.item held a partial typed string. So the Link field is
+							     restored. -->
+							<LinkField
+								:model-value="block.item"
+								@update:model-value="block.item = $event"
+								target-doctype="Item"
+								:dropdown="false"
+								:disabled="readonly"
+								placeholder="Search Item…"
 								@item-select="onItemSelected(blockIdx, $event.value)"
 								@change="onItemMaybeCleared(blockIdx)"
-								:disabled="readonly"
-								placeholder="Select Item"
-								dropdown
-								completeOnFocus
-								fluid
 							/>
 						</div>
 					</div>
@@ -348,8 +351,12 @@
 						</div>
 					</template>
 
-					<!-- grid attribute only (no row attributes) — single row -->
-					<template v-else-if="block.item && block.grid_attribute && !hasRowAttributes(block)">
+					<!-- grid attribute only (no row attributes) — single row.
+					     `block.rows[0]` guard: while the user is still TYPING an item name
+					     (block.item is a partial string but the item isn't resolved yet —
+					     grid_attribute null, rows empty), this branch must NOT render and
+					     bind block.rows[0].qty (undefined → render crash → blank page). -->
+					<template v-else-if="block.item && block.grid_attribute && !hasRowAttributes(block) && block.rows[0]">
 						<div class="table-container">
 							<table class="grid-table">
 								<thead>
@@ -379,8 +386,11 @@
 						</div>
 					</template>
 
-					<!-- no grid attribute — single qty -->
-					<template v-else-if="block.item && !block.grid_attribute">
+					<!-- no grid attribute — single qty. `block.rows[0]` guard: while the
+					     user is still TYPING (item not resolved → rows empty), this branch
+					     would bind block.rows[0].qty._default on an empty array and crash
+					     the render (blank page). Only render once a row exists. -->
+					<template v-else-if="block.item && !block.grid_attribute && block.rows[0]">
 						<div class="single-qty-box">
 							<label class="qty-label">Enter Quantity</label>
 							<InputNumber
@@ -420,7 +430,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from "vue"
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from "vue"
 import { useRouter } from "vue-router"
 import Button from "primevue/button"
 import Tag from "primevue/tag"
@@ -431,6 +441,7 @@ import Select from "primevue/select"
 import AutoComplete from "primevue/autocomplete"
 import DatePicker from "primevue/datepicker"
 import Tooltip from "primevue/tooltip"
+import LinkField from "@/components/LinkField.vue"
 import { callMethod, searchLink } from "@/api/client"
 import { useDoc } from "@/composables/useDoc"
 import { usePermissions } from "@/composables/usePermissions"
@@ -849,7 +860,25 @@ async function loadSettingsDirect() {
 	}
 }
 
-onMounted(load)
+// Ctrl/Cmd+S → Save (mirror the Desk + DocDetail shortcut, which the specialized
+// editors were missing); Ctrl/Cmd+D → Cancel a submitted order. preventDefault
+// stops the browser's "save page" dialog.
+function onKeydown(e) {
+	const key = (e.key || "").toLowerCase()
+	if ((e.ctrlKey || e.metaKey) && key === "s") {
+		e.preventDefault()
+		if (readonly.value || saving.value) return
+		onSave()
+	} else if ((e.ctrlKey || e.metaKey) && key === "d") {
+		e.preventDefault()
+		if (docstatus.value === 1) onCancel()
+	}
+}
+onMounted(() => {
+	load()
+	window.addEventListener("keydown", onKeydown)
+})
+onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown))
 watch(() => props.id, load)
 
 // ════════════════ SAVE / SUBMIT / CANCEL ════════════════
@@ -1091,13 +1120,13 @@ function formatNumber(val) {
 	border-radius: var(--radius);
 	overflow: visible; /* allow dropdowns to escape the card */
 }
-/* Section heads share the Bright Workshop teal band (mirrors .mgk-card__head). */
+/* Section heads share the Bright Workshop band (light tint; mirrors .mgk-card__head). */
 .panel-head {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
 	padding: 10px 16px;
-	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+	background: var(--mgk-accent-50); border-bottom: 1px solid var(--mgk-line);
 }
 .panel-head::before {
 	content: "";
@@ -1146,7 +1175,7 @@ function formatNumber(val) {
 	font-weight: 600;
 }
 .fld-wrap .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 .fld-hint {
 	font-size: 11px;

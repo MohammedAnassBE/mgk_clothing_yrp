@@ -113,6 +113,26 @@ async function request(url, options = {}) {
   return json
 }
 
+/**
+ * Split a thrown error's message into individual readable lines for a persistent
+ * inline banner (Q15). `request()` already parses `_server_messages` / `exc`,
+ * strips HTML, and joins the parts with "\n", so the banner just needs the
+ * per-line breakdown. Empty/whitespace lines are dropped and duplicates removed.
+ * @returns {string[]}
+ */
+export function errorLines(err) {
+  const msg = typeof err === "string" ? err : err?.message || ""
+  const seen = new Set()
+  const out = []
+  for (const raw of String(msg).split("\n")) {
+    const line = raw.trim()
+    if (!line || seen.has(line)) continue
+    seen.add(line)
+    out.push(line)
+  }
+  return out
+}
+
 // ---------------------------------------------------------------------------
 // Frappe Resource API helpers
 // ---------------------------------------------------------------------------
@@ -225,6 +245,28 @@ export async function callMethod(method, args = {}) {
     body: JSON.stringify(args),
   })
   return json.message
+}
+
+export async function getBulkEditFields(doctype) {
+  const result = await callMethod(
+    'mgk_clothing_yrp.mgk_clothing_yrp.api.bulk_edit.get_bulk_edit_fields',
+    { doctype },
+  )
+  return Array.isArray(result) ? result : []
+}
+
+export async function bulkUpdateField(doctype, docnames, field, value) {
+  return callMethod(
+    'mgk_clothing_yrp.mgk_clothing_yrp.api.bulk_edit.bulk_update_field',
+    {
+      doctype,
+      docnames,
+      fieldname: field.fieldname,
+      value,
+      child_doctype: field.child_doctype || null,
+      parent_table_field: field.parent_table_field || null,
+    },
+  )
 }
 
 // ---------------------------------------------------------------------------

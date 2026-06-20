@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MGK Clothing /web — UI polish mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     MGK /web — design proof.  FOUR tokens + Inter, everything
+     derived by opacity. Mirrors the partners_api reference system,
+     re-skinned to MGK (teal primary + indigo accent).
+     ============================================================ */
+  :root{
+    --c-primary: 13 148 136;   /* #0D9488 MGK teal */
+    --c-accent:  37 99 235;    /* #2563EB royal blue (accent + input focus) */
+    --c-ink:     27 34 51;     /* #1B2233          */
+    --c-surface: 247 248 251;  /* #F7F8FB          */
+    --c-success: 4 120 87; --c-warn: 180 83 9; --c-danger: 220 38 38;
+    --font:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --r:12px; --pad:1;
+    --shadow-card:0 1px 2px rgb(var(--c-ink)/.05),0 10px 28px rgb(var(--c-ink)/.06);
+    --shadow-pop:0 10px 30px rgb(var(--c-ink)/.16);
+    --shadow-rail:0 16px 44px rgb(var(--c-ink)/.16);
+  }
+  [data-dark="1"]{ --c-ink:226 232 240; --c-surface:17 21 33; }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--font);background:rgb(var(--c-surface));color:rgb(var(--c-ink));-webkit-font-smoothing:antialiased}
+  .muted{color:rgb(var(--c-ink)/.56)}
+  [data-dark="1"] .card,[data-dark="1"] .topbar{background:rgb(255 255 255/.04)}
+  [data-dark="1"] .side{background:#1b1e2a}  /* SOLID — the rail flyout must not bleed content when it expands */
+  [data-dark="1"] .modal,[data-dark="1"] .toast{background:#171d2f}  /* solid surfaces float over the dark scrim */
+  .card{background:#fff;border:1px solid rgb(var(--c-ink)/.10);border-radius:var(--r);box-shadow:var(--shadow-card)}
+  /* buttons */
+  .btn{font:600 calc(13px*var(--pad)) var(--font);border:1px solid transparent;border-radius:9px;padding:calc(8px*var(--pad)) calc(14px*var(--pad));cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:.14s;white-space:nowrap}
+  .btn-primary{background:rgb(var(--c-primary));color:#fff}.btn-primary:hover{filter:brightness(1.07)}
+  .btn-accent{background:rgb(var(--c-accent));color:#fff}
+  .btn-ghost{background:transparent;color:rgb(var(--c-ink)/.8);border-color:rgb(var(--c-ink)/.14)}.btn-ghost:hover{background:rgb(var(--c-ink)/.05)}
+  .btn-danger{background:rgb(var(--c-danger));color:#fff}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .split{display:inline-flex}.split .btn-primary{border-top-right-radius:0;border-bottom-right-radius:0}
+  .split .cap{background:rgb(var(--c-primary));color:#fff;border:0;border-left:1px solid rgb(255 255 255/.25);border-radius:0 9px 9px 0;padding:0 9px;cursor:pointer;filter:brightness(1)}
+  .ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+  /* fields */
+  .field label{display:block;font-size:12.5px;font-weight:600;margin:0 0 5px;color:rgb(var(--c-ink)/.75)}
+  .input{width:100%;font:500 14px var(--font);color:rgb(var(--c-ink));background:rgb(var(--c-ink)/.03);border:1px solid rgb(var(--c-ink)/.14);border-radius:9px;padding:10px 12px;outline:none;transition:.14s}
+  .input:focus{border-color:rgb(var(--c-accent));box-shadow:0 0 0 3px rgb(var(--c-accent)/.18);background:#fff}
+  /* badges */
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px}
+  .b-primary{color:rgb(var(--c-primary));background:rgb(var(--c-primary)/.12)}
+  .b-accent{color:rgb(var(--c-accent));background:rgb(var(--c-accent)/.14)}
+  .b-muted{color:rgb(var(--c-ink)/.6);background:rgb(var(--c-ink)/.08)}
+  .b-success{color:rgb(var(--c-success));background:rgb(var(--c-success)/.13)}
+  .b-warn{color:rgb(var(--c-warn));background:rgb(var(--c-warn)/.13)}
+  .b-danger{color:rgb(var(--c-danger));background:rgb(var(--c-danger)/.12)}
+  /* controls bar */
+  .controls{position:sticky;top:0;z-index:60;display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:11px 18px;background:rgb(var(--c-surface)/.92);backdrop-filter:blur(8px);border-bottom:1px solid rgb(var(--c-ink)/.1)}
+  .controls .grp{display:flex;align-items:center;gap:7px;font-size:12.5px}
+  .seg{display:flex;border:1px solid rgb(var(--c-ink)/.14);border-radius:8px;overflow:hidden}
+  .seg button{border:0;background:transparent;color:rgb(var(--c-ink)/.7);font:600 12px var(--font);padding:6px 11px;cursor:pointer}
+  .seg button.on{background:rgb(var(--c-primary));color:#fff}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 18px 80px}
+  h2.s{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:rgb(var(--c-ink)/.5);margin:34px 0 12px;font-weight:700}
+  .device{border:1px solid rgb(var(--c-ink)/.12);border-radius:18px;overflow:hidden;box-shadow:0 20px 50px rgb(var(--c-ink)/.10)}
+  .note{font-size:12.5px;color:rgb(var(--c-ink)/.6);background:rgb(var(--c-primary)/.07);border-left:3px solid rgb(var(--c-primary));border-radius:0 9px 9px 0;padding:10px 13px;margin:10px 0}
+  /* ---- app shell ---- */
+  .shell{position:relative;display:grid;grid-template-columns:68px 1fr;min-height:600px;background:rgb(var(--c-surface));overflow:hidden}
+  .rail{position:relative}
+  .side{position:absolute;top:0;left:0;height:100%;width:68px;background:#fff;border-right:1px solid rgb(var(--c-ink)/.1);padding:14px 12px;display:flex;flex-direction:column;gap:2px;overflow:hidden;z-index:20;transition:width .18s cubic-bezier(.16,1,.3,1)}
+  .side:hover,.side.pinned{width:232px}
+  .side:hover{box-shadow:var(--shadow-rail)}
+  .shell:has(.side.pinned){grid-template-columns:232px 1fr}
+  .hamb{display:none}
+  @media(max-width:760px){
+    .shell,.shell:has(.side.pinned){grid-template-columns:1fr}
+    .rail{display:none}
+    .side,.side.pinned{width:248px;transform:translateX(-100%);box-shadow:var(--shadow-rail);z-index:30}
+    .hamb{display:grid}
+    .pagehd{flex-direction:column;align-items:stretch;gap:10px}
+    .pagehd .split{align-self:flex-start}
+  }
+  .side .brand{display:flex;align-items:center;gap:10px;padding:4px 6px 12px;white-space:nowrap}
+  .side .blogo{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,rgb(var(--c-primary)),rgb(var(--c-accent)));color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px;flex:0 0 auto}
+  .side .label{opacity:0;transition:opacity .14s;white-space:nowrap}
+  .side:hover .label,.side.pinned .label{opacity:1}
+  .grouphd{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgb(var(--c-ink)/.42);padding:12px 10px 4px;height:0;opacity:0;overflow:hidden;transition:.14s}
+  .side:hover .grouphd,.side.pinned .grouphd{height:auto;opacity:1}
+  .nav{display:flex;align-items:center;gap:12px;padding:9px;border-radius:9px;color:rgb(var(--c-ink)/.72);font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;position:relative}
+  .nav .ico{margin:0 3px;flex:0 0 auto;width:19px;height:19px}
+  .nav:hover{background:rgb(var(--c-ink)/.05)}
+  .nav.on{background:rgb(var(--c-primary)/.12);color:rgb(var(--c-primary))}
+  .nav.on::before{content:"";position:absolute;left:-12px;top:7px;bottom:7px;width:3px;border-radius:0 3px 3px 0;background:rgb(var(--c-primary))}
+  .topbar{display:flex;align-items:center;gap:14px;padding:12px 22px;background:#fff;border-bottom:1px solid rgb(var(--c-ink)/.1)}
+  .topbar .ttl{font-size:13.5px;font-weight:600;color:rgb(var(--c-ink)/.85)}
+  .topbar .search{flex:1;max-width:340px;display:flex;align-items:center;gap:8px;background:rgb(var(--c-ink)/.04);border:1px solid rgb(var(--c-ink)/.1);border-radius:9px;padding:7px 11px;color:rgb(var(--c-ink)/.55);font-size:13px}
+  .topbar .kbd{margin-left:auto;font-size:10.5px;border:1px solid rgb(var(--c-ink)/.18);border-radius:5px;padding:1px 5px;color:rgb(var(--c-ink)/.5)}
+  .iconbtn{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;border:1px solid transparent;background:transparent;color:rgb(var(--c-ink)/.65);cursor:pointer}.iconbtn:hover{background:rgb(var(--c-ink)/.05)}
+  .avatar{display:flex;align-items:center;gap:9px;background:rgb(var(--c-ink)/.04);border-radius:999px;padding:4px 10px 4px 4px}
+  .avatar .a{width:28px;height:28px;border-radius:50%;background:rgb(var(--c-accent));color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px}
+  .avatar .nm{font-size:12.5px;font-weight:700;line-height:1.1}.avatar .rl{font-size:11px;color:rgb(var(--c-ink)/.55)}
+  .content{padding:22px}
+  @media(max-width:760px){.content{padding:16px}}
+  .pagehd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+  .pagehd .h1{font-size:18px;font-weight:800;letter-spacing:-.2px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:760px){.stats{grid-template-columns:1fr 1fr}}
+  .stat{padding:15px 16px;cursor:pointer;transition:.14s}.stat:hover{transform:translateY(-1px);box-shadow:var(--shadow-pop)}
+  .stat .n{font-size:25px;font-weight:800;letter-spacing:-.5px;line-height:1}
+  .stat .l{font-size:12px;color:rgb(var(--c-ink)/.55);margin-top:6px}
+  .stat .arrow{float:right;color:rgb(var(--c-ink)/.3)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid rgb(var(--c-ink)/.08)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:rgb(var(--c-ink)/.5);font-weight:700}
+  tbody tr{transition:.12s}tbody tr:hover{background:rgb(var(--c-ink)/.04)}
+  td .code{font-weight:600;color:rgb(var(--c-primary))}
+  .tabbar{display:flex;gap:4px;border-bottom:1px solid rgb(var(--c-ink)/.1);margin-bottom:14px;flex-wrap:wrap}
+  .tab{padding:9px 13px;font-size:13px;font-weight:600;color:rgb(var(--c-ink)/.6);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.on{color:rgb(var(--c-primary));border-bottom-color:rgb(var(--c-primary))}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0 12px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:rgb(var(--c-primary)/.1);color:rgb(var(--c-primary));border-radius:999px;padding:4px 10px}
+  /* detail */
+  .detgrid{display:grid;grid-template-columns:1fr 280px;gap:16px}
+  @media(max-width:760px){.detgrid{grid-template-columns:1fr}}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px 18px}
+  @media(max-width:760px){.fgrid{grid-template-columns:1fr}}
+  .fcell .v{font-size:15px;font-weight:700}.fcell .k{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:rgb(var(--c-ink)/.5);margin-top:2px}
+  .meta div{font-size:12.5px;padding:7px 0;border-bottom:1px solid rgb(var(--c-ink)/.07);display:flex;justify-content:space-between}
+  .meta div span:first-child{color:rgb(var(--c-ink)/.55)}
+  /* gallery */
+  .gal{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.gal{grid-template-columns:1fr}}
+  .gal h4{margin:0 0 12px;font-size:14px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
+  /* empty + skeleton */
+  .empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:34px;border:1.5px dashed rgb(var(--c-ink)/.16);border-radius:12px;color:rgb(var(--c-ink)/.55);font-size:13px}
+  .empty .ico{width:26px;height:26px;color:rgb(var(--c-primary))}
+  .sk{background:linear-gradient(90deg,rgb(var(--c-ink)/.06),rgb(var(--c-ink)/.11),rgb(var(--c-ink)/.06));background-size:200% 100%;animation:sh 1.2s infinite;border-radius:6px;height:12px}
+  @keyframes sh{from{background-position:200% 0}to{background-position:-200% 0}}
+  /* toast + dialog */
+  #toasts{position:fixed;top:64px;right:18px;z-index:90;display:flex;flex-direction:column;gap:10px}
+  .toast{display:flex;gap:11px;background:#fff;border:1px solid rgb(var(--c-ink)/.1);border-left:4px solid rgb(var(--c-primary));border-radius:11px;box-shadow:var(--shadow-pop);padding:12px 14px;min-width:260px;animation:tin .2s cubic-bezier(.16,1,.3,1)}
+  .toast.ok{border-left-color:rgb(var(--c-success))}.toast.err{border-left-color:rgb(var(--c-danger))}
+  .toast .tt{font-weight:700;font-size:13.5px}.toast .td{font-size:12.5px;color:rgb(var(--c-ink)/.6);margin-top:1px}
+  @keyframes tin{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+  .ov{position:fixed;inset:0;background:rgb(var(--c-ink)/.45);display:none;place-items:center;z-index:80;padding:18px}.ov.show{display:grid}
+  .modal{width:100%;max-width:460px;background:#fff;border-radius:16px;box-shadow:0 30px 70px rgb(0 0 0/.35);overflow:hidden;animation:tin .2s ease}
+  .modal .mh{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgb(var(--c-ink)/.1);font-weight:700}
+  .modal .mb{padding:18px}.modal .mf{padding:14px 18px;border-top:1px solid rgb(var(--c-ink)/.1);display:flex;justify-content:flex-end;gap:9px}
+</style>
+</head>
+<body>
+<div class="controls">
+  <strong style="font-size:13px">MGK Clothing · /web design proof</strong>
+  <div class="grp"><span class="muted">Brand</span>
+    <div class="seg" id="pal">
+      <button data-p="teal" class="on">Teal</button>
+      <button data-p="indigo">Indigo</button>
+      <button data-p="royal">Royal</button>
+    </div>
+  </div>
+  <div class="grp"><span class="muted">Density</span>
+    <div class="seg" id="den"><button data-d="1" class="on">Comfortable</button><button data-d=".92">Compact</button></div>
+  </div>
+  <div class="grp"><span class="muted">Mode</span>
+    <div class="seg" id="mode"><button data-m="0" class="on">Light</button><button data-m="1">Dark</button></div>
+  </div>
+  <div class="grp" style="margin-left:auto"><span class="muted">Jump</span>
+    <a class="btn btn-ghost btn-sm" href="#home">Home</a>
+    <a class="btn btn-ghost btn-sm" href="#list">List</a>
+    <a class="btn btn-ghost btn-sm" href="#detail">Detail</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="note">This is the <b>design</b> (a static mockup), not the app — it uses MGK's real nav, queues and doctypes.
+    Use the bar above to switch the <b>brand colour</b>, density and light/dark. Hover the left rail to expand it.
+    Approve a direction and I wire the real Vue components to match. One font (Inter) throughout.</div>
+
+  <!-- ================= HOME / DASHBOARD ================= -->
+  <h2 class="s" id="home">Home — dashboard (matches the reference layout)</h2>
+  <div class="device">
+    <div class="shell">
+      <div class="rail"></div>
+      <aside class="side pinned">
+        <div class="brand"><div class="blogo">MGK</div><div class="label" style="font-weight:800;font-size:14px">MGK&nbsp;Clothing</div></div>
+        <div class="nav on"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg><span class="label">Home</span></div>
+        <div class="grouphd label">Procurement</div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M9 12h6M9 16h6"/></svg><span class="label">Purchase Order</span></div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/></svg><span class="label">Goods Received Note</span></div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg><span class="label">Bill Tracking</span></div>
+        <div class="grouphd label">Production</div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="label">Work Order</span></div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v6H4zM4 14h10v6H4z"/></svg><span class="label">Production Order</span></div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.5"/></svg><span class="label">Delivery Challan</span></div>
+        <div class="grouphd label">Stock</div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11"/></svg><span class="label">Inspection Entry</span></div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/></svg><span class="label">Stock Entry</span></div>
+        <div class="grouphd label">Item Masters</div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="label">Item</span></div>
+        <div style="margin-top:auto"></div>
+        <div class="nav"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V23a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 6 21.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.7 9"/></svg><span class="label">Settings</span></div>
+      </aside>
+      <div>
+        <div class="topbar">
+          <div class="ttl">Home</div>
+          <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search documents… <span class="kbd">⌘K</span></div>
+          <button class="iconbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
+          <button class="iconbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg></button>
+          <div class="avatar"><div class="a">AD</div><div><div class="nm">Administrator</div><div class="rl">System Manager</div></div></div>
+        </div>
+        <div class="content">
+          <div class="pagehd">
+            <div><div class="h1">Good morning, Administrator</div><div class="muted" style="font-size:13px">Here's your floor today.</div></div>
+            <div class="split"><button class="btn btn-primary"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New Work Order</button><button class="cap">▾</button></div>
+          </div>
+          <div class="stats">
+            <div class="card stat"><span class="arrow">→</span><div class="n">0</div><div class="l">Design approvals pending</div></div>
+            <div class="card stat"><span class="arrow">→</span><div class="n">1</div><div class="l">Pending inspections</div></div>
+            <div class="card stat"><span class="arrow">→</span><div class="n">0</div><div class="l">Vendor bills pending</div></div>
+            <div class="card stat"><span class="arrow">→</span><div class="n">5</div><div class="l">Open work orders</div></div>
+          </div>
+          <div class="card" style="margin-top:16px;padding:16px 18px">
+            <div class="tabbar"><div class="tab on">Recent work orders</div><div class="tab">Awaiting inspection</div><div class="tab">Flagged</div></div>
+            <table>
+              <thead><tr><th>Code</th><th>Item</th><th>Qty</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody>
+                <tr><td class="code">WO-2627-00493</td><td>Towel — Bath 30×60 White</td><td>120</td><td><span class="badge b-success">Submitted</span></td><td class="muted">20 Jun</td></tr>
+                <tr><td class="code">WO-2627-00492</td><td>Towel — Hand 16×24 Cream</td><td>240</td><td><span class="badge b-primary">In production</span></td><td class="muted">20 Jun</td></tr>
+                <tr><td class="code">WO-2627-00491</td><td>Towel — Bath 27×54 Grey</td><td>80</td><td><span class="badge b-muted">Draft</span></td><td class="muted">19 Jun</td></tr>
+                <tr><td class="code">WO-2627-00490</td><td>Towel — Face 12×12 White</td><td>500</td><td><span class="badge b-warn">On hold</span></td><td class="muted">19 Jun</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LIST ================= -->
+  <h2 class="s" id="list">List — any doctype (Work Orders), with status tabs + skeleton loading</h2>
+  <div class="device"><div class="shell"><div class="rail"></div>
+    <aside class="side"><div class="brand"><div class="blogo">MGK</div><div class="label" style="font-weight:800;font-size:14px">MGK&nbsp;Clothing</div></div>
+      <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg><span class="label">Home</span></div>
+      <div class="nav on"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="label">Work Order</span></div>
+      <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11"/></svg><span class="label">Inspection Entry</span></div>
+    </aside>
+    <div><div class="topbar"><div class="ttl">Work Order</div><div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search work orders…</div><div class="avatar"><div class="a">AD</div></div></div>
+      <div class="content">
+        <div class="pagehd"><div class="h1">Work Orders</div><div class="row" style="margin:0">
+          <button class="btn btn-ghost btn-sm"><svg class="ico" viewBox="0 0 24 24"><path d="M3 4h18l-7 9v6l-4 2v-8z"/></svg>Filters</button>
+          <button class="btn btn-primary btn-sm"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button></div>
+        </div>
+        <div class="tabbar"><div class="tab on">All</div><div class="tab">Draft</div><div class="tab">Submitted</div><div class="tab">Cancelled</div></div>
+        <div class="toolbar"><span class="chip">Status: Open ✕</span><span class="chip">This month ✕</span></div>
+        <div class="card" style="padding:4px 6px">
+          <table>
+            <thead><tr><th style="width:30px">☐</th><th>Code</th><th>Item</th><th>Qty</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody>
+              <tr><td>☐</td><td class="code">WO-2627-00493</td><td>Towel — Bath 30×60 White</td><td>120</td><td><span class="badge b-success">Submitted</span></td><td class="muted">20 Jun</td></tr>
+              <tr><td>☐</td><td class="code">WO-2627-00492</td><td>Towel — Hand 16×24 Cream</td><td>240</td><td><span class="badge b-primary">In production</span></td><td class="muted">20 Jun</td></tr>
+              <tr><td>☐</td><td colspan="5"><div style="display:flex;gap:16px;align-items:center;padding:3px 0"><div class="sk" style="width:120px"></div><div class="sk" style="width:200px"></div><div class="sk" style="width:40px"></div><div class="sk" style="width:80px"></div></div></td></tr>
+              <tr><td>☐</td><td colspan="5"><div style="display:flex;gap:16px;align-items:center;padding:3px 0"><div class="sk" style="width:120px"></div><div class="sk" style="width:170px"></div><div class="sk" style="width:40px"></div><div class="sk" style="width:80px"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:10px;text-align:right">1–25 of 128 · ‹ Prev  Next ›</div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ================= DETAIL ================= -->
+  <h2 class="s" id="detail">Detail — value-as-hero fields, action hierarchy, meta sidebar</h2>
+  <div class="device"><div class="shell"><div class="rail"></div>
+    <aside class="side"><div class="brand"><div class="blogo">MGK</div><div class="label" style="font-weight:800;font-size:14px">MGK&nbsp;Clothing</div></div>
+      <div class="nav"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg><span class="label">Home</span></div>
+      <div class="nav on"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="label">Work Order</span></div>
+    </aside>
+    <div><div class="topbar"><div class="ttl">Work Order › WO-2627-00493</div><div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search…</div><div class="avatar"><div class="a">AD</div></div></div>
+      <div class="content">
+        <div class="pagehd">
+          <div style="display:flex;align-items:center;gap:12px"><div class="h1">WO-2627-00493</div><span class="badge b-success">Submitted</span></div>
+          <div class="row" style="margin:0"><button class="btn btn-primary">Create Delivery Challan</button><button class="btn btn-ghost">More ▾</button><button class="btn btn-ghost">Cancel</button></div>
+        </div>
+        <div class="tabbar"><div class="tab on">Details</div><div class="tab">Activity</div><div class="tab">Linked</div></div>
+        <div class="detgrid">
+          <div class="card" style="padding:18px">
+            <div class="fgrid">
+              <div class="fcell"><div class="v">Sri Devi Agencies</div><div class="k">Customer</div></div>
+              <div class="fcell"><div class="v">Towel — Bath 30×60</div><div class="k">Item</div></div>
+              <div class="fcell"><div class="v">120 pcs</div><div class="k">Quantity</div></div>
+              <div class="fcell"><div class="v">20 Jun 2026</div><div class="k">Order date</div></div>
+              <div class="fcell"><div class="v">26 Jun 2026</div><div class="k">Expected</div></div>
+              <div class="fcell"><div class="v">White</div><div class="k">Colour</div></div>
+            </div>
+            <div style="margin:18px 0 10px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgb(var(--c-ink)/.5)">Deliverables</div>
+            <table><thead><tr><th>Process</th><th>Qty</th><th>Status</th></tr></thead><tbody>
+              <tr><td>Cutting</td><td>120</td><td><span class="badge b-success">Done</span></td></tr>
+              <tr><td>Stitching</td><td>120</td><td><span class="badge b-primary">Running</span></td></tr>
+              <tr><td>Packing</td><td>0</td><td><span class="badge b-muted">Pending</span></td></tr>
+            </tbody></table>
+          </div>
+          <div class="card" style="padding:16px">
+            <div class="meta">
+              <div><span>Created</span><span>20 Jun, 09:14</span></div>
+              <div><span>Modified</span><span>20 Jun, 11:02</span></div>
+              <div><span>Owner</span><span>Administrator</span></div>
+              <div><span>Workflow</span><span><span class="badge b-accent">Approved</span></span></div>
+              <div style="border:0"><span>Series</span><span>WO-2627-.####</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ================= COMPONENTS ================= -->
+  <h2 class="s">Component kit — built once, reused everywhere</h2>
+  <div class="gal">
+    <div class="card" style="padding:18px"><h4>Buttons</h4>
+      <div class="row"><button class="btn btn-primary">Primary</button><button class="btn btn-accent">Accent</button><button class="btn btn-ghost">Ghost</button><button class="btn btn-danger">Danger</button></div>
+      <div class="row"><button class="btn btn-primary btn-sm"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>With icon</button><button class="btn btn-ghost btn-sm">Small</button></div>
+    </div>
+    <div class="card" style="padding:18px"><h4>Status badges (tints of the tokens)</h4>
+      <div class="row"><span class="badge b-success">Submitted</span><span class="badge b-primary">In production</span><span class="badge b-muted">Draft</span><span class="badge b-warn">On hold</span><span class="badge b-danger">Cancelled</span><span class="badge b-accent">Approved</span></div>
+    </div>
+    <div class="card" style="padding:18px"><h4>Form fields</h4>
+      <div class="field" style="margin-bottom:12px"><label>Customer</label><div class="input">Sri Devi Agencies</div></div>
+      <div class="field"><label>Transport</label><div class="input" style="display:flex;justify-content:space-between">VRL Logistics <span class="muted">▾</span></div></div>
+    </div>
+    <div class="card" style="padding:18px"><h4>Feedback — toasts, dialog, empty</h4>
+      <div class="row">
+        <button class="btn btn-accent btn-sm" onclick="toast('ok','Saved','WO-2627-00493 updated.')">Success toast</button>
+        <button class="btn btn-danger btn-sm" onclick="toast('err','Failed','Qty exceeds stock.')">Error toast</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('ov').classList.add('show')">Open dialog</button>
+      </div>
+      <div class="empty" style="margin-top:12px"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/></svg>No inspection entries yet</div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div class="ov" id="ov" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal"><div class="mh"><span>Edit work order</span><button class="iconbtn" onclick="document.getElementById('ov').classList.remove('show')">✕</button></div>
+    <div class="mb"><div class="tabbar"><div class="tab on">Details</div><div class="tab">Items</div></div>
+      <div class="field" style="margin-bottom:12px"><label>Customer</label><div class="input">Sri Devi Agencies</div></div>
+      <div class="field"><label>Priority</label><div class="input" style="display:flex;justify-content:space-between">High <span class="muted">▾</span></div></div></div>
+    <div class="mf"><button class="btn btn-ghost" onclick="document.getElementById('ov').classList.remove('show')">Cancel</button><button class="btn btn-primary" onclick="toast('ok','Saved','Changes saved.');document.getElementById('ov').classList.remove('show')">Save</button></div>
+  </div>
+</div>
+
+<script>
+  const PAL={teal:{p:'13 148 136',a:'37 99 235'},indigo:{p:'79 70 229',a:'13 148 136'},royal:{p:'37 99 235',a:'245 158 11'}};
+  const root=document.documentElement;
+  function setPal(k){root.style.setProperty('--c-primary',PAL[k].p);root.style.setProperty('--c-accent',PAL[k].a)}
+  function bind(id,attr,fn){const s=document.getElementById(id);s.addEventListener('click',e=>{if(!e.target.dataset[attr])return;[...s.children].forEach(b=>b.classList.remove('on'));e.target.classList.add('on');fn(e.target.dataset[attr])})}
+  bind('pal','p',setPal);bind('den','d',v=>root.style.setProperty('--pad',v));bind('mode','m',v=>root.setAttribute('data-dark',v));
+  function toast(kind,title,desc){const el=document.createElement('div');el.className='toast '+(kind||'');el.innerHTML='<div><div class="tt">'+title+'</div><div class="td">'+desc+'</div></div>';document.getElementById('toasts').appendChild(el);setTimeout(()=>{el.style.transition='.25s';el.style.opacity='0';el.style.transform='translateX(16px)';setTimeout(()=>el.remove(),250)},2600)}
+</script>
+</body>
+</html>

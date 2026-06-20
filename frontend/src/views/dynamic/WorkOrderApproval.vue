@@ -106,6 +106,7 @@ import Dialog from "primevue/dialog"
 import Textarea from "primevue/textarea"
 import { callMethod } from "@/api/client"
 import { useAppToast } from "@/composables/useToast"
+import { useAppConfirm } from "@/composables/useConfirm"
 
 const API = "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order"
 
@@ -117,6 +118,7 @@ const props = defineProps({
 const emit = defineEmits(["changed", "state"])
 
 const toast = useAppToast()
+const confirm = useAppConfirm()
 
 const state = ref(null)
 const acting = ref(null) // "approve" | "reject" | null
@@ -152,11 +154,26 @@ async function loadState() {
 
 watch(() => props.name, loadState, { immediate: true })
 
-async function doApprove() {
+// Q7: the design sign-off is the single most consequential, irreversible action
+// in the WO flow — gate it behind a confirm that names the consequence, the same
+// way Submit / Reject / Cancel are guarded.
+function doApprove() {
+	confirm.require({
+		header: "Approve design?",
+		message: `Approve the design for ${props.name}? This unblocks Submit for this Work Order.`,
+		icon: "pi pi-check-circle",
+		acceptLabel: "Approve",
+		acceptClass: "p-button-primary",
+		rejectLabel: "Cancel",
+		accept: performApprove,
+	})
+}
+
+async function performApprove() {
 	acting.value = "approve"
 	try {
 		await callMethod(`${API}.approve`, { work_order: props.name })
-		toast.success("Approved", `${props.name} design approved`)
+		toast.success("Approved", `${props.name} design approved`, 6000)
 		await loadState()
 		emit("changed")
 	} catch (e) {
@@ -183,7 +200,7 @@ async function doReject() {
 			work_order: props.name,
 			reason: rejectReason.value.trim(),
 		})
-		toast.success("Rejected", `${props.name} design rejected`)
+		toast.success("Rejected", `${props.name} design rejected`, 6000)
 		rejectOpen.value = false
 		await loadState()
 		emit("changed")

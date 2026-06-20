@@ -7,6 +7,7 @@ import {
 export function useDoc(doctype) {
   const doc = ref(null)
   const meta = ref(null)          // parent DocType meta (fields, title_field…)
+  const metaBundle = ref(null)    // full getdoctype bundle: [parentMeta, ...childMetas]
   const linked = ref(null)        // { <LinkedDocType>: [rows] }
   const docInfo = ref(null)       // { comments, versions, communications… }
   const loading = ref(false)
@@ -28,20 +29,31 @@ export function useDoc(doctype) {
     }
   }
 
-  // Meta is cached per composable instance — fetched once per doctype.
+  // Meta is cached per composable instance — fetched once per doctype. The
+  // in-flight promise is shared (`metaPromise`) so concurrent callers — e.g.
+  // DocDetail's loadMeta() + loadChildMetas() — collapse to ONE getdoctype
+  // request. `metaBundle` keeps the FULL bundle ([parentMeta, ...childMetas]) so
+  // a child-meta consumer can reuse it instead of refetching the same endpoint.
+  let metaPromise = null
   async function loadMeta() {
     if (meta.value) return meta.value
+    if (metaPromise) return metaPromise
     metaLoading.value = true
-    try {
-      const bundle = await getMeta(doctype)
-      meta.value = bundle[0] || null
-      return meta.value
-    } catch (_) {
-      meta.value = null
-      return null
-    } finally {
-      metaLoading.value = false
-    }
+    metaPromise = (async () => {
+      try {
+        const bundle = await getMeta(doctype)
+        metaBundle.value = bundle || []
+        meta.value = bundle[0] || null
+        return meta.value
+      } catch (_) {
+        meta.value = null
+        return null
+      } finally {
+        metaLoading.value = false
+        metaPromise = null
+      }
+    })()
+    return metaPromise
   }
 
   async function loadLinked(name) {
@@ -153,6 +165,7 @@ export function useDoc(doctype) {
   return {
     doc,
     meta,
+    metaBundle,
     linked,
     docInfo,
     loading: readonly(loading),

@@ -3,8 +3,16 @@
    holds the page reset, shell layout variables, and a few app-level helpers. */
 
 :root {
+	/* ── Base tokens (partners_api system): 4 colours → opacity-derived neutrals.
+	   New components use rgb(var(--c-*)/<alpha>); the --mgk-* layer below aliases
+	   onto these, so every existing screen is unchanged. ── */
+	--c-primary: 13 148 136;   /* #0D9488 teal — actions / CTAs / active nav / links */
+	--c-accent:  37 99 235;    /* #2563EB royal blue — secondary accent + input focus */
+	--c-ink:     27 34 51;     /* #1B2233 — text / borders via opacity */
+	--c-surface: 247 248 251;  /* #F7F8FB — page ground */
+
 	/* ── Surfaces ── */
-	--mgk-bg:        #F6F8FA;   /* cool near-white page (was warm cream #F4F1EB) */
+	--mgk-bg:        #F7F8FB;   /* cool near-white page (= --c-surface) */
 	--mgk-card:      #FFFFFF;   /* white panels/cards */
 	--mgk-slate-50:  #EEF2F7;   /* secondary surface (table headers, hover rows) */
 
@@ -22,19 +30,24 @@
 	--mgk-accent-50: #E6F6F4;   /* light teal wash — badges, focus tint */
 	--mgk-accent-600:#0F827A;   /* mid teal — header-band gradient stop */
 	--mgk-accent-700:#0F766E;   /* dark teal — link text, hover (AA ~4.6:1 on white) */
-	--mgk-accent-ink:#FFFFFF;   /* text/icon color ON the teal header band */
+	--mgk-accent-ink:var(--mgk-accent-700);  /* teal title/icon ON the light (accent-50) header band */
+
+	/* ── Secondary accent: royal blue (input focus + accent CTAs/highlights).
+	   Derived from --c-accent so dark only has to flip that one base token. ── */
+	--mgk-accent2:     rgb(var(--c-accent));
+	--mgk-accent2-50:  rgb(var(--c-accent) / 0.12);
 
 	/* ── Elevation (cool, not warm) ── */
-	--mgk-shadow:    rgba(15, 23, 42, 0.06);
-	--mgk-shadow-md: rgba(15, 23, 42, 0.10);
+	--mgk-shadow:    rgba(27, 34, 51, 0.06);   /* ink-based, softer */
+	--mgk-shadow-md: rgba(27, 34, 51, 0.10);
 
 	/* ── Sizing ── */
 	--sidebar-width: 232px;
-	--sidebar-collapsed-width: 60px;
+	--sidebar-collapsed-width: 68px;   /* slim rail rest width (partners_api) */
 	--topbar-height: 56px;
-	--radius-sm: 6px;    /* was 5px */
-	--radius: 10px;      /* was 8px */
-	--radius-lg: 14px;   /* was 12px */
+	--radius-sm: 9px;    /* controls (buttons/inputs) — partners_api */
+	--radius: 12px;      /* cards / dialogs */
+	--radius-lg: 14px;
 
 	/* ── Spacing scale (replaces 14 ad-hoc gap values) ── */
 	--space-1: 4px;
@@ -45,8 +58,9 @@
 	--space-6: 24px;
 
 	/* ── Shadow scale (replaces inline shadow + the unused -md token) ── */
-	--mgk-shadow-sm: 0 1px 2px var(--mgk-shadow), 0 1px 1px rgba(15, 23, 42, 0.04);
-	--mgk-shadow-pop: 0 4px 12px var(--mgk-shadow-md);   /* dropdowns/dialogs — USES --mgk-shadow-md, resolving the "unused" minor */
+	--mgk-shadow-sm: 0 1px 2px rgba(27,34,51,.05), 0 1px 1px rgba(27,34,51,.04);
+	--mgk-shadow-card: 0 1px 2px rgba(27,34,51,.05), 0 10px 28px rgba(27,34,51,.06);  /* airy card lift (partners_api) */
+	--mgk-shadow-pop: 0 10px 30px rgba(27,34,51,.16);   /* dropdowns / dialogs / toasts */
 
 	/* ── Status colors (single source for all badges/pills) ── */
 	--mgk-success:    #047857;   /* AA on white 4.6:1 */
@@ -60,6 +74,177 @@
 	--ctrl-h: 38px;              /* touch target floor — meets ~40px principle */
 	--ctrl-pad: 8px 11px;
 	--ctrl-radius: var(--radius-sm);
+
+	/* ── Type scale (single source — replaces scattered 11/12.5/13/14.5/16/20px) ── */
+	--fs-2xs: 11px;   /* uppercase micro-labels */
+	--fs-xs:  12px;   /* sub-captions, chips */
+	--fs-sm:  13px;   /* secondary body, table cells */
+	--fs-base:14px;   /* body default */
+	--fs-md:  15px;
+	--fs-lg:  16px;   /* value-as-hero */
+	--fs-xl:  20px;   /* doc hero title */
+	--fs-2xl: 24px;   /* page title */
+
+	color-scheme: light;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Dark "Bright Workshop" — activated by `.dark` on <html> (useTheme).
+   Overriding the --mgk-* token layer flips every bespoke surface (sidebar,
+   topbar, home cards, detail/.mgk-card, panels, empty-states) at once; PrimeVue
+   components flip via theme.js colorScheme.dark. Status/teal Tag tints adapt
+   through the --mgk-accent-50 / --mgk-success-50 / … overrides below.
+   ───────────────────────────────────────────────────────────────────────── */
+.dark {
+	/* Surfaces — soft dark slate, lifted OFF near-black to cut halation / eye
+	   strain (was #0B1220 near-black). Page < card < bands = gentle elevation. */
+	--mgk-bg:        #1A2230;   /* page */
+	--mgk-card:      #222C3A;   /* panels / cards (elevated above the page) */
+	--mgk-slate-50:  #2A3543;   /* secondary surface (header bands, hover rows) */
+
+	/* Text — soft off-white, NOT pure white (pure white on dark = halation). */
+	--mgk-ink:       #D8DFE9;   /* primary value text */
+	--mgk-ink-2:     #B0BBC9;   /* secondary headings */
+	--mgk-muted:     #8B98AA;   /* labels / hints */
+	--mgk-muted-2:   #6A7789;   /* disabled / subtle */
+
+	/* Lines — soft, low-contrast against the lifted surfaces */
+	--mgk-line:      #323D4C;
+
+	/* Accent — brighter teal for dark contrast */
+	--mgk-accent:    #2BB0A3;
+	--mgk-accent-50: rgba(45, 176, 163, 0.16);  /* teal wash on dark (bands, badges) */
+	--mgk-accent-600:#2BB0A3;
+	--mgk-accent-700:#5EC9BE;   /* link / hover — light teal on dark */
+	--mgk-accent-ink:#5EC9BE;   /* title / icon on the dark teal-wash band */
+
+	/* Base-token overrides for dark — --mgk-accent2 derives from --c-accent */
+	--c-ink:     216 223 233;   /* #D8DFE9 */
+	--c-surface: 26 34 48;      /* #1A2230 */
+	--c-accent:  96 165 250;    /* #60A5FA lighter royal blue reads on dark */
+
+	/* Elevation — deeper shadows on dark */
+	--mgk-shadow:    rgba(0, 0, 0, 0.40);
+	--mgk-shadow-md: rgba(0, 0, 0, 0.55);
+
+	/* Status — lighter inks + translucent tints for dark bg */
+	--mgk-success:    #34D399;
+	--mgk-success-50: rgba(52, 211, 153, 0.16);
+	--mgk-warn:       #FBBF24;
+	--mgk-warn-50:    rgba(251, 191, 36, 0.16);
+	--mgk-danger:     #FB7185;
+	--mgk-danger-50:  rgba(251, 113, 133, 0.16);
+
+	color-scheme: dark;
+}
+
+/* ── Dark-mode surfaces for PrimeVue form fields + overlay panels ──
+   Aura's dark component tokens reference high surface levels that our
+   chrome-oriented dark ramp renders LIGHT (white inputs / dropdowns / menus in
+   dark). PrimeVue v4 ships its component CSS inside `@layer primevue`, so these
+   UNLAYERED rules win without !important. Force them to the card surface. */
+.dark .p-inputtext,
+.dark .p-textarea,
+.dark .p-select,
+.dark .p-multiselect,
+.dark .p-autocomplete-input,
+.dark .p-datepicker-input,
+.dark .p-inputnumber-input {
+	background: var(--mgk-card);
+	color: var(--mgk-ink);
+}
+/* Checkbox: unchecked box bg also rides a light surface in dark — pin it dark
+   (the checked/teal state keeps its accent fill from the preset). */
+.dark .p-checkbox-box {
+	background: var(--mgk-card);
+	border-color: var(--mgk-line);
+}
+/* Tabs: the tab strip (.p-tablist) and the tab content panel (.p-tabpanels)
+   default to {surface.900} = light in our dark ramp — that was the white band
+   under the list's status tabs and the white panel the detail cards floated on.
+   Make them transparent so they sit on the dark page (cards keep their own bg). */
+.dark .p-tablist,
+.dark .p-tabpanels {
+	background: transparent;
+}
+/* Inner TEXT of menus / selects / options keeps a dark color (it's a child of
+   the box, so the box's color override doesn't reach it) — force it light, but
+   keep placeholders muted. This fixes dark-on-dark menu items + the chosen
+   Select value ("Orange") in dark. */
+.dark .p-menu-item-link,
+.dark .p-menu-item-label,
+.dark .p-tieredmenu .p-menu-item-label,
+.dark .p-select-label,
+.dark .p-multiselect-label,
+.dark .p-select-option,
+.dark .p-multiselect-option,
+.dark .p-autocomplete-option {
+	color: var(--mgk-ink);
+}
+.dark .p-select-label.p-placeholder,
+.dark .p-multiselect-label.p-placeholder {
+	color: var(--mgk-muted-2);
+}
+.dark .p-select-overlay,
+.dark .p-multiselect-overlay,
+.dark .p-autocomplete-overlay,
+.dark .p-datepicker-panel,
+.dark .p-menu,
+.dark .p-popover,
+.dark .p-popover-content,
+.dark .p-tieredmenu,
+.dark .p-dialog,
+.dark .p-card {
+	background: var(--mgk-card);
+	color: var(--mgk-ink);
+	border-color: var(--mgk-line);
+}
+.dark .p-paginator {
+	background: transparent;
+	color: var(--mgk-ink);
+}
+
+/* DataTable: pin the row dividers + table frame to the line token. Aura leaves
+   these at a default mid-grey (#808080) that reads as harsh white-ish gridlines
+   on the dark theme; cells already use --mgk-line via theme.js. Both schemes. */
+.p-datatable-table,
+.p-datatable-table > tbody > tr,
+.p-datatable-tbody > tr,
+.p-datatable-thead > tr,
+.p-datatable-tbody > tr > td,
+.p-datatable-thead > tr > th {
+	border-color: var(--mgk-line);
+}
+
+/* Dark: Aura's dark DataTable ROW background is {surface.900}, which our
+   chrome-oriented dark ramp renders LIGHT (#EDF1F6) — so rows showed as pale
+   strips with dark text (the "white listview"). Make rows transparent over the
+   dark table surface + light text; light mode is unaffected (rows use surface.0). */
+.dark .p-datatable-tbody > tr {
+	background: transparent;
+	color: var(--mgk-ink);
+}
+.dark .p-datatable-tbody > tr > td {
+	color: var(--mgk-ink);
+}
+.dark .p-datatable-tbody > tr:hover {
+	background: var(--mgk-slate-50);
+}
+
+/* ── Input focus: royal-blue (secondary accent), uniform across PrimeVue inputs.
+   `.p-inputtext:focus` also covers autocomplete / datepicker / number inner
+   inputs (they all carry .p-inputtext). Unlayered → wins over @layer primevue
+   without !important; --mgk-accent2 flips per scheme. ── */
+.p-inputtext:enabled:focus,
+.p-inputtext:focus,
+.p-textarea:enabled:focus,
+.p-autocomplete-input:enabled:focus,
+.p-datepicker-input:enabled:focus,
+.p-inputnumber-input:enabled:focus,
+.p-select.p-focus,
+.p-multiselect.p-focus {
+	border-color: var(--mgk-accent2) !important;
+	box-shadow: 0 0 0 3px var(--mgk-accent2-50) !important;
 }
 
 * {
@@ -73,8 +258,8 @@ body {
 }
 
 body {
-	font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-		"Helvetica Neue", Arial, sans-serif;
+	font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
+		"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 	font-size: 14px;
 	line-height: 1.5;
 	color: var(--mgk-ink);
@@ -99,12 +284,14 @@ a {
 	color: var(--mgk-accent-700);
 }
 
-/* ── Bright Workshop card system (canonical — mirrors DocDetail .detail-card) ── */
+/* ── Bright Workshop card system (canonical). .mgk-card, DocDetail
+   .detail-card/.side-card, and the HomePage stat/recent cards all use the airy
+   --mgk-shadow-card (the Phase-1-review card-shadow divergence is resolved). ── */
 .mgk-card {
 	background: var(--mgk-card);
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius);
-	box-shadow: var(--mgk-shadow-sm);
+	box-shadow: var(--mgk-shadow-card);
 	overflow: hidden;
 }
 .mgk-card__head {
@@ -112,8 +299,8 @@ a {
 	align-items: center;
 	gap: var(--space-2);
 	padding: 10px 16px;
-	/* AA FIX: band runs accent-600 → accent-700 so white title passes 4.6:1 */
-	background: linear-gradient(135deg, var(--mgk-accent-600) 0%, var(--mgk-accent-700) 100%);
+	/* Light band: pale tint + teal title (AA ~4.6:1), header recedes so data leads. */
+	background: var(--mgk-accent-50); border-bottom: 1px solid var(--mgk-line);
 }
 .mgk-card__head::before {            /* leading dot glyph */
 	content: "";
@@ -132,7 +319,7 @@ a {
 }
 .mgk-card__count {                   /* optional right-aligned count pill */
 	margin-left: auto;
-	background: rgba(255,255,255,0.22);
+	background: #fff;
 	color: var(--mgk-accent-ink);
 	font-size: 11px; font-weight: 600;
 	padding: 1px 8px; border-radius: 999px;
@@ -172,3 +359,51 @@ a {
 }
 .mgk-empty .pi { font-size: 26px; color: var(--mgk-accent); opacity: 0.85; }
 .mgk-empty__text { font-size: 13px; }
+
+/* ── Shared loading skeleton (detail cards, editors) — shimmer placeholders
+   instead of a blank flash. ── */
+.mgk-detail-skel {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--space-3);
+	margin-top: var(--space-3);
+}
+@media (max-width: 768px) {
+	.mgk-detail-skel { grid-template-columns: 1fr; }
+}
+.mgk-detail-skel__card {
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius);
+	box-shadow: var(--mgk-shadow-card);
+	overflow: hidden;
+}
+.mgk-skel-band {
+	height: 38px;
+	background: var(--mgk-accent-50);
+	border-bottom: 1px solid var(--mgk-line);
+}
+.mgk-skel-body {
+	padding: var(--space-4);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+.mgk-skel-line {
+	height: 14px;
+	border-radius: 6px;
+	background: linear-gradient(90deg, var(--mgk-slate-50), var(--mgk-line), var(--mgk-slate-50));
+	background-size: 200% 100%;
+	animation: mgk-shimmer 1.2s infinite;
+}
+.mgk-skel-line:nth-child(odd) { width: 72%; }
+@keyframes mgk-shimmer {
+	from { background-position: 200% 0; }
+	to { background-position: -200% 0; }
+}
+
+/* Respect reduced-motion: hold the skeleton shimmer still. */
+@media (prefers-reduced-motion: reduce) {
+	.mgk-skel-line,
+	.recent-skel { animation: none; }
+}

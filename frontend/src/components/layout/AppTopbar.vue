@@ -1,8 +1,31 @@
 <template>
 	<header class="mgk-topbar">
-		<span class="topbar-title">{{ pageTitle }}</span>
+		<div class="topbar-left">
+			<button
+				class="topbar-hamburger"
+				type="button"
+				aria-label="Open navigation menu"
+				:aria-expanded="drawerOpen"
+				@click="$emit('toggle-drawer')"
+			>
+				<i class="pi pi-bars" />
+			</button>
+			<span class="topbar-title">{{ pageTitle }}</span>
+		</div>
 
 		<div class="topbar-right">
+			<!-- Global search / command palette trigger (also ⌘K / Ctrl+K). -->
+			<button
+				class="cmdk-trigger"
+				type="button"
+				aria-label="Open search (Ctrl or Cmd + K)"
+				title="Search — Ctrl/Cmd + K"
+				@click="openPalette"
+			>
+				<i class="pi pi-search" />
+				<span class="cmdk-trigger__label">Search…</span>
+				<span class="cmdk-trigger__kbd">⌘K</span>
+			</button>
 			<!-- Real role(s), read-only — NO switcher (plan: the user's real
 			     role drives the UI). -->
 			<div class="role-chip" :title="roleTitle">
@@ -13,11 +36,21 @@
 				</div>
 			</div>
 			<Button
+				:icon="isDark ? 'pi pi-sun' : 'pi pi-moon'"
+				severity="secondary"
+				text
+				rounded
+				:aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'"
+				:title="isDark ? 'Light mode' : 'Dark mode'"
+				@click="toggleTheme"
+			/>
+			<Button
 				icon="pi pi-sign-out"
 				severity="secondary"
 				text
 				rounded
 				aria-label="Log out"
+				title="Log out"
 				@click="onLogout"
 			/>
 		</div>
@@ -29,10 +62,17 @@ import { computed } from "vue"
 import { useRoute } from "vue-router"
 import Button from "primevue/button"
 import { useAuth } from "@/composables/useAuth"
+import { useTheme } from "@/composables/useTheme"
+import { useCommandPalette } from "@/composables/useCommandPalette"
 import { getRegistryByRoute } from "@/config/doctypes"
+
+defineProps({ drawerOpen: Boolean })
+defineEmits(["toggle-drawer"])
 
 const route = useRoute()
 const { fullName, logout } = useAuth()
+const { isDark, toggleTheme } = useTheme()
+const { openPalette } = useCommandPalette()
 
 const bootUser = window.frappe?.boot?.user || {}
 const roles = Array.isArray(bootUser.roles) ? bootUser.roles : []
@@ -52,10 +92,23 @@ const primaryRole = computed(() => {
 })
 const roleTitle = computed(() => `Roles: ${roles.join(", ") || "—"}`)
 
+// Q3: readable titles for the specialized rich-flow routes (their route.name is
+// camelCase like "ProcessMatrix", which leaked into the topbar). Generic
+// list/detail routes resolve to the DocType label via the registry.
+const ROUTE_TITLES = {
+	Home: "Home",
+	IPDCreate: "New Item Production Detail",
+	IPDEditFields: "Edit Item Production Detail",
+	IPDConfig: "Item Production Detail",
+	ProcessMatrix: "Process Matrix",
+	BOMMapping: "Item BOM Mapping",
+	ProductionOrder: "Production Order",
+}
+
 const pageTitle = computed(() => {
-	if (route.name === "Home") return "Home"
 	const reg = getRegistryByRoute(route.params.docRoute)
-	return reg?.label || route.name || ""
+	if (reg) return reg.label
+	return ROUTE_TITLES[route.name] || route.name || ""
 })
 
 const initials = computed(() => {
@@ -82,6 +135,34 @@ async function onLogout() {
 	padding: 0 20px;
 }
 
+.topbar-left {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+/* Mobile-only menu button (opens the drawer). */
+.topbar-hamburger {
+	display: none;
+	background: transparent;
+	border: 0;
+	color: var(--mgk-ink-2);
+	font-size: 18px;
+	padding: 6px 8px;
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+}
+.topbar-hamburger:hover {
+	background: var(--mgk-slate-50);
+}
+@media (max-width: 768px) {
+	.topbar-hamburger {
+		display: inline-flex;
+		align-items: center;
+	}
+}
+
 .topbar-title {
 	font-size: 13px;
 	font-weight: 600;
@@ -92,6 +173,45 @@ async function onLogout() {
 	display: flex;
 	align-items: center;
 	gap: 10px;
+}
+
+/* Global search trigger — looks like a search field, opens the ⌘K palette. */
+.cmdk-trigger {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	height: 32px;
+	min-width: 200px;
+	padding: 0 8px 0 10px;
+	background: var(--mgk-bg);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius-sm);
+	color: var(--mgk-muted);
+	font-family: inherit;
+	font-size: var(--fs-sm);
+	cursor: pointer;
+	transition: border-color 0.12s ease, color 0.12s ease;
+}
+.cmdk-trigger:hover {
+	border-color: var(--mgk-accent);
+	color: var(--mgk-ink-2);
+}
+.cmdk-trigger .pi {
+	font-size: var(--fs-sm);
+	color: var(--mgk-muted-2);
+}
+.cmdk-trigger__label {
+	flex: 1;
+	text-align: left;
+}
+.cmdk-trigger__kbd {
+	font-size: var(--fs-2xs);
+	font-weight: 700;
+	color: var(--mgk-muted-2);
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: 4px;
+	padding: 1px 5px;
 }
 
 .role-chip {
@@ -108,7 +228,9 @@ async function onLogout() {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
-	background: var(--mgk-ink);
+	/* Teal (brand) so initials stay legible in both light and dark — the old
+	   --mgk-ink bg inverted to near-white in dark, hiding white initials. */
+	background: var(--mgk-accent);
 	color: #fff;
 	font-weight: 600;
 	font-size: 12px;

@@ -206,7 +206,7 @@ defineExpose({ reload: loadTransitions })
 .reject-error {
 	display: block;
 	margin-top: 6px;
-	color: #be123c;
+	color: var(--mgk-danger);
 	font-size: 12px;
 }
 </style>

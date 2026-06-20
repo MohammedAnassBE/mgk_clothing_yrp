@@ -23,6 +23,20 @@ const linkSearchHandlers = {
 			: null,
 }
 
+// Q18: unify the vendor-party term ("Job-worker") with WO + DC. On a GRN the
+// sender party is `supplier`; `delivery_location` is the receiving side.
+const labels = {
+	supplier: "Job-worker",
+}
+
+// Q13: surface help on the pivotal Against selector (Desk hides its description
+// from /web users) so a floor user knows what the choice drives.
+const help = {
+	against: "Receive against a Work Order (job-work return) or a Purchase Order (bought-in goods). This drives which items and quantities load below.",
+}
+
 export default {
 	linkSearchHandlers,
+	labels,
+	help,
 }

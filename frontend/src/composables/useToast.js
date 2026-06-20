@@ -13,8 +13,13 @@ export function useAppToast() {
 	}
 
 	return {
-		success(summary, detail) {
-			show("success", summary || "Success", detail)
+		// Q19: success takes an optional `life` so high-stakes confirmations
+		// (Submit / Cancel / Delete / Amend / Approve) can linger ~6s — a state
+		// change the user must actually register ("WO-00010 submitted") deserves
+		// longer on screen than a routine field save. Toasts now appear top-right
+		// (App.vue), offset below the topbar.
+		success(summary, detail, life = 4000) {
+			show("success", summary || "Success", detail, life)
 		},
 		error(summary, detail) {
 			show("error", summary || "Error", detail, 6000)

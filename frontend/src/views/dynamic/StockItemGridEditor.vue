@@ -63,7 +63,7 @@
 		<!-- ── Existing logical items (grouped pivot view) ── -->
 		<div v-if="groups.length" class="grid-groups">
 			<div v-for="(group, gi) in groups" :key="'g-' + gi" class="grid-group">
-				<DataTable :value="group.items" class="mgk-table pivot-dt" :rowHover="false">
+				<DataTable :value="group.items" class="mgk-table pivot-dt" :rowHover="false" :tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }">
 					<Column header="#" :style="{ width: '40px' }">
 						<template #body="{ index }">{{ index + 1 }}</template>
 					</Column>
@@ -415,7 +415,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from "vue"
+import { ref, reactive, computed, onMounted, watch, nextTick } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -479,8 +479,22 @@ const props = defineProps({
 
 const toast = useAppToast()
 
+// Q6: let the parent (DocDetail) treat grid edits as "unsaved changes". The grid
+// keeps its own state (not in the parent `form`), so without this a quantity/rate
+// edit wouldn't trip the parent's dirty guard. We emit `change` on genuine user
+// edits to `groups` (cell qty/rate, add/delete row) — armed AFTER loadData/mount
+// so the programmatic hydration/seed never false-fires.
+const emit = defineEmits(["change"])
+const changeArmed = ref(false)
+
 // ── grouped state (== save_stock_items.py shape) ──
 const groups = ref([])
+
+watch(
+	groups,
+	() => { if (changeArmed.value) emit("change") },
+	{ deep: true },
+)
 
 // ── dimension config (lot / received_type …) ──
 const dimensions = ref([])
@@ -524,6 +538,9 @@ const dimSuggestions = reactive({}) // { fieldname: [values] }
 onMounted(async () => {
 	if (props.showDimensions) await loadDimensions()
 	if (props.initialData != null) loadData(props.initialData)
+	// Arm change-emit after the initial (programmatic) state settles. A later
+	// external loadData() (parent hydrate/autofill) re-disarms then re-arms.
+	nextTick(() => { changeArmed.value = true })
 })
 
 // Read-only view use: (re)load when the grouped data arrives/changes.
@@ -1015,6 +1032,7 @@ function hasItems() {
 // Rebuild internal state from a saved grouped payload (array or JSON string).
 // Tolerant of partial entries (missing dimensions/attributes/values).
 function loadData(grouped) {
+	changeArmed.value = false // programmatic load — don't emit change
 	let data = grouped
 	if (typeof data === "string") {
 		try {
@@ -1025,6 +1043,7 @@ function loadData(grouped) {
 	}
 	if (!Array.isArray(data)) {
 		groups.value = []
+		nextTick(() => { changeArmed.value = true })
 		return
 	}
 	groups.value = data.map((g) => ({
@@ -1042,6 +1061,7 @@ function loadData(grouped) {
 			values: cloneValues(it.values),
 		})),
 	}))
+	nextTick(() => { changeArmed.value = true })
 }
 
 function cloneValues(values) {
@@ -1103,6 +1123,9 @@ defineExpose({ getItems, loadData, hasItems })
 	width: 100%;
 }
 :deep(.cell-num-input) {
+	/* fill the cell — PrimeVue's fluid sets the inner input to width:1% which
+	   collapses to ~26px on our block-display host; force full width. */
+	width: 100%;
 	text-align: center;
 }
 .cell-ro {
@@ -1183,7 +1206,7 @@ defineExpose({ getItems, loadData, hasItems })
 	font-weight: 600;
 }
 .add-fld .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 
 /* Qty pivot (size cells) */
@@ -1222,7 +1245,7 @@ defineExpose({ getItems, loadData, hasItems })
 	font-weight: 600;
 }
 .qty-single .req {
-	color: #be123c;
+	color: var(--mgk-danger);
 }
 
 .rate-row,
