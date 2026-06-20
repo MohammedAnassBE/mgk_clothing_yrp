@@ -359,3 +359,45 @@ a {
 }
 .mgk-empty .pi { font-size: 26px; color: var(--mgk-accent); opacity: 0.85; }
 .mgk-empty__text { font-size: 13px; }
+
+/* ── Shared loading skeleton (detail cards, editors) — shimmer placeholders
+   instead of a blank flash. ── */
+.mgk-detail-skel {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--space-3);
+	margin-top: var(--space-3);
+}
+@media (max-width: 768px) {
+	.mgk-detail-skel { grid-template-columns: 1fr; }
+}
+.mgk-detail-skel__card {
+	background: var(--mgk-card);
+	border: 1px solid var(--mgk-line);
+	border-radius: var(--radius);
+	box-shadow: var(--mgk-shadow-card);
+	overflow: hidden;
+}
+.mgk-skel-band {
+	height: 38px;
+	background: var(--mgk-accent-50);
+	border-bottom: 1px solid var(--mgk-line);
+}
+.mgk-skel-body {
+	padding: var(--space-4);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+.mgk-skel-line {
+	height: 14px;
+	border-radius: 6px;
+	background: linear-gradient(90deg, var(--mgk-slate-50), var(--mgk-line), var(--mgk-slate-50));
+	background-size: 200% 100%;
+	animation: mgk-shimmer 1.2s infinite;
+}
+.mgk-skel-line:nth-child(odd) { width: 72%; }
+@keyframes mgk-shimmer {
+	from { background-position: 200% 0; }
+	to { background-position: -200% 0; }
+}

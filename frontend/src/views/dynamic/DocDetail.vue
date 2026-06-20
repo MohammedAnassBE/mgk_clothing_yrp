@@ -302,10 +302,15 @@
 			@calculated="onDeliverablesCalculated"
 		/>
 
-		<!-- Loading (doc load, or create-mode meta load) -->
-		<div v-if="loading || (isCreate && metaLoading)" class="state-block">
-			<i class="pi pi-spin pi-spinner" style="font-size: 1.5rem" />
-			<span>Loading…</span>
+		<!-- Loading (doc load, or create-mode meta load) — skeleton mimics the
+		     grouped detail cards instead of a blank flash. -->
+		<div v-if="loading || (isCreate && metaLoading)" class="mgk-detail-skel" aria-busy="true" aria-label="Loading">
+			<div v-for="c in 2" :key="`sk-${c}`" class="mgk-detail-skel__card">
+				<div class="mgk-skel-band" />
+				<div class="mgk-skel-body">
+					<div v-for="i in 4" :key="`sk-${c}-${i}`" class="mgk-skel-line" />
+				</div>
+			</div>
 		</div>
 
 		<!-- Error (load failure) -->
@@ -4508,7 +4513,7 @@ function stripHtml(s) {
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius);
 	overflow: hidden;
-	box-shadow: var(--mgk-shadow-sm);
+	box-shadow: var(--mgk-shadow-card);
 }
 .detail-card__head {
 	display: flex;
@@ -4741,7 +4746,7 @@ function stripHtml(s) {
 }
 .side-card {
 	border: 1px solid var(--mgk-line);
-	box-shadow: var(--mgk-shadow-sm);
+	box-shadow: var(--mgk-shadow-card);
 	overflow: hidden;
 }
 /* Band head is full-bleed; the body owns the inset. Matches the Details cards. */
