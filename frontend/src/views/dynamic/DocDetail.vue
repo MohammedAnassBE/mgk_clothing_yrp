@@ -182,6 +182,16 @@
 						@click="onDiscard"
 					/>
 					<Button
+						v-if="isPurchaseInvoice"
+						label="Fetch GRN"
+						icon="pi pi-download"
+						size="small"
+						severity="secondary"
+						outlined
+						:loading="fetchingGrn"
+						@click="onFetchGrn"
+					/>
+					<Button
 						v-if="canWrite(doctype)"
 						label="Save"
 						icon="pi pi-check"
@@ -202,6 +212,16 @@
 						outlined
 						:disabled="saving"
 						@click="onDiscard"
+					/>
+					<Button
+						v-if="isPurchaseInvoice"
+						label="Fetch GRN"
+						icon="pi pi-download"
+						size="small"
+						severity="secondary"
+						outlined
+						:loading="fetchingGrn"
+						@click="onFetchGrn"
 					/>
 					<Button
 						v-if="canCreate(doctype)"
@@ -315,6 +335,16 @@
 			:modified="doc.modified"
 			@changed="onApprovalChanged"
 			@state="onApprovalState"
+		/>
+
+		<!-- Purchase Invoice: close the linked Work Orders before submit (yrp gates
+		     PI submit on all linked WOs being closed). -->
+		<PurchaseInvoiceWOClose
+			v-if="isPurchaseInvoice && doc && mode === 'view'"
+			:name="doc.name"
+			:docstatus="Number(doc.docstatus) || 0"
+			:against="doc.against || ''"
+			@changed="onApprovalChanged"
 		/>
 
 		<!-- WO Calculate Deliverables (yarn mode) — draft Work Order only -->
@@ -1384,6 +1414,7 @@ import processCostConfig from "@/config/fields/process-cost.js"
 // Q10: tooltip directive for gated (disabled-with-reason) action buttons.
 const vTooltip = Tooltip
 import WorkOrderApproval from "./WorkOrderApproval.vue"
+import PurchaseInvoiceWOClose from "./PurchaseInvoiceWOClose.vue"
 import AddressContactTab from "./AddressContactTab.vue"
 import CalculateDeliverablesModal from "./CalculateDeliverablesModal.vue"
 import StockItemGridEditor from "./StockItemGridEditor.vue"
@@ -1454,6 +1485,7 @@ const isPurchaseOrder = computed(() => doctype.value === "Purchase Order")
 const isDeliveryChallan = computed(() => doctype.value === "Delivery Challan")
 const isGoodsReceivedNote = computed(() => doctype.value === "Goods Received Note")
 const isInspectionEntry = computed(() => doctype.value === "Inspection Entry")
+const isPurchaseInvoice = computed(() => doctype.value === "Purchase Invoice")
 const isItem = computed(() => doctype.value === "Item")
 const isItemMasterTemplate = computed(() => doctype.value === "Item Master Template")
 // Item Master Template shares Item's attribute/mapping shape and the
@@ -1480,6 +1512,7 @@ const isCreate = computed(() => props.id === "new")
 const mode = ref("view")
 const isFormMode = computed(() => mode.value === "edit" || mode.value === "create")
 const acting = ref(null) // "submit" | "cancel" | "delete" | "amend" | "convert" | null
+const fetchingGrn = ref(false) // Purchase Invoice: "Fetch GRN" call in-flight
 
 // Prompt-named doctypes (autoname="prompt" / naming_rule="Set by user", e.g. Item
 // Master Template, FG Item Master Template) require the USER to supply the document
@@ -2897,6 +2930,36 @@ function zeroGroupedQtys(itemDetails) {
 	}
 }
 
+// Purchase Invoice: "Fetch GRN" button. Reads the GRN child rows the user picked,
+// calls the server fetch (which derives item + Process Cost rate, amount = qty *
+// rate; WO items bill at Process Cost, PO items at the GRN line rate), and loads
+// the returned rows into the flat `items` grid. Mirrors the Desk fetch_grn handler.
+async function onFetchGrn() {
+	const grns = (form.grn || []).map((r) => r.grn).filter(Boolean)
+	if (!grns.length) return toast.warn("No GRN selected", "Add at least one row in the GRN table first.")
+	if (!form.supplier) return toast.warn("Supplier required", "Set the Supplier first.")
+	if (!form.against) return toast.warn("Against required", "Set Against (Purchase Order / Work Order) first.")
+	fetchingGrn.value = true
+	try {
+		const r = await callMethod(
+			"yrp.yrp.doctype.purchase_invoice.purchase_invoice.fetch_grn_details",
+			{ grns: JSON.stringify(grns), against: form.against, supplier: form.supplier },
+		)
+		if (!r || typeof r !== "object") return
+		form.items = (r.items || []).map((row) => ({ ...row }))
+		if ("pi_work_order_billed_details" in form)
+			form.pi_work_order_billed_details = (r.wo_items || []).map((row) => ({ ...row }))
+		if ("grn_grand_total" in form) form.grn_grand_total = r.total || 0
+		if ("total_quantity" in form) form.total_quantity = r.total_quantity || 0
+		if ("allow_to_change_rate" in form) form.allow_to_change_rate = r.allow_to_change_rate || 0
+		toast.success("GRN fetched", `${(r.items || []).length} item row(s) loaded.`)
+	} catch (e) {
+		toast.error("Fetch GRN failed", e.message)
+	} finally {
+		fetchingGrn.value = false
+	}
+}
+
 async function runDocAutofill(fieldname) {
 	const dt = doctype.value
 	// Item Production Detail mirrors production_api's item-change handler
@@ -3057,7 +3120,15 @@ async function onChildLinkComplete(col, e) {
 		return
 	}
 	try {
-		const rows = await searchLink(target, e.query || "")
+		// Purchase Invoice GRN picker: only submitted GRNs of this supplier + against
+		// type that are NOT already billed on another PI (mirrors the Desk get_query).
+		let filters
+		if (target === "Goods Received Note" && isPurchaseInvoice.value) {
+			filters = { docstatus: 1, purchase_invoice_name: ["is", "not set"] }
+			if (form.supplier) filters.supplier = form.supplier
+			if (form.against) filters.against = form.against
+		}
+		const rows = await searchLink(target, e.query || "", filters)
 		childLinkSuggestions.value = rows.map((r) => r.name)
 	} catch (_) {
 		childLinkSuggestions.value = []
