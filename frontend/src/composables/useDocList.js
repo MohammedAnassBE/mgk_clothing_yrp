@@ -33,6 +33,18 @@ export function useDocList(doctype, options = {}) {
     return out
   }
 
+  // The exact filter param + order this list queries with: tuples when advanced
+  // filters are present (so a filter's own doctype reaches get_list), else the
+  // simpler object form. Exposed so callers (e.g. the detail page's prev/next
+  // navigation) can step through the SAME set. or_filters (search) is excluded —
+  // Frappe's get_next ignores it too, keeping stepping faithful to the Desk.
+  function resolvedQuery() {
+    const filters_ = advancedFilters.value.length
+      ? [...objectFiltersToTuples(filters), ...advancedFilters.value]
+      : { ...filters }
+    return { filters: filters_, orderBy: currentOrderBy.value }
+  }
+
   async function fetch() {
     loading.value = true
     error.value = null
@@ -40,9 +52,7 @@ export function useDocList(doctype, options = {}) {
       // When advanced filters are present, send Frappe list-form filters (tuples)
       // so a filter's own doctype (parent OR child table) reaches get_list, which
       // adds the child-table JOIN itself. With none, keep the simpler object form.
-      const filterParam = advancedFilters.value.length
-        ? [...objectFiltersToTuples(filters), ...advancedFilters.value]
-        : { ...filters }
+      const filterParam = resolvedQuery().filters
       // A child-table filter (tuple doctype !== this list's doctype) makes the
       // server LEFT JOIN the child table, emitting one row per matching child — so
       // de-duplicate parents with `distinct` on BOTH the list and the count.
@@ -164,6 +174,7 @@ export function useDocList(doctype, options = {}) {
     clearAdvancedFilters,
     setPage,
     setOrderBy,
-    refresh
+    refresh,
+    resolvedQuery
   }
 }

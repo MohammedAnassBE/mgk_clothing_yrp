@@ -452,6 +452,7 @@ import InputNumber from "primevue/inputnumber"
 import DatePicker from "primevue/datepicker"
 import ToggleSwitch from "primevue/toggleswitch"
 import { useDocList } from "@/composables/useDocList"
+import { captureListContext } from "@/composables/useListContext"
 import { useRealtime } from "@/composables/useRealtime"
 import { usePermissions } from "@/composables/usePermissions"
 import { useLinkTitles } from "@/composables/useLinkTitles"
@@ -1316,7 +1317,23 @@ function onRowClick(e) {
 	const target = e?.originalEvent?.target
 	if (target?.closest?.(".p-checkbox, .p-selection-column, button, a, input, textarea, select")) return
 	const name = e?.data?.name
-	if (name) router.push(`/${props.docRoute}/${encodeURIComponent(name)}`)
+	if (!name) return
+	captureNavContext()
+	router.push(`/${props.docRoute}/${encodeURIComponent(name)}`)
+}
+
+// Stash the resolved list query (filters + sort) so the detail page's prev/next
+// arrows step through EXACTLY this list — same active tab (e.g. Submitted), same
+// filters, same sort. Frappe v15 form-navigation parity. or_filters (search) is
+// intentionally excluded (get_next ignores it, matching the Desk).
+function captureNavContext() {
+	if (!doctype.value || !listState.value) return
+	const q = listState.value.resolvedQuery()
+	captureListContext(doctype.value, {
+		docRoute: props.docRoute,
+		orderBy: q.orderBy,
+		filters: q.filters,
+	})
 }
 
 function onNew() {

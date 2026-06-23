@@ -197,8 +197,8 @@
 					<div class="fld-wrap">
 						<label>Lead Time</label>
 						<div class="fld-static">
-							<span v-if="header.lead_time_given != null && header.lead_time_given !== ''">
-								{{ header.lead_time_given }} day(s)
+							<span v-if="leadTimeGivenDisplay != null && leadTimeGivenDisplay !== ''">
+								{{ leadTimeGivenDisplay }} day(s)
 							</span>
 							<span v-else>—</span>
 						</div>
@@ -514,6 +514,12 @@ const grandTotal = computed(() => {
 	let total = 0
 	for (const block of items.value) total += getBlockTotal(block)
 	return total
+})
+const leadTimeGivenDisplay = computed(() => {
+	const baseDate = header.posting_date || todayStr()
+	const days = dateDiffDays(header.delivery_date, baseDate)
+	if (days !== null) return days
+	return header.lead_time_given
 })
 
 // ════════════════ MATRIX HELPERS (mirror ProductionOrderTable) ════════════════
@@ -899,28 +905,34 @@ function buildPayload() {
 	}
 }
 
-async function onSave() {
+function buildValidatedPayload() {
 	if (!header.delivery_date) {
 		toast.warn("Missing Delivery Date", "Delivery Date is required.")
-		return
+		return null
 	}
 	if (!header.dont_deliver_after) {
 		toast.warn("Missing date", "Don't Deliver After is required.")
-		return
+		return null
 	}
 	const { finalItems, payload } = buildPayload()
 	if (!finalItems.length) {
 		toast.warn("No items", "Add at least one item with a quantity before saving.")
-		return
+		return null
 	}
+	return { finalItems, payload }
+}
+
+async function onSave() {
+	const built = buildValidatedPayload()
+	if (!built) return
 	try {
 		if (isCreate.value) {
-			const result = await docState.save(payload)
+			const result = await docState.save(built.payload)
 			const newName = result?.name
 			toast.success("Created", newName ? `Production Order ${newName} created` : "Order created")
 			if (newName) router.replace(`/production-order/${encodeURIComponent(newName)}`)
 		} else {
-			await docState.save(payload, props.id)
+			await docState.save(built.payload, props.id)
 			toast.success("Saved", `${props.id} updated`)
 			await load()
 		}
@@ -938,6 +950,9 @@ function onSubmit() {
 		accept: async () => {
 			acting.value = "submit"
 			try {
+				const built = buildValidatedPayload()
+				if (!built) return
+				await docState.save(built.payload, props.id)
 				await docState.submit(props.id)
 				toast.success("Submitted", `${props.id} submitted`)
 				await load()
@@ -1022,6 +1037,17 @@ function fromDateObj(d) {
 	if (!d) return ""
 	const pad = (n) => String(n).padStart(2, "0")
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+function todayStr() {
+	return fromDateObj(new Date())
+}
+function dateDiffDays(to, from) {
+	const start = toDateObj(from)
+	const end = toDateObj(to)
+	if (!start || !end) return null
+	const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
+	const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate())
+	return Math.round((endUtc - startUtc) / 86400000)
 }
 function formatDate(val) {
 	if (!val) return ""

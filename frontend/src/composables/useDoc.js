@@ -1,6 +1,6 @@
 import { ref, readonly } from 'vue'
 import {
-  getDoc, createDoc, updateDoc, deleteDoc, submitDoc, cancelDoc, amendDoc,
+  getDoc, createDoc, updateDoc, deleteDoc, submitDoc, cancelDoc, amendDoc, duplicateDoc,
   getMeta, getLinkedDocs, getDocInfo,
 } from '@/api/client'
 
@@ -157,6 +157,20 @@ export function useDoc(doctype) {
     }
   }
 
+  async function duplicate(name = null) {
+    saving.value = true
+    error.value = null
+    try {
+      const result = await duplicateDoc(doctype, name || doc.value?.name)
+      return result
+    } catch (e) {
+      error.value = e.message || 'Failed to duplicate'
+      throw e
+    } finally {
+      saving.value = false
+    }
+  }
+
   function reset() {
     doc.value = null
     error.value = null
@@ -183,6 +197,7 @@ export function useDoc(doctype) {
     submit,
     cancel,
     amend,
+    duplicate,
     reset
   }
 }

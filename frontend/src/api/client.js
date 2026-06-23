@@ -533,6 +533,72 @@ export async function amendDoc(doctype, name) {
   return createDoc(doctype, newDoc)
 }
 
+const DUPLICATE_SYSTEM_FIELDS = new Set([
+  'name', 'creation', 'modified', 'modified_by', 'owner', 'docstatus',
+  'idx', 'parent', 'parentfield', 'parenttype', 'amended_from',
+  '_user_tags', '_comments', '_assign', '_liked_by', '__onload',
+])
+const DUPLICATE_VALUELESS_FIELDTYPES = new Set([
+  'Section Break', 'Column Break', 'Tab Break', 'Fold', 'Heading',
+  'HTML', 'Button', 'Image',
+])
+
+function metaMapFromBundle(bundle) {
+  const out = new Map()
+  for (const doc of bundle || []) {
+    if (doc?.name) out.set(doc.name, doc)
+  }
+  return out
+}
+
+function shouldDuplicateField(df) {
+  if (!df?.fieldname) return false
+  if (DUPLICATE_SYSTEM_FIELDS.has(df.fieldname)) return false
+  if (DUPLICATE_VALUELESS_FIELDTYPES.has(df.fieldtype)) return false
+  return !(df.no_copy === 1 || df.no_copy === true || df.no_copy === '1')
+}
+
+function duplicateByEntries(source) {
+  const out = {}
+  for (const [key, value] of Object.entries(source || {})) {
+    if (DUPLICATE_SYSTEM_FIELDS.has(key)) continue
+    if (Array.isArray(value)) out[key] = value.map((row) => duplicateByEntries(row))
+    else out[key] = value
+  }
+  return out
+}
+
+function duplicateFromMeta(source, meta, metaByName) {
+  if (!meta?.fields?.length) return duplicateByEntries(source)
+  const out = {}
+  for (const df of meta.fields) {
+    if (!shouldDuplicateField(df)) continue
+    const fieldname = df.fieldname
+    const value = source?.[fieldname]
+    if (value === undefined) continue
+    if (df.fieldtype === 'Table') {
+      const childMeta = metaByName.get(df.options)
+      out[fieldname] = Array.isArray(value)
+        ? value.map((row) => duplicateFromMeta(row, childMeta, metaByName))
+        : []
+    } else {
+      out[fieldname] = value
+    }
+  }
+  return out
+}
+
+/**
+ * Duplicate a saved document into an unsaved draft payload, matching Frappe's
+ * Duplicate action semantics: copy normal fields and child rows, skip identity
+ * fields plus DocField `no_copy`, and do NOT set `amended_from`.
+ */
+export async function duplicateDoc(doctype, name) {
+  const [orig, bundle] = await Promise.all([getDoc(doctype, name), getMeta(doctype)])
+  const metaByName = metaMapFromBundle(bundle)
+  return duplicateFromMeta(orig, metaByName.get(doctype), metaByName)
+}
+
 // ---------------------------------------------------------------------------
 // Workflow transition helpers (workflow-managed DocTypes — Process Cost, Item
 // Price). Both core methods are @frappe.whitelist(): get_transitions is

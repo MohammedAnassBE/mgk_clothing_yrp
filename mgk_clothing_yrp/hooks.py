@@ -240,6 +240,7 @@ fixtures = [
 doc_events = {
 	"Purchase Order": {
 		"validate": "mgk_clothing_yrp.overrides.purchase_order.validate",
+		"before_submit": "mgk_clothing_yrp.overrides.purchase_order.before_submit",
 	},
 	"Work Order": {
 		"before_submit": "mgk_clothing_yrp.overrides.work_order.before_submit",
@@ -321,4 +322,3 @@ doctype_js = {
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

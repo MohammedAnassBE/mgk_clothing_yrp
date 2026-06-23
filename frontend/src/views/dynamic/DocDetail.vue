@@ -49,6 +49,35 @@
 				<div v-if="mode === 'edit'" class="doc-subtle edit-hint">Editing</div>
 			</div>
 
+			<!-- Prev/Next document navigation (Frappe v15 form-arrow parity) — view
+			     mode only. Left = previous, right = next, stepping through the list
+			     the user came from. Disabled at the list ends; tooltip names the
+			     target document. -->
+			<div v-if="showDocNav" class="doc-nav">
+				<Button
+					class="doc-nav__btn"
+					icon="pi pi-chevron-left"
+					text
+					rounded
+					size="small"
+					:disabled="!docHasPrev"
+					aria-label="Previous document"
+					v-tooltip.bottom="docPrevName ? `Previous: ${docPrevName}` : 'No previous document'"
+					@click="docGoPrev"
+				/>
+				<Button
+					class="doc-nav__btn"
+					icon="pi pi-chevron-right"
+					text
+					rounded
+					size="small"
+					:disabled="!docHasNext"
+					aria-label="Next document"
+					v-tooltip.bottom="docNextName ? `Next: ${docNextName}` : 'No next document'"
+					@click="docGoNext"
+				/>
+			</div>
+
 			<Tag
 				v-if="!loading && doc && mode === 'view' && (isSubmittable || isWorkflow || doc.status)"
 				class="head-status"
@@ -611,7 +640,12 @@
 								/>
 								<Popover :ref="(el) => setColChooserRef(mgkItemsTable.fieldname, el)">
 									<div class="col-chooser">
-										<div class="col-chooser__title">Show columns</div>
+										<div class="col-chooser__head">
+											<div class="col-chooser__title">Show columns</div>
+											<div class="col-chooser__total">
+												{{ childWidthUnitsTotal(mgkItemsTable.fieldname, mgkItemsTable.columns) }}/{{ MAX_TABLE_WIDTH_UNITS }}
+											</div>
+										</div>
 										<div
 											v-for="col in mgkItemsTable.columns"
 											:key="col.fieldname"
@@ -624,6 +658,15 @@
 												@update:modelValue="toggleColumn(mgkItemsTable.fieldname, mgkItemsTable.columns, col.fieldname)"
 											/>
 											<label :for="'colsel-mgk-' + col.fieldname">{{ col.label }}</label>
+											<InputNumber
+												class="col-chooser__width"
+												inputClass="col-chooser__width-input"
+												:modelValue="childColWidthUnits(mgkItemsTable.fieldname, col)"
+												:min="1"
+												:max="childWidthUnitMax(mgkItemsTable.fieldname, mgkItemsTable.columns, col)"
+												:useGrouping="false"
+												@update:modelValue="(value) => setChildColWidthUnits(mgkItemsTable.fieldname, mgkItemsTable.columns, col, value)"
+											/>
 										</div>
 									</div>
 								</Popover>
@@ -805,7 +848,12 @@
 								/>
 								<Popover :ref="(el) => setColChooserRef(ct.fieldname, el)">
 									<div class="col-chooser">
-										<div class="col-chooser__title">Show columns</div>
+										<div class="col-chooser__head">
+											<div class="col-chooser__title">Show columns</div>
+											<div class="col-chooser__total">
+												{{ childWidthUnitsTotal(ct.fieldname, ct.columns) }}/{{ MAX_TABLE_WIDTH_UNITS }}
+											</div>
+										</div>
 										<div
 											v-for="col in ct.columns"
 											:key="col.fieldname"
@@ -818,6 +866,15 @@
 												@update:modelValue="toggleColumn(ct.fieldname, ct.columns, col.fieldname)"
 											/>
 											<label :for="'colsel-edit-' + ct.fieldname + '-' + col.fieldname">{{ col.label }}</label>
+											<InputNumber
+												class="col-chooser__width"
+												inputClass="col-chooser__width-input"
+												:modelValue="childColWidthUnits(ct.fieldname, col)"
+												:min="1"
+												:max="childWidthUnitMax(ct.fieldname, ct.columns, col)"
+												:useGrouping="false"
+												@update:modelValue="(value) => setChildColWidthUnits(ct.fieldname, ct.columns, col, value)"
+											/>
 										</div>
 									</div>
 								</Popover>
@@ -1095,7 +1152,12 @@
 									/>
 									<Popover :ref="(el) => setColChooserRef(ct.fieldname, el)">
 										<div class="col-chooser">
-											<div class="col-chooser__title">Show columns</div>
+											<div class="col-chooser__head">
+												<div class="col-chooser__title">Show columns</div>
+												<div class="col-chooser__total">
+													{{ childWidthUnitsTotal(ct.fieldname, ct.columns) }}/{{ MAX_TABLE_WIDTH_UNITS }}
+												</div>
+											</div>
 											<div
 												v-for="col in ct.columns"
 												:key="col.fieldname"
@@ -1108,6 +1170,15 @@
 													@update:modelValue="toggleColumn(ct.fieldname, ct.columns, col.fieldname)"
 												/>
 												<label :for="'colsel-view-' + ct.fieldname + '-' + col.fieldname">{{ col.label }}</label>
+												<InputNumber
+													class="col-chooser__width"
+													inputClass="col-chooser__width-input"
+													:modelValue="childColWidthUnits(ct.fieldname, col)"
+													:min="1"
+													:max="childWidthUnitMax(ct.fieldname, ct.columns, col)"
+													:useGrouping="false"
+													@update:modelValue="(value) => setChildColWidthUnits(ct.fieldname, ct.columns, col, value)"
+												/>
 											</div>
 										</div>
 									</Popover>
@@ -1382,6 +1453,7 @@ import Popover from "primevue/popover"
 import Checkbox from "primevue/checkbox"
 import Menu from "primevue/menu"
 import { useDoc } from "@/composables/useDoc"
+import { useDocNav } from "@/composables/useDocNav"
 import { useRealtime } from "@/composables/useRealtime"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
@@ -1402,10 +1474,13 @@ import {
 } from "@/config/fields"
 import {
 	ACTION_COL_WIDTH,
+	MAX_TABLE_WIDTH_UNITS,
 	useVisibleColumns,
 	persistVisibleColumns,
 	resolvedColumnWidth,
 	persistColumnWidth,
+	resolvedColumnWidthUnits,
+	persistColumnWidthUnits,
 } from "@/composables/useChildTableColumns"
 // Self-contained per-doctype child-column hide rules (NOT registered in
 // config/fields/index.js — consumed directly here via childColumnHiddenBy).
@@ -1493,6 +1568,7 @@ const isItemMasterTemplate = computed(() => doctype.value === "Item Master Templ
 const hasAttributeValuesEditor = computed(() => isItem.value || isItemMasterTemplate.value)
 const isSubmittable = computed(() => registry.value?.isSubmittable || false)
 const isWorkflow = computed(() => registry.value?.isWorkflow || false)
+const DUPLICATE_DRAFT_STORAGE_PREFIX = "mgk_clothing_yrp:duplicate_draft:"
 
 // ── doc state ──
 // doctype is captured once at setup; correct only because AppLayout keys <router-view> by $route.path, remounting per doctype/record. Do not remove that :key.
@@ -1511,7 +1587,7 @@ const error = docState.error
 const isCreate = computed(() => props.id === "new")
 const mode = ref("view")
 const isFormMode = computed(() => mode.value === "edit" || mode.value === "create")
-const acting = ref(null) // "submit" | "cancel" | "delete" | "amend" | "convert" | null
+const acting = ref(null) // "submit" | "cancel" | "delete" | "amend" | "duplicate" | "convert" | null
 const fetchingGrn = ref(false) // Purchase Invoice: "Fetch GRN" call in-flight
 
 // Prompt-named doctypes (autoname="prompt" / naming_rule="Set by user", e.g. Item
@@ -1535,6 +1611,32 @@ const newName = ref("")
 // Inspection Entry "Convert Stock" gate — { can_convert, reason, siblings } from
 // the server (can_convert_stock), or null when not applicable / not allowed.
 const ieConvert = ref(null)
+
+// ── Prev/Next document navigation (Frappe v15 form-arrow parity) ──
+// Left arrow → previous document, right arrow → next, stepping through EXACTLY
+// the list the user came from (same active tab/filters/sort, captured in
+// useListContext on row-click). Neighbour resolution + the get_next calls live in
+// useDocNav; here we just feed it reactive doctype/route/name + a view-mode gate
+// and hand it the router push. Resolved after each doc load (see loadAll).
+const {
+	prevName: docPrevName,
+	nextName: docNextName,
+	hasPrev: docHasPrev,
+	hasNext: docHasNext,
+	goPrev: docGoPrev,
+	goNext: docGoNext,
+	resolve: resolveDocNav,
+} = useDocNav(
+	{
+		doctype,
+		docRoute: () => props.docRoute,
+		name: () => props.id,
+		enabled: () => mode.value === "view" && !isCreate.value && !!doc.value,
+	},
+	(route, name) => router.push(`/${route}/${encodeURIComponent(name)}`),
+)
+// Arrows render only on a loaded, saved document in view mode.
+const showDocNav = computed(() => mode.value === "view" && !isCreate.value && !!doc.value)
 
 // ── Header action hierarchy ──────────────────────────────────────────────
 // Submitted-state "create next" actions, ordered. The FIRST renders as the one
@@ -1577,6 +1679,9 @@ const moreMenuModel = computed(() => {
 		disabled: a.disabled,
 		command: () => a.handler(),
 	}))
+	if (canCreate(doctype.value)) {
+		items.push({ label: "Duplicate", icon: "pi pi-copy", command: () => onDuplicate() })
+	}
 	items.push({ label: "Print", icon: "pi pi-print", command: () => openPrintDialog() })
 	if (isAdmin.value || hasRole("System Manager"))
 		items.push({ label: "Open in Desk", icon: "pi pi-external-link", url: deskUrl.value, target: "_blank" })
@@ -2073,6 +2178,9 @@ async function loadAll() {
 	docState.loadActivity(props.id)
 	loadConnections()
 	loadIeConvertState()
+	// Resolve prev/next neighbours for the header arrows, stepping through the
+	// list the user came from (captured list context) — fire-and-forget.
+	resolveDocNav()
 }
 
 // The getdoctype bundle is [parentMeta, ...childMetas] keyed by DocType name.
@@ -2121,6 +2229,25 @@ onMounted(loadAll)
 function onShortcut(e) {
 	if (!(e.ctrlKey || e.metaKey)) return
 	const key = (e.key || "").toLowerCase()
+	// Shift+Ctrl+< (prev) / Shift+Ctrl+> (next) document — Frappe v15 form-arrow
+	// parity. View mode only, and never while the user is typing in a field (so a
+	// Shift+Ctrl+. in a search/text input doesn't yank the page away). "<" is
+	// Shift+comma, ">" is Shift+period — accept the shifted symbol and the base
+	// punctuation key across layouts.
+	const t = e.target
+	const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)
+	if (e.shiftKey && showDocNav.value && !typing) {
+		if (key === ">" || key === ".") {
+			e.preventDefault()
+			docGoNext()
+			return
+		}
+		if (key === "<" || key === ",") {
+			e.preventDefault()
+			docGoPrev()
+			return
+		}
+	}
 	if (key === "s") {
 		e.preventDefault()
 		if (saving.value || acting.value) return
@@ -2449,13 +2576,54 @@ function buildCreateForm() {
 	for (const ct of editableChildTables.value) {
 		form[ct.fieldname] = []
 	}
+	const duplicateApplied = applyPendingDuplicateDraft()
 	// Pre-fill from route query (Create-from-parent buttons like WO → Create
 	// DC / Create GRN). Async: trigger the autofill source once everything is
 	// seeded so get_work_order_defaults / get_purchase_order_defaults run and
 	// fill the header + items grid. nextTick lets the editor mount first.
 	// Arm dirty-tracking only AFTER the query seed + autofill settle, so a
 	// create-from-parent form doesn't open already "dirty".
-	applyCreateFormQuery().finally(armDirty)
+	const seed = duplicateApplied ? Promise.resolve() : applyCreateFormQuery()
+	seed.finally(armDirty)
+}
+
+function duplicateDraftStorageKey() {
+	return `${DUPLICATE_DRAFT_STORAGE_PREFIX}${doctype.value}`
+}
+
+function stashDuplicateDraft(data) {
+	try {
+		sessionStorage.setItem(
+			duplicateDraftStorageKey(),
+			JSON.stringify({ doctype: doctype.value, data }),
+		)
+		return true
+	} catch (_) {
+		return false
+	}
+}
+
+function applyPendingDuplicateDraft() {
+	if (router.currentRoute.value.query?.duplicate !== "1") return false
+	let payload = null
+	try {
+		const key = duplicateDraftStorageKey()
+		const raw = sessionStorage.getItem(key)
+		sessionStorage.removeItem(key)
+		payload = raw ? JSON.parse(raw) : null
+	} catch (_) {
+		payload = null
+	}
+	if (!payload || payload.doctype !== doctype.value || !payload.data) return false
+	for (const [key, value] of Object.entries(payload.data)) {
+		if (!(key in form) || SYSTEM_FIELDS.has(key)) continue
+		if (Array.isArray(value)) form[key] = value.map((row) => ({ ...row }))
+		else if (value && typeof value === "object") form[key] = { ...value }
+		else form[key] = value
+	}
+	form.__islocal = 1
+	newName.value = ""
+	return true
 }
 
 async function applyCreateFormQuery() {
@@ -2639,6 +2807,41 @@ function childColWidth(tableFieldname, col) {
 }
 const childActionColWidth = `${ACTION_COL_WIDTH}px`
 
+function childColWidthUnits(tableFieldname, col) {
+	return resolvedColumnWidthUnits(doctype.value, tableFieldname, col)
+}
+
+function childColumnsForWidthTotal(tableFieldname, columns) {
+	return (columns || []).filter(
+		(c) => isColumnVisible(tableFieldname, columns, c.fieldname) && !childColumnHiddenBy(tableFieldname, c.fieldname),
+	)
+}
+
+function childWidthUnitsTotal(tableFieldname, columns) {
+	return childColumnsForWidthTotal(tableFieldname, columns).reduce(
+		(total, col) => total + childColWidthUnits(tableFieldname, col),
+		0,
+	)
+}
+
+function childWidthUnitMax(tableFieldname, columns, col) {
+	const visible = isColumnVisible(tableFieldname, columns, col.fieldname)
+	const current = visible ? childColWidthUnits(tableFieldname, col) : 0
+	const others = Math.max(0, childWidthUnitsTotal(tableFieldname, columns) - current)
+	return Math.max(1, MAX_TABLE_WIDTH_UNITS - others)
+}
+
+function setChildColWidthUnits(tableFieldname, columns, col, value) {
+	const requested = Number(value)
+	if (!Number.isFinite(requested)) return
+	const units = Math.max(1, Math.round(requested))
+	const max = childWidthUnitMax(tableFieldname, columns, col)
+	if (units > max) {
+		toast.warn("Column width limit", `Visible columns can use ${MAX_TABLE_WIDTH_UNITS} total units.`)
+	}
+	persistColumnWidthUnits(doctype.value, tableFieldname, col.fieldname, Math.min(units, max))
+}
+
 // Capture a user resize. PrimeVue's column-resize-end payload is { element, delta }
 // where `element` is the resized header <th> and `delta` is the drag distance in px
 // (no column object is provided). With columnResizeMode="fixed" PrimeVue does NOT
@@ -2722,6 +2925,12 @@ function toggleColumn(tableFieldname, columns, fieldname) {
 		if (vis.size <= 1) return // never hide the last column
 		vis.delete(fieldname)
 	} else {
+		const col = columns.find((c) => c.fieldname === fieldname)
+		const nextTotal = childWidthUnitsTotal(tableFieldname, columns) + (col ? childColWidthUnits(tableFieldname, col) : 1)
+		if (nextTotal > MAX_TABLE_WIDTH_UNITS) {
+			toast.warn("Column width limit", `Visible columns can use ${MAX_TABLE_WIDTH_UNITS} total units.`)
+			return
+		}
 		vis.add(fieldname)
 	}
 	persistVisibleColumns(doctype.value, tableFieldname, vis)
@@ -3660,6 +3869,32 @@ function onAmend() {
 	})
 }
 
+function onDuplicate() {
+	if (!doc.value) return
+	confirm.require({
+		header: "Duplicate document",
+		message: `Create an unsaved draft copy of ${props.id}?`,
+		acceptLabel: "Duplicate",
+		acceptClass: "p-button-primary",
+		accept: async () => {
+			acting.value = "duplicate"
+			try {
+				const draft = await docState.duplicate(props.id)
+				if (!stashDuplicateDraft(draft)) {
+					toast.error("Duplicate failed", "Could not prepare the draft copy in this browser.")
+					return
+				}
+				toast.success("Duplicated", "Unsaved draft copy ready", 6000)
+				router.push({ path: `/${props.docRoute}/new`, query: { duplicate: "1" } })
+			} catch (e) {
+				showActionError("Duplicate failed", e)
+			} finally {
+				acting.value = null
+			}
+		},
+	})
+}
+
 // Inspection Entry: fetch the approver-gated "Convert Stock" eligibility for a
 // submitted, not-yet-converted IE (mirrors the Desk's _maybe_add_convert_stock_button).
 async function loadIeConvertState() {
@@ -3726,6 +3961,9 @@ async function reloadView() {
 	loadIeConvertState()
 	if (isWorkOrder.value && approvalRef.value) approvalRef.value.reload?.()
 	if (isWorkflow.value && workflowRef.value) workflowRef.value.reload?.()
+	// A submit/cancel/amend changes `modified` (and may move the doc within the
+	// list's sort), so re-resolve the prev/next neighbours.
+	resolveDocNav()
 }
 
 // ── Details field list (config → meta → doc keys) — VIEW mode ──
@@ -4412,6 +4650,22 @@ function stripHtml(s) {
 	flex-direction: column;
 	gap: 3px;
 }
+/* Prev/Next document navigation arrows — vertically centred against the (taller)
+   id-block, subtle until hovered. */
+.doc-nav {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	align-self: center;
+}
+.doc-nav__btn.p-button {
+	width: 30px;
+	height: 30px;
+	color: var(--mgk-muted);
+}
+.doc-nav__btn.p-button:not(:disabled):hover {
+	color: var(--mgk-accent-700);
+}
 .doc-id {
 	font-size: 18px;
 	letter-spacing: -0.01em;
@@ -4609,10 +4863,17 @@ function stripHtml(s) {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	min-width: 180px;
+	min-width: 260px;
 	max-height: 320px;
 	overflow-y: auto;
 	padding: 2px;
+}
+.col-chooser__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 2px;
 }
 .col-chooser__title {
 	font-size: 11px;
@@ -4620,7 +4881,12 @@ function stripHtml(s) {
 	text-transform: uppercase;
 	color: var(--mgk-muted);
 	font-weight: 600;
-	margin-bottom: 2px;
+}
+.col-chooser__total {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--mgk-ink);
+	font-variant-numeric: tabular-nums;
 }
 .col-chooser__row {
 	display: flex;
@@ -4628,10 +4894,24 @@ function stripHtml(s) {
 	gap: 8px;
 }
 .col-chooser__row label {
+	flex: 1 1 auto;
+	min-width: 0;
 	font-size: 13px;
 	color: var(--mgk-ink);
 	cursor: pointer;
 	user-select: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.col-chooser__width {
+	flex: 0 0 64px;
+	width: 64px;
+}
+.col-chooser__width :deep(.col-chooser__width-input) {
+	width: 64px;
+	text-align: center;
+	padding-inline: 6px;
 }
 .child-cols-note.pivot-note {
 	color: var(--mgk-accent-700);

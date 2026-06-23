@@ -68,6 +68,29 @@ export const DEFAULT_WIDTHS = {
 export const FALLBACK_WIDTH = 160
 // The trailing action column (delete / add-row) is a small fixed width.
 export const ACTION_COL_WIDTH = 56
+// Frappe-style width editor units shown in the Columns popover. Ten units is
+// treated as the usable child-table width; each unit maps to a stable px value
+// for the existing PrimeVue fixed-width grid.
+export const WIDTH_UNIT_PX = 100
+export const MAX_TABLE_WIDTH_UNITS = 10
+export const MIN_COLUMN_WIDTH_UNITS = 1
+
+function defaultColumnWidthPx(col) {
+	const ft = col?.fieldtype || ""
+	return DEFAULT_WIDTHS[ft] || FALLBACK_WIDTH
+}
+
+function pxToWidthUnits(px) {
+	const n = Number(px)
+	if (!Number.isFinite(n) || n <= 0) return MIN_COLUMN_WIDTH_UNITS
+	return Math.max(MIN_COLUMN_WIDTH_UNITS, Math.round(n / WIDTH_UNIT_PX))
+}
+
+function widthUnitsToPx(units) {
+	const n = Number(units)
+	if (!Number.isFinite(n) || n <= 0) return WIDTH_UNIT_PX
+	return Math.max(MIN_COLUMN_WIDTH_UNITS, Math.round(n)) * WIDTH_UNIT_PX
+}
 
 // Resolve a column's default width from its raw Frappe `fieldtype` (the only key
 // that matches DEFAULT_WIDTHS — `col.type` is a display type like "link"/"number"
@@ -75,9 +98,7 @@ export const ACTION_COL_WIDTH = 56
 // generic width. Returns a CSS length string ("180px"). `fieldtype` is always
 // populated by childEditColumns, so there is no need for a display-type branch.
 export function columnWidth(col) {
-	const ft = col?.fieldtype || ""
-	const px = DEFAULT_WIDTHS[ft] || FALLBACK_WIDTH
-	return `${px}px`
+	return `${defaultColumnWidthPx(col)}px`
 }
 
 // Stable cache key per (host-doctype, child-table fieldname). The server scopes
@@ -254,20 +275,26 @@ function visKeyFor(doctype, fieldname) {
 // All `columns` remain available to toggle on via the chooser regardless.
 export function defaultVisibleFieldnames(columns, maxDefault = 5) {
 	const cols = Array.isArray(columns) ? columns : []
-	const inListView = cols.filter((c) => c.in_list_view).map((c) => c.fieldname)
+	const fitWithinBudget = (candidates) => {
+		const out = []
+		let used = 0
+		for (const col of candidates) {
+			const units = pxToWidthUnits(defaultColumnWidthPx(col))
+			if (out.length && used + units > MAX_TABLE_WIDTH_UNITS) continue
+			out.push(col.fieldname)
+			used += units
+			if (used >= MAX_TABLE_WIDTH_UNITS) break
+		}
+		return out
+	}
+	const inListView = fitWithinBudget(cols.filter((c) => c.in_list_view))
 	if (inListView.length) return inListView
 	// No in_list_view fields → first N non-hidden, non-read-only fields, in order.
-	const firstN = cols
-		.filter((c) => !c.hidden && !c.read_only)
-		.slice(0, maxDefault)
-		.map((c) => c.fieldname)
+	const firstN = fitWithinBudget(cols.filter((c) => !c.hidden && !c.read_only).slice(0, maxDefault))
 	if (firstN.length) return firstN
 	// Last resort (a table whose every non-hidden field is read-only): show the
 	// first N non-hidden columns so the grid never renders zero columns.
-	return cols
-		.filter((c) => !c.hidden)
-		.slice(0, maxDefault)
-		.map((c) => c.fieldname)
+	return fitWithinBudget(cols.filter((c) => !c.hidden).slice(0, maxDefault))
 }
 
 // Get (or initialise) the reactive Set of visible fieldnames for a table.
@@ -376,6 +403,10 @@ export function persistColumnWidth(doctype, fieldname, columnFieldname, px) {
 	persistViewDebounced(doctype, fieldname)
 }
 
+export function persistColumnWidthUnits(doctype, fieldname, columnFieldname, units) {
+	persistColumnWidth(doctype, fieldname, columnFieldname, widthUnitsToPx(units))
+}
+
 // Resolve the width (CSS length) to apply to a column: the user's field-keyed
 // override if present, else the per-fieldtype default from columnWidth().
 export function resolvedColumnWidth(doctype, fieldname, col) {
@@ -383,4 +414,11 @@ export function resolvedColumnWidth(doctype, fieldname, col) {
 	const override = col?.fieldname ? store[col.fieldname] : undefined
 	if (Number.isFinite(override) && override > 0) return `${override}px`
 	return columnWidth(col)
+}
+
+export function resolvedColumnWidthUnits(doctype, fieldname, col) {
+	const store = useColumnWidths(doctype, fieldname)
+	const override = col?.fieldname ? store[col.fieldname] : undefined
+	const px = Number.isFinite(override) && override > 0 ? override : defaultColumnWidthPx(col)
+	return pxToWidthUnits(px)
 }
