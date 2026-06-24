@@ -33,6 +33,17 @@
 					size="small"
 					@click="showFilterPanel = true"
 				/>
+				<!-- Bill Tracking: filter to bills assigned to a department I belong to. -->
+				<Button
+					v-if="isBillTracking && !accessDenied"
+					:label="assignedToMeActive ? 'Showing My Departments' : 'Show Assigned To Me'"
+					icon="pi pi-user"
+					:severity="assignedToMeActive ? 'primary' : 'secondary'"
+					:outlined="!assignedToMeActive"
+					size="small"
+					:loading="assignedToMeLoading"
+					@click="toggleAssignedToMe"
+				/>
 				<Button
 					v-if="isAdmin || hasRole('System Manager')"
 					label="Open in Desk"
@@ -159,6 +170,17 @@
 					:disabled="!selectedRows.length || !!bulkActing"
 					:loading="bulkActing === 'edit' || bulkEditLoading"
 					@click="openBulkEditDialog"
+				/>
+				<Button
+					v-if="isBillTracking"
+					:label="`Assign (${assignableSelectedRows.length})`"
+					icon="pi pi-user-plus"
+					size="small"
+					severity="secondary"
+					outlined
+					:disabled="!assignableSelectedRows.length || !!bulkActing"
+					:loading="bulkActing === 'assign'"
+					@click="openBulkAssignDialog"
 				/>
 				<Button
 					v-if="isSubmittable && canSubmit(doctype)"
@@ -291,6 +313,55 @@
 			:model-value="advFilters"
 			@apply="onApplyFilters"
 		/>
+
+		<!-- Bill Tracking — Bulk Assign the selected bills to one Department -->
+		<Dialog
+			v-model:visible="showBulkAssignDialog"
+			header="Bulk Assign"
+			modal
+			:style="{ width: 'min(460px, calc(100vw - 32px))' }"
+		>
+			<div class="bulk-edit-form">
+				<div class="bulk-edit-selected">
+					<span class="bulk-count">{{ selectedRows.length }} selected</span>
+				</div>
+				<div class="bulk-edit-field">
+					<label class="field-label" for="bulk-assign-dept">Assign To *</label>
+					<LinkField
+						v-model="bulkAssignDept"
+						target-doctype="Department"
+						placeholder="Search Department…"
+						class="fld"
+					/>
+				</div>
+				<div class="bulk-edit-field">
+					<label class="field-label" for="bulk-assign-remarks">Remarks</label>
+					<Textarea
+						id="bulk-assign-remarks"
+						v-model="bulkAssignRemarks"
+						rows="3"
+						autoResize
+						class="fld"
+					/>
+				</div>
+			</div>
+			<template #footer>
+				<Button
+					label="Cancel"
+					severity="secondary"
+					text
+					:disabled="bulkAssignApplying"
+					@click="showBulkAssignDialog = false"
+				/>
+				<Button
+					label="Assign"
+					icon="pi pi-user-plus"
+					:disabled="!bulkAssignDept || bulkAssignApplying"
+					:loading="bulkAssignApplying"
+					@click="onBulkAssignApply"
+				/>
+			</template>
+		</Dialog>
 
 		<Dialog
 			v-model:visible="showBulkEditDialog"
@@ -478,6 +549,7 @@ const toast = useAppToast()
 
 const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
+const isBillTracking = computed(() => doctype.value === "Bill Tracking")
 const isWorkflow = computed(() => registry.value?.isWorkflow || false)
 const meta = shallowRef(null)            // parent DocType meta (docs[0]), cached per route
 const isSubmittable = computed(
@@ -511,6 +583,15 @@ const bulkEditFields = ref([])
 const bulkEditSelectedKey = ref("")
 const bulkEditValue = ref(null)
 
+// Bill Tracking — Bulk Assign dialog + "Show Assigned To Me" toggle state.
+const showBulkAssignDialog = ref(false)
+const bulkAssignDept = ref("")
+const bulkAssignRemarks = ref("")
+const bulkAssignApplying = ref(false)
+const assignedToMeActive = ref(false)
+const assignedToMeLoading = ref(false)
+let assignedToMeSavedTab = "all"
+
 const selectedDraftRows = computed(() =>
 	selectedRows.value.filter((row) => Number(row.docstatus) === 0),
 )
@@ -519,6 +600,14 @@ const selectedSubmittedRows = computed(() =>
 )
 const selectedCancelledRows = computed(() =>
 	selectedRows.value.filter((row) => Number(row.docstatus) === 2),
+)
+// Bill Tracking — rows eligible for assignment: submitted and not terminal.
+// Mirrors the server guard in assign_vendor_bill (docstatus==1, form_status in
+// Open/Assigned/Reopen/Amended) so Bulk Assign never silently no-ops on a draft.
+const assignableSelectedRows = computed(() =>
+	selectedRows.value.filter(
+		(row) => Number(row.docstatus) === 1 && !["Closed", "Cancelled"].includes(row.form_status),
+	),
 )
 
 const bulkEditFieldOptions = computed(() =>
@@ -701,6 +790,9 @@ const fetchFields = computed(() => {
 		if (!fields.includes(c.field)) fields.push(c.field)
 	}
 	if (isSubmittable.value && !fields.includes("docstatus")) fields.push("docstatus")
+	// Bill Tracking: fetch form_status so Bulk Assign can tell which selected rows
+	// are assignable (submitted + not terminal) without an extra round-trip.
+	if (isBillTracking.value && !fields.includes("form_status")) fields.push("form_status")
 	if (isWorkflow.value && !fields.includes("workflow_state")) fields.push("workflow_state")
 	return fields
 })
@@ -907,6 +999,8 @@ async function initList() {
 	bulkEditFields.value = []
 	bulkEditSelectedKey.value = ""
 	bulkEditValue.value = null
+	assignedToMeActive.value = false
+	assignedToMeSavedTab = "all"
 
 	// Parse the route-query base filter up front so the very first fetch carries
 	// it — seed it as the list's defaultFilters.
@@ -1197,6 +1291,14 @@ function onTabChange(key) {
 	if (!listState.value) return
 	clearSelection()
 	bulkError.value = null
+	// A manual tab change supersedes the "Show Assigned To Me" overlay — drop its
+	// filters + active state so the picked tab shows the normal docstatus view (the
+	// docstatus setFilter + fetch below apply the rest in this same pass).
+	if (assignedToMeActive.value) {
+		assignedToMeActive.value = false
+		listState.value.removeFilter("assigned_to")
+		listState.value.removeFilter("form_status")
+	}
 	const tab = statusTabs.value.find((t) => tabValueKey(t.value) === key)
 	const value = tab ? tab.value : null
 	if (tabMode.value === "status") {
@@ -1514,6 +1616,118 @@ function onBulkCancel() {
 		rejectLabel: "Keep",
 		accept: () => runBulkAction("cancel", rowsToActOn),
 	})
+}
+
+// ── Bill Tracking: department-based assignment (mirrors the Desk flows) ──
+
+// "Show Assigned To Me": filter to bills assigned to a Department the current
+// user belongs to (yrp get_user_departments), submitted, and not Closed. The
+// Submitted docstatus is applied by FORCE-SELECTING the Submitted tab (not a
+// manual docstatus setFilter, which would silently clobber the tab strip's own
+// state); toggling off restores the tab the user was on.
+async function toggleAssignedToMe() {
+	if (!listState.value || assignedToMeLoading.value) return
+	if (assignedToMeActive.value) {
+		deactivateAssignedToMe()
+		return
+	}
+	assignedToMeLoading.value = true
+	try {
+		const depts = await callMethod(
+			"yrp.yrp.doctype.department.department.get_user_departments",
+		)
+		const list = Array.isArray(depts) ? depts : []
+		if (!list.length) {
+			toast.warn("No departments", "You are not mapped to any department.")
+			return
+		}
+		assignedToMeSavedTab = activeTab.value
+		assignedToMeActive.value = true
+		listState.value.setFilter("assigned_to", ["in", list])
+		listState.value.setFilter("form_status", ["!=", "Closed"])
+		// docstatus=1 from the Submitted tab — set the tab + filter together so the
+		// tab strip stays in sync, then ONE fetch (no onTabChange round-trip).
+		if (tabMode.value === "docstatus") {
+			activeTab.value = "1"
+			listState.value.setFilter("docstatus", 1)
+		}
+		listState.value.fetch()
+	} catch (e) {
+		toast.error("Couldn’t load your departments", e.message)
+	} finally {
+		assignedToMeLoading.value = false
+	}
+}
+
+// Explicit toggle-off: drop the overlay filters and restore the docstatus tab the
+// user was on before activating (a single fetch).
+function deactivateAssignedToMe() {
+	assignedToMeActive.value = false
+	if (!listState.value) return
+	listState.value.removeFilter("assigned_to")
+	listState.value.removeFilter("form_status")
+	if (tabMode.value === "docstatus") {
+		const key = assignedToMeSavedTab || "all"
+		activeTab.value = key
+		const tab = statusTabs.value.find((t) => tabValueKey(t.value) === key)
+		const value = tab ? tab.value : null
+		listState.value.setFilter(
+			"docstatus",
+			value === null ? (routeBaseFilters.value?.docstatus ?? null) : Number(value),
+		)
+	}
+	listState.value.fetch()
+}
+
+function openBulkAssignDialog() {
+	if (!selectedRows.value.length) {
+		toast.warn("No documents selected", "Select bills to assign.")
+		return
+	}
+	if (!assignableSelectedRows.value.length) {
+		toast.warn(
+			"Nothing to assign",
+			"None of the selected bills are submitted and open for assignment.",
+		)
+		return
+	}
+	bulkAssignDept.value = ""
+	bulkAssignRemarks.value = ""
+	bulkError.value = null
+	showBulkAssignDialog.value = true
+}
+
+// Bulk-assign the selected bills to one Department. Only submitted, non-terminal
+// rows are eligible (matching the server guard); any others in the selection are
+// counted as skipped so the success toast can't overstate what actually happened.
+async function onBulkAssignApply() {
+	const dt = doctype.value
+	const docs = assignableSelectedRows.value.map((row) => ({ name: row.name })).filter((d) => d.name)
+	if (!dt || !bulkAssignDept.value || !docs.length) return
+	const skipped = selectedRows.value.length - docs.length
+	bulkActing.value = "assign"
+	bulkAssignApplying.value = true
+	bulkError.value = null
+	try {
+		const dept = bulkAssignDept.value
+		const n = docs.length
+		await callMethod("yrp.yrp.doctype.bill_tracking.bill_tracking.bulk_assign_bills", {
+			assign_to: dept,
+			selected_docs: docs,
+			remarks: bulkAssignRemarks.value || null,
+		})
+		await refreshAfterBulk()
+		showBulkAssignDialog.value = false
+		const extra = skipped ? ` (${skipped} skipped — not assignable)` : ""
+		toast.success("Assigned", `${n} ${plural(n, "bill")} assigned to ${dept}${extra}.`, 6000)
+	} catch (error) {
+		const lines = errorLines(error)
+		bulkError.value = { title: "Bulk assign failed", lines: lines.length ? lines : [error.message || "Failed"] }
+		toast.error("Bulk assign failed", lines[0] || error.message || "Failed")
+	} finally {
+		bulkActing.value = null
+		bulkAssignApplying.value = false
+	}
 }
 
 // ── formatting + status helpers ──

@@ -127,6 +127,16 @@
 						outlined
 						@click="onCalculateDeliverables"
 					/>
+					<!-- Bill Tracking: Assign to Department (submitted, non-terminal). -->
+					<Button
+						v-if="isBillTracking && docstatus === 1 && !isCreate && !['Closed', 'Cancelled'].includes(doc?.form_status)"
+						label="Assign"
+						icon="pi pi-user-plus"
+						size="small"
+						severity="secondary"
+						outlined
+						@click="assignOpen = true"
+					/>
 
 					<!-- Submitted (docstatus 1): ONE primary forward CTA; the remaining
 					     create-next actions collapse into a "More" overflow menu so the
@@ -384,6 +394,15 @@
 			:modified="doc.modified"
 			:payload="calcDeliverablesPayload"
 			@calculated="onDeliverablesCalculated"
+		/>
+
+		<!-- Bill Tracking — Assign to Department (submitted, non-terminal) -->
+		<AssignDepartmentModal
+			v-if="isBillTracking && doc"
+			v-model:visible="assignOpen"
+			:name="doc.name"
+			@assigning="markLocalWrite"
+			@assigned="onAssigned"
 		/>
 
 		<!-- Loading (doc load, or create-mode meta load) — skeleton mimics the
@@ -1492,6 +1511,7 @@ import WorkOrderApproval from "./WorkOrderApproval.vue"
 import PurchaseInvoiceWOClose from "./PurchaseInvoiceWOClose.vue"
 import AddressContactTab from "./AddressContactTab.vue"
 import CalculateDeliverablesModal from "./CalculateDeliverablesModal.vue"
+import AssignDepartmentModal from "./AssignDepartmentModal.vue"
 import StockItemGridEditor from "./StockItemGridEditor.vue"
 import ItemDependentAttributeEditor from "./ItemDependentAttributeEditor.vue"
 import ItemAttributeListView from "./ItemAttributeListView.vue"
@@ -1563,6 +1583,7 @@ const isInspectionEntry = computed(() => doctype.value === "Inspection Entry")
 const isPurchaseInvoice = computed(() => doctype.value === "Purchase Invoice")
 const isItem = computed(() => doctype.value === "Item")
 const isItemMasterTemplate = computed(() => doctype.value === "Item Master Template")
+const isBillTracking = computed(() => doctype.value === "Bill Tracking")
 // Item Master Template shares Item's attribute/mapping shape and the
 // __onload.attr_list contract, so it gets the same Attribute Values editor.
 const hasAttributeValuesEditor = computed(() => isItem.value || isItemMasterTemplate.value)
@@ -3729,6 +3750,9 @@ function onCreateDebitFromWo() {
 const calcDeliverablesOpen = ref(false)
 const calcDeliverablesPayload = ref({})
 
+// Bill Tracking — Assign-to-Department dialog (mirrors Desk bill_tracking.js).
+const assignOpen = ref(false)
+
 async function onCalculateDeliverables() {
 	if (!doc.value) return
 	try {
@@ -3766,6 +3790,13 @@ async function onDeliverablesCalculated(res) {
 		`${res?.deliverables ?? 0} deliverable(s) and ${res?.receivables ?? 0} receivable(s).`,
 		6000,
 	)
+}
+
+// After a Bill Tracking assignment succeeds: refresh the doc (a new "Assign"
+// history row + form_status "Assigned") and toast which department it went to.
+async function onAssigned(department) {
+	await reloadView()
+	toast.success("Assigned", department ? `Bill assigned to ${department}.` : "Bill assigned.")
 }
 async function onCreateGrnFromWo() {
 	if (!doc.value) return
@@ -3949,6 +3980,9 @@ async function reloadView() {
 	// success toast on a retry that worked). reloadView is the chokepoint for those.
 	serverError.value = null
 	missingField.value = null
+	// A deliberate reload adopts the latest `modified`, so any "modified by another
+	// user" notice (incl. a race from our OWN write's realtime echo) is now moot.
+	staleNotice.value = false
 	await docState.load(props.id)
 	// See the note in onSave: viewGrouped doesn't refresh from a plain
 	// doc.load, so submit/cancel/amend/approval-change would leave the
