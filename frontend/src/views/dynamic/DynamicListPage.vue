@@ -7,7 +7,7 @@
 				<p v-if="!doctype" class="page-sub">unknown route</p>
 			</div>
 			<div class="head-actions">
-				<IconField v-if="!accessDenied">
+				<IconField v-if="!accessDenied && !treeView">
 					<InputIcon class="pi pi-search" />
 					<InputText
 						v-model="searchQuery"
@@ -16,7 +16,7 @@
 					/>
 				</IconField>
 				<Button
-					v-if="doctype && !accessDenied && eligibleColumns.length"
+					v-if="doctype && !accessDenied && eligibleColumns.length && !treeView"
 					label="Columns"
 					icon="pi pi-sliders-h"
 					severity="secondary"
@@ -25,13 +25,23 @@
 					@click="showColumnsModal = true"
 				/>
 				<Button
-					v-if="doctype && !accessDenied"
+					v-if="doctype && !accessDenied && !treeView"
 					:label="advFilters.length ? `Filter (${advFilters.length})` : 'Filter'"
 					icon="pi pi-filter"
 					severity="secondary"
 					outlined
 					size="small"
 					@click="showFilterPanel = true"
+				/>
+				<!-- Tree DocTypes (e.g. Item Group): toggle the hierarchical card tree. -->
+				<Button
+					v-if="isTree && !accessDenied"
+					:label="treeView ? 'Showing Tree' : 'Show as Tree'"
+					icon="pi pi-sitemap"
+					:severity="treeView ? 'primary' : 'secondary'"
+					:outlined="!treeView"
+					size="small"
+					@click="treeView = !treeView"
 				/>
 				<!-- Bill Tracking: filter to bills assigned to a department I belong to. -->
 				<Button
@@ -73,6 +83,8 @@
 		</div>
 
 		<!-- Tab strip (meta-derived: status mode / docstatus mode / none — see CUSTOM_UI §6.3) -->
+		<!-- TREE MODE hides the whole flat-list body; the card tree replaces it below. -->
+		<template v-if="!treeView">
 		<Tabs v-if="tabMode" :value="activeTab" @update:value="onTabChange">
 			<TabList>
 				<Tab
@@ -298,6 +310,15 @@
 			:totalRecords="totalCount"
 			:first="(page - 1) * pageSize"
 			@page="onPage"
+		/>
+
+		</template>
+
+		<!-- Tree DocTypes: lazy-loaded hierarchical card tree (replaces the list). -->
+		<DocTree
+			v-if="treeView"
+			:doctype="doctype"
+			:doc-route="docRoute"
 		/>
 
 		<ColumnCustomizerModal
@@ -535,6 +556,7 @@ import { getMeta, getCount, callMethod, submitDoc, cancelDoc, getBulkEditFields,
 import ColumnCustomizerModal from "@/components/ColumnCustomizerModal.vue"
 import FilterPanel from "@/components/FilterPanel.vue"
 import LinkField from "@/components/LinkField.vue"
+import DocTree from "@/components/DocTree.vue"
 
 const props = defineProps({
 	docRoute: { type: String, required: true },
@@ -557,6 +579,11 @@ const isSubmittable = computed(
 )
 const workflowStates = computed(() => registry.value?.workflowStates || [])
 const dateTabField = computed(() => registry.value?.dateTabs || null)
+
+// Tree view: any DocType flagged is_tree (Item Group, …) can show a hierarchical
+// card tree instead of the flat list. Detected from meta at runtime — generic.
+const treeView = ref(false)
+const isTree = computed(() => Number(meta.value?.is_tree) === 1)
 
 // ── Columns: meta-driven, overlaid with the user's saved per-user choice (#2) ──
 // No hardcoded listFields: defaults come from the DocType meta (`in_list_view`),
@@ -1001,6 +1028,7 @@ async function initList() {
 	bulkEditValue.value = null
 	assignedToMeActive.value = false
 	assignedToMeSavedTab = "all"
+	treeView.value = false
 
 	// Parse the route-query base filter up front so the very first fetch carries
 	// it — seed it as the list's defaultFilters.

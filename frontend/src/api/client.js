@@ -273,6 +273,17 @@ export async function callMethod(method, args = {}) {
   return json.message
 }
 
+/**
+ * Lazy-load one level of a Nested-Set-Model tree DocType. `get_children` reads
+ * the doctype's `nsm_parent_field` from meta, so this stays generic across any
+ * `is_tree` DocType. `parent=''` returns the roots. Each child is
+ * `{ value, title, expandable }`.
+ */
+export async function getTreeChildren(doctype, parent = '') {
+  const result = await callMethod('frappe.desk.treeview.get_children', { doctype, parent })
+  return Array.isArray(result) ? result : []
+}
+
 export async function getBulkEditFields(doctype) {
   const result = await callMethod(
     'mgk_clothing_yrp.mgk_clothing_yrp.api.bulk_edit.get_bulk_edit_fields',
