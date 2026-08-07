@@ -93,4 +93,21 @@ def get_boot():
 		"socketio_port": frappe.conf.socketio_port or 9000,
 		"app_logo": _website_asset("app_logo", "mgk-logo.png"),
 		"user": json.loads(frappe.as_json(frappe.get_user().load_user())),
+		# The session user's YRP UI Preference -> UI Layout resolution. Registered
+		# Experience mode carries only a validated registry key + safe props.
+		"ui_config": _safe_ui_config(),
 	}
+
+
+def _safe_ui_config():
+	"""A UI configuration problem must never stop /web from booting."""
+	try:
+		from yrp.yrp.api.ui_config import get_config_for_boot
+
+		return get_config_for_boot()
+	except Exception:
+		try:
+			frappe.log_error(title="MGK /web: UI config boot failure")
+		except Exception:
+			pass
+		return None

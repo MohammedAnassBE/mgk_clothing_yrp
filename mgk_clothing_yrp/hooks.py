@@ -26,12 +26,19 @@ website_route_rules = [
 	{"from_route": "/web/<path:app_path>", "to_route": "web"},
 ]
 
+# Code-owned allowlist consumed by the base YRP UI Layout resolver. A layout
+# may select this key and only these declarative props; it can never supply a
+# Vue import path or executable handler from the database.
+yrp_registered_experiences = {
+	"operations-workspace": [],
+}
+
 # Includes in <head>
 # ------------------
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/mgk_clothing_yrp/css/mgk_clothing_yrp.css"
-# app_include_js = "/assets/mgk_clothing_yrp/js/mgk_clothing_yrp.js"
+app_include_js = ["mgk_clothing_yrp.bundle.js"]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/mgk_clothing_yrp/css/mgk_clothing_yrp.css"
@@ -211,7 +218,9 @@ override_whitelisted_methods = {
 
 # Fixtures
 # ------------------
-# Custom Fields owned by this app (module-tagged) travel with it.
+# Keep exports scoped to fields and property setters owned by this app. Without
+# these filters a future ``export-fixtures`` on a shared site would pull in
+# unrelated customizations from other applications.
 
 fixtures = [
 	{"dt": "Custom Field", "filters": [["module", "=", "MGK Clothing YRP"]]},
@@ -225,8 +234,7 @@ fixtures = [
 					"Work Order-item-reqd",
 					"Work Order-item-hidden",
 					"Work Order-production_detail-hidden",
-					"Item Production Detail-tech_pack_version-hidden",
-					"Item Production Detail-pattern_version-hidden",
+					"Item Production Detail-ipd_processes-hidden",
 					"Work Order-main-field_order",
 				],
 			]
@@ -244,6 +252,10 @@ doc_events = {
 	},
 	"Work Order": {
 		"before_submit": "mgk_clothing_yrp.overrides.work_order.before_submit",
+	},
+	"Item Production Detail": {
+		"onload": "mgk_clothing_yrp.yarn_process.load_attribute_list",
+		"before_validate": "mgk_clothing_yrp.yarn_process.validate_yarn_process_flow",
 	},
 }
 

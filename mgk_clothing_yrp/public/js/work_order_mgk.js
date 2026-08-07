@@ -32,7 +32,7 @@ function open_mgk_approval_dialog(frm) {
 			d.hide();
 			frappe.call({
 				method: "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.approve",
-				args: { work_order: frm.doc.name },
+				args: { work_order: frm.doc.name, modified: frm.doc.modified },
 				freeze: true,
 				callback(r) {
 					if (!r.exc) {
@@ -52,7 +52,11 @@ function open_mgk_approval_dialog(frm) {
 			d.hide();
 			frappe.call({
 				method: "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.reject",
-				args: { work_order: frm.doc.name, reason },
+				args: {
+					work_order: frm.doc.name,
+					reason,
+					modified: frm.doc.modified,
+				},
 				freeze: true,
 				callback(r) {
 					if (!r.exc) {
@@ -77,9 +81,74 @@ frappe.ui.form.on("Work Order", {
 			return { filters: row.item ? { item: row.item } : {} };
 		});
 		// Calculate Deliverables — yarn-mode split editor (one block per mgk_items row).
-		frm.add_custom_button(__("Calculate Deliverables"), () => open_calculate_deliverables(frm));
+		if (!frm.is_new() && frm.doc.docstatus === 0) {
+			frm.add_custom_button(
+				__("Calculate Deliverables"),
+				() => open_calculate_deliverables(frm)
+			);
+		}
+		setTimeout(() => mount_mgk_calculated_item_views(frm), 0);
 	},
 });
+
+// Keep calculated inputs and outputs visible through YRP's grouped Vue editor,
+// but lock direct row editing: MGK derives both sides from the selected IPD
+// yarn route and the Calculate Deliverables action.
+function mount_mgk_calculated_item_views(frm) {
+	if (!frappe.yrp?.work_order?.ItemEditor) return;
+	[
+		{
+			fieldname: "deliverable_items",
+			editor_key: "deliverableEditor",
+			payload_field: "deliverable_details",
+			source_table: "deliverables",
+			editor_type: "work_order_deliverables",
+			title: __("Yarn Sent"),
+		},
+		{
+			fieldname: "receivable_items",
+			editor_key: "receivableEditor",
+			payload_field: "receivable_details",
+			source_table: "receivables",
+			editor_type: "work_order_receivables",
+			title: __("Yarn Received"),
+		},
+	].forEach((config) => {
+		const field = frm.fields_dict[config.fieldname];
+		if (!field) return;
+		if (frm[config.editor_key]?.app) {
+			frm[config.editor_key].app.unmount();
+		}
+		frm.set_df_property(config.fieldname, "hidden", 0);
+		frm.set_df_property(config.source_table, "hidden", 1);
+		$(field.wrapper).empty();
+		frm[config.editor_key] = new frappe.yrp.work_order.ItemEditor(
+			field.wrapper,
+			{
+				title: config.title,
+				editorType: config.editor_type,
+				showDimensions: false,
+				allowCreate: false,
+				allowEdit: false,
+				allowRemove: false,
+				aggregateDisplay: true,
+			}
+		);
+		let data =
+			frm.doc.__onload?.[config.payload_field] ||
+			frm.doc[config.payload_field] ||
+			[];
+		if (typeof data === "string") {
+			try {
+				data = JSON.parse(data);
+			} catch (_) {
+				data = [];
+			}
+		}
+		frm[config.editor_key].load_data(data);
+		frm[config.editor_key].update_status();
+	});
+}
 
 // ── Calculate Deliverables (MGK, yarn mode) ─────────────────────────────────
 // Fetches the per-row payload from the server, then renders ONE block per
@@ -112,9 +181,130 @@ function open_calculate_deliverables(frm) {
 				frappe.msgprint(__("Add at least one Item row to this Work Order first."));
 				return;
 			}
+			if (payload.mode === "transformation") {
+				render_transformation_dialog(frm, payload, rows);
+				return;
+			}
 			render_calculate_dialog(frm, payload, rows);
 		},
 	});
+}
+
+function render_transformation_dialog(frm, payload, rows) {
+	const fields = [];
+	rows.forEach((row, i) => {
+		fields.push({
+			fieldtype: "Section Break",
+			label: __("Row {0} · Sequence {1} · {2}", [
+				row.idx,
+				row.sequence,
+				frappe.utils.escape_html(row.transformation_type || ""),
+			]),
+		});
+		fields.push({
+			fieldtype: "HTML",
+			fieldname: `route_${i}`,
+			options: `<div class="alert alert-light border mb-2">
+				<strong>${frappe.utils.escape_html(row.input_label || "")}</strong>
+				&nbsp;→&nbsp;
+				<strong>${frappe.utils.escape_html(row.output_label || "")}</strong>
+				<div class="text-muted small">${__(
+					"Item Production Detail: {0} · Output ratio: {1} per 1 input",
+					[
+						frappe.utils.escape_html(row.production_detail || ""),
+						flt_num(row.quantity_ratio),
+					]
+				)}</div>
+			</div>`,
+		});
+
+		(row.attributes || []).forEach((attr, attr_index) => {
+			fields.push({
+				fieldtype: "Select",
+				fieldname: `route_attr_${i}_${attr_index}`,
+				label: attr.label || attr.attribute,
+				options: ["", ...(attr.options || [])].join("\n"),
+			});
+		});
+		fields.push({ fieldtype: "Column Break" });
+		fields.push({
+			fieldtype: "Float",
+			fieldname: `route_weight_${i}`,
+			label: __("Input Quantity ({0})", [row.input_uom || ""]),
+			description: __("Leave blank to skip this route."),
+			precision: 3,
+		});
+	});
+
+	const d = new frappe.ui.Dialog({
+		title: __("Calculate {0} Yarn Transformation", [
+			payload.process_name || "",
+		]),
+		fields,
+		size: "large",
+		primary_action_label: __("Calculate"),
+		primary_action() {
+			const values = d.get_values() || {};
+			const out = [];
+
+			rows.forEach((row, i) => {
+				const weight = flt_num(values[`route_weight_${i}`]);
+				if (weight <= 0) return;
+
+				const attribute_values = {};
+				(row.attributes || []).forEach((attr, attr_index) => {
+					const value = values[`route_attr_${i}_${attr_index}`];
+					if (!value) {
+						frappe.throw(
+							__("Select {0} for {1} → {2}.", [
+								attr.label || attr.attribute,
+								row.input_label,
+								row.output_label,
+							])
+						);
+					}
+					attribute_values[attr.attribute] = value;
+				});
+				out.push({
+					production_detail: row.production_detail,
+					route_name: row.route_name,
+					attribute_values,
+					weight,
+				});
+			});
+
+			if (!out.length) {
+				frappe.msgprint(
+					__("Enter an input quantity for at least one process route.")
+				);
+				return;
+			}
+			frappe.call({
+				method: "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.calculate_deliverables",
+				args: {
+					work_order: frm.doc.name,
+					rows: JSON.stringify(out),
+					modified: frm.doc.modified,
+				},
+				freeze: true,
+				freeze_message: __("Calculating yarn transformation…"),
+				callback(r) {
+					if (r.exc) return;
+					const res = r.message || {};
+					d.hide();
+					frappe.show_alert({
+						message: __(
+							"Calculated {0} input(s) and {1} output(s).",
+							[res.deliverables, res.receivables]
+						),
+						indicator: "green",
+					});
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+	d.show();
 }
 
 function render_calculate_dialog(frm, payload, rows) {
@@ -214,7 +404,11 @@ function render_calculate_dialog(frm, payload, rows) {
 			}
 			frappe.call({
 				method: "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.calculate_deliverables",
-				args: { work_order: frm.doc.name, rows: JSON.stringify(out) },
+				args: {
+					work_order: frm.doc.name,
+					rows: JSON.stringify(out),
+					modified: frm.doc.modified,
+				},
 				freeze: true,
 				freeze_message: __("Calculating deliverables…"),
 				callback(r) {
@@ -252,4 +446,3 @@ function flt_num(v) {
 	const n = parseFloat(v);
 	return isNaN(n) ? 0 : n;
 }
-

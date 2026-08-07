@@ -34,22 +34,11 @@
  },
  {
   "doctype": "Property Setter",
-  "name": "Item Production Detail-tech_pack_version-hidden",
+  "name": "Item Production Detail-ipd_processes-hidden",
   "is_system_generated": 1,
   "doctype_or_field": "DocField",
   "doc_type": "Item Production Detail",
-  "field_name": "tech_pack_version",
-  "property": "hidden",
-  "property_type": "Check",
-  "value": "1"
- },
- {
-  "doctype": "Property Setter",
-  "name": "Item Production Detail-pattern_version-hidden",
-  "is_system_generated": 1,
-  "doctype_or_field": "DocField",
-  "doc_type": "Item Production Detail",
-  "field_name": "pattern_version",
+  "field_name": "ipd_processes",
   "property": "hidden",
   "property_type": "Check",
   "value": "1"

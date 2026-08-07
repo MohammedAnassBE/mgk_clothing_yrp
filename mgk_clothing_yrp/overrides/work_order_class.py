@@ -26,7 +26,7 @@ from yrp.yrp.doctype.work_order.work_order import (
 
 
 class MGKWorkOrder(WorkOrder):
-	def set_receivable_process_costs(self):
+	def set_receivable_process_costs(self, require_approved=False):
 		"""Cost receivables per-row for yarn processes; defer to base otherwise."""
 		# Resolve the WO's Process. Anything that is NOT an is_yarn_process
 		# Process (including a WO with no process) uses unchanged base behaviour.
@@ -34,7 +34,9 @@ class MGKWorkOrder(WorkOrder):
 		if self.process_name:
 			process = frappe.get_cached_doc("Process", self.process_name)
 		if not process or not process.get("is_yarn_process"):
-			return super().set_receivable_process_costs()
+			return super().set_receivable_process_costs(
+				require_approved=require_approved
+			)
 
 		# --- yarn process: per-row costing ---
 		if not self.get("receivables"):
@@ -69,6 +71,10 @@ class MGKWorkOrder(WorkOrder):
 				# matching Process Cost is left uncosted rather than blocking.
 				if self.get("is_rework"):
 					return
+				if not require_approved:
+					# Match YRP core: draft Work Orders may be prepared before
+					# their approved Process Costs exist. Submission enforces it.
+					continue
 				frappe.throw(
 					_(
 						"No approved Process Cost for yarn item {0} / process {1} / supplier {2}. "

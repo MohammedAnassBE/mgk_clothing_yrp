@@ -1,0 +1,1860 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MGK Operations Workspace — Viewing Prototype</title>
+	<style>
+		:root {
+			--ink: #172033;
+			--muted: #6b7280;
+			--line: #e6e2da;
+			--canvas: #f7f5f0;
+			--surface: #ffffff;
+			--surface-soft: #fbfaf7;
+			--navy: #16243b;
+			--navy-soft: #233653;
+			--accent: #c64a31;
+			--accent-soft: #fbece7;
+			--green: #15805e;
+			--green-soft: #e8f7f1;
+			--amber: #a8640e;
+			--amber-soft: #fff5df;
+			--blue: #2869a7;
+			--blue-soft: #eaf3fb;
+			--purple: #6e57a5;
+			--purple-soft: #f1edfb;
+			--shadow: 0 14px 38px rgba(23, 32, 51, 0.08);
+		}
+
+		* { box-sizing: border-box; }
+		html { scroll-behavior: smooth; }
+		body {
+			margin: 0;
+			background: var(--canvas);
+			color: var(--ink);
+			font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			font-size: 14px;
+		}
+
+		button, input, select, textarea { font: inherit; }
+		button { cursor: pointer; }
+		button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+			outline: 3px solid rgba(40, 105, 167, 0.28);
+			outline-offset: 2px;
+		}
+
+		.app-shell { min-height: 100vh; }
+		.topbar {
+			position: sticky;
+			top: 0;
+			z-index: 50;
+			display: flex;
+			align-items: center;
+			gap: 18px;
+			height: 66px;
+			padding: 0 32px;
+			border-bottom: 1px solid rgba(230, 226, 218, 0.9);
+			background: rgba(255, 255, 255, 0.94);
+			backdrop-filter: blur(14px);
+		}
+
+		.brand {
+			display: flex;
+			align-items: center;
+			gap: 11px;
+			border: 0;
+			background: transparent;
+			color: var(--ink);
+			text-align: left;
+		}
+
+		.brand-mark {
+			display: grid;
+			place-items: center;
+			width: 38px;
+			height: 38px;
+			border-radius: 11px;
+			background: var(--navy);
+			color: #fff;
+			font-size: 12px;
+			font-weight: 800;
+			letter-spacing: 0.05em;
+		}
+
+		.brand strong { display: block; font-size: 14px; }
+		.brand span { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; }
+		.topbar-divider { width: 1px; height: 28px; background: var(--line); }
+		.topbar-title { min-width: 0; color: var(--muted); font-size: 13px; }
+		.topbar-title strong { color: var(--ink); font-weight: 650; }
+		.topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+		.prototype-chip {
+			padding: 5px 10px;
+			border-radius: 999px;
+			background: var(--amber-soft);
+			color: var(--amber);
+			font-size: 11px;
+			font-weight: 750;
+			letter-spacing: 0.03em;
+		}
+		.avatar {
+			display: grid;
+			place-items: center;
+			width: 34px;
+			height: 34px;
+			border-radius: 50%;
+			background: var(--navy);
+			color: #fff;
+			font-size: 11px;
+			font-weight: 800;
+		}
+
+		.page {
+			max-width: 1440px;
+			margin: 0 auto;
+			padding: 30px 32px 60px;
+		}
+
+		.breadcrumbs {
+			display: flex;
+			align-items: center;
+			gap: 7px;
+			min-height: 24px;
+			margin-bottom: 16px;
+			color: var(--muted);
+			font-size: 12px;
+		}
+
+		.crumb-link {
+			padding: 0;
+			border: 0;
+			background: transparent;
+			color: var(--blue);
+			font-weight: 650;
+		}
+
+		.page-heading {
+			display: flex;
+			align-items: flex-start;
+			gap: 16px;
+			margin-bottom: 24px;
+		}
+
+		.heading-copy { min-width: 0; }
+		.eyebrow {
+			margin-bottom: 7px;
+			color: var(--accent);
+			font-size: 11px;
+			font-weight: 800;
+			letter-spacing: 0.1em;
+			text-transform: uppercase;
+		}
+		h1, h2, h3, p { margin-top: 0; }
+		h1 {
+			margin-bottom: 8px;
+			font-size: clamp(27px, 3vw, 40px);
+			line-height: 1.08;
+			letter-spacing: -0.035em;
+		}
+		.page-heading p { max-width: 720px; margin-bottom: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+		.heading-actions { display: flex; gap: 8px; margin-left: auto; }
+
+		.btn {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 7px;
+			min-height: 39px;
+			padding: 8px 14px;
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			background: var(--surface);
+			color: var(--ink);
+			font-weight: 700;
+		}
+		.btn:hover { border-color: #c9c4ba; background: var(--surface-soft); }
+		.btn.primary { border-color: var(--navy); background: var(--navy); color: #fff; }
+		.btn.primary:hover { background: var(--navy-soft); }
+		.btn.success { border-color: var(--green); background: var(--green); color: #fff; }
+		.btn.small { min-height: 32px; padding: 6px 10px; font-size: 11px; }
+		.btn:disabled { cursor: not-allowed; opacity: 0.48; }
+
+		.manage-grid {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 15px;
+		}
+		.manage-card {
+			padding: 20px;
+			border: 1px solid var(--line);
+			border-radius: 15px;
+			background: var(--surface);
+			box-shadow: 0 5px 20px rgba(23, 32, 51, 0.035);
+		}
+		.manage-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 15px; border-radius: 11px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 850; }
+		.manage-card h2 { margin-bottom: 7px; font-size: 17px; }
+		.manage-card p { min-height: 42px; margin-bottom: 16px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+		.manage-card-footer { display: flex; align-items: center; gap: 8px; }
+		.manage-count { margin-left: auto; color: var(--muted); font-size: 11px; }
+		.manage-open { padding: 0; border: 0; background: transparent; color: var(--blue); font-size: 11px; font-weight: 800; }
+		.manage-open:hover { text-decoration: underline; }
+		.master-usage { display: flex; flex-wrap: wrap; gap: 6px; margin: -5px 0 16px; }
+		.master-usage span { padding: 4px 7px; border-radius: 999px; background: var(--surface-soft); color: var(--muted); font-size: 9px; font-weight: 700; }
+		.master-mobile-list { display: none; }
+		.master-mobile-row { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+		.master-mobile-row strong { display: block; font-size: 12px; }
+		.master-mobile-row span { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+		.master-mobile-row .btn { margin-top: 10px; }
+
+		.entry-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .55fr); gap: 16px; align-items: start; }
+		.entry-layout > *, .form-section, .form-section-body { min-width: 0; }
+		.form-section {
+			margin-bottom: 15px;
+			border: 1px solid var(--line);
+			border-radius: 15px;
+			background: var(--surface);
+			overflow: hidden;
+		}
+		.form-section-head { display: flex; align-items: center; gap: 9px; padding: 14px 17px; border-bottom: 1px solid var(--line); background: var(--surface-soft); }
+		.form-section-head h2 { margin: 0; font-size: 14px; }
+		.form-section-head p { margin: 0 0 0 auto; color: var(--muted); font-size: 11px; }
+		.form-section-body { padding: 17px; }
+		.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+		.field-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+		.field { min-width: 0; }
+		.field.full { grid-column: 1 / -1; }
+		.field label { display: flex; align-items: center; gap: 5px; margin-bottom: 6px; color: #4d5565; font-size: 11px; font-weight: 750; }
+		.required { color: var(--accent); }
+		.field input, .field select, .field textarea {
+			width: 100%;
+			min-height: 40px;
+			padding: 9px 11px;
+			border: 1px solid #d8d4cc;
+			border-radius: 9px;
+			background: #fff;
+			color: var(--ink);
+		}
+		.field textarea { min-height: 78px; resize: vertical; }
+		.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--blue); outline: 3px solid rgba(40, 105, 167, .12); }
+		.check-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+		.check-row { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--ink); font-size: 11px; font-weight: 700; }
+		.check-row input { width: auto; min-height: auto; margin: 0; }
+		.field-hint { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+		.field-with-action { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+		.field-with-action > select { min-width: 0; }
+		.selected-summary { margin-top: 10px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
+		.selected-summary strong { display: block; font-size: 11px; }
+		.selected-summary span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+		.entry-table-wrap { overflow-x: auto; }
+		.entry-table { width: 100%; min-width: 720px; border-collapse: collapse; }
+		.entry-table th { padding: 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 9px; text-align: left; text-transform: uppercase; }
+		.entry-table td { padding: 10px; vertical-align: top; }
+		.entry-table input, .entry-table select { width: 100%; min-height: 38px; padding: 8px 9px; border: 1px solid #d8d4cc; border-radius: 8px; background: #fff; }
+		.price-alert { display: flex; align-items: center; gap: 11px; margin-top: 12px; padding: 12px; border: 1px solid #edc36c; border-radius: 10px; background: var(--amber-soft); color: #77500c; }
+		.price-alert.success { border-color: #93d4bd; background: var(--green-soft); color: var(--green); }
+		.price-alert strong { display: block; font-size: 11px; }
+		.price-alert small { display: block; margin-top: 3px; font-size: 10px; line-height: 1.4; }
+		.price-alert .btn { margin-left: auto; flex: 0 0 auto; }
+		.summary-stack { display: grid; gap: 10px; }
+		.summary-row { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid #efede8; }
+		.summary-row:last-child { padding-bottom: 0; border-bottom: 0; }
+		.summary-row span { color: var(--muted); font-size: 11px; }
+		.summary-row strong { margin-left: auto; font-size: 12px; }
+		.entry-actions { display: grid; gap: 8px; margin-top: 13px; }
+		.flow-help { padding: 13px; border-radius: 10px; background: var(--blue-soft); color: #35516d; font-size: 10px; line-height: 1.55; }
+
+		.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(13, 23, 39, .58); backdrop-filter: blur(4px); }
+		.modal {
+			width: min(760px, 100%);
+			max-height: min(820px, calc(100vh - 38px));
+			overflow: auto;
+			border-radius: 17px;
+			background: var(--surface);
+			box-shadow: 0 26px 80px rgba(10, 20, 36, .34);
+		}
+		.modal.wide { width: min(920px, 100%); }
+		.modal-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); }
+		.modal-head h2 { margin-bottom: 4px; font-size: 19px; }
+		.modal-head p { margin: 0; color: var(--muted); font-size: 11px; }
+		.modal-close { margin-left: auto; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--muted); font-size: 18px; }
+		.modal-body { padding: 20px; }
+		.modal-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+		.modal-section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+		.modal-section-title { margin-bottom: 12px; font-size: 13px; }
+		.modal-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); background: rgba(255,255,255,.97); }
+		.workflow-box { padding: 22px; border: 1px solid #edc36c; border-radius: 12px; background: var(--amber-soft); text-align: center; }
+		.workflow-box .status { margin-bottom: 12px; }
+		.workflow-box h3 { margin-bottom: 7px; }
+		.workflow-box p { max-width: 520px; margin: 0 auto; color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+		.hero {
+			position: relative;
+			overflow: hidden;
+			display: grid;
+			grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+			gap: 22px;
+			margin-bottom: 22px;
+			padding: 30px;
+			border-radius: 22px;
+			background: var(--navy);
+			color: #fff;
+			box-shadow: var(--shadow);
+		}
+
+		.hero::after {
+			content: "";
+			position: absolute;
+			right: -90px;
+			top: -120px;
+			width: 360px;
+			height: 360px;
+			border: 70px solid rgba(255, 255, 255, 0.035);
+			border-radius: 50%;
+		}
+
+		.hero-copy, .hero-attention { position: relative; z-index: 1; }
+		.hero h1 { max-width: 710px; margin-bottom: 12px; font-size: clamp(31px, 4vw, 50px); }
+		.hero p { max-width: 670px; margin-bottom: 21px; color: #c6d1e2; font-size: 15px; line-height: 1.6; }
+		.location-chip {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			padding: 7px 11px;
+			border: 1px solid rgba(255, 255, 255, 0.13);
+			border-radius: 999px;
+			background: rgba(255, 255, 255, 0.08);
+			color: #eef3fb;
+			font-size: 12px;
+			font-weight: 650;
+		}
+		.location-dot { width: 8px; height: 8px; border-radius: 50%; background: #55d2a5; box-shadow: 0 0 0 4px rgba(85, 210, 165, 0.14); }
+		.hero-attention {
+			align-self: stretch;
+			padding: 18px;
+			border: 1px solid rgba(255, 255, 255, 0.1);
+			border-radius: 16px;
+			background: rgba(255, 255, 255, 0.07);
+		}
+		.hero-attention h3 { margin-bottom: 12px; font-size: 13px; letter-spacing: 0.02em; }
+		.attention-row {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			width: 100%;
+			padding: 10px 0;
+			border: 0;
+			border-top: 1px solid rgba(255, 255, 255, 0.09);
+			background: transparent;
+			color: #fff;
+			text-align: left;
+		}
+		.attention-row:first-of-type { border-top: 0; }
+		.attention-row:hover strong { text-decoration: underline; }
+		.attention-icon { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 9px; background: rgba(255, 255, 255, 0.1); font-size: 11px; font-weight: 800; }
+		.attention-row strong { display: block; font-size: 12px; }
+		.attention-row small { display: block; margin-top: 2px; color: #aebdd1; font-size: 11px; }
+		.attention-arrow { margin-left: auto; color: #9fb0c8; }
+
+		.section-head {
+			display: flex;
+			align-items: flex-end;
+			gap: 12px;
+			margin: 29px 0 14px;
+		}
+		.section-head h2 { margin: 0; font-size: 19px; letter-spacing: -0.02em; }
+		.section-head p { margin: 0 0 1px; color: var(--muted); font-size: 12px; }
+
+		.kpi-grid {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 13px;
+		}
+		.kpi {
+			padding: 18px;
+			border: 1px solid var(--line);
+			border-radius: 14px;
+			background: var(--surface);
+			box-shadow: 0 3px 15px rgba(23, 32, 51, 0.035);
+		}
+		.kpi-label { color: var(--muted); font-size: 12px; font-weight: 650; }
+		.kpi-value { margin-top: 7px; font-size: 28px; font-weight: 770; letter-spacing: -0.04em; }
+		.kpi-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+		.kpi-foot i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+
+		.flow-strip {
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+			gap: 0;
+			overflow: hidden;
+			border: 1px solid var(--line);
+			border-radius: 15px;
+			background: var(--surface);
+		}
+		.flow-step {
+			position: relative;
+			min-height: 82px;
+			padding: 15px 22px 14px 18px;
+			border: 0;
+			border-right: 1px solid var(--line);
+			background: transparent;
+			color: var(--ink);
+			text-align: left;
+		}
+		.flow-step:last-child { border-right: 0; }
+		.flow-step:hover { background: var(--surface-soft); }
+		.flow-step::after {
+			content: "›";
+			position: absolute;
+			right: 7px;
+			top: 29px;
+			color: #b9b5ad;
+			font-size: 18px;
+		}
+		.flow-step:last-child::after { display: none; }
+		.flow-number { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: 0.08em; }
+		.flow-step strong { display: block; margin-top: 5px; font-size: 13px; }
+		.flow-step small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+
+		.book-grid {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 16px;
+		}
+		.group-grid {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 16px;
+		}
+		.group-card {
+			min-height: 238px;
+			padding: 20px;
+			border: 1px solid #d9d4ca;
+			border-radius: 18px;
+			background: var(--surface);
+			color: var(--ink);
+			text-align: left;
+			box-shadow: 0 5px 20px rgba(23, 32, 51, 0.035);
+			transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+		}
+		.group-card:hover { transform: translateY(-4px); border-color: #bdb5a8; box-shadow: var(--shadow); }
+		.group-top { display: flex; align-items: flex-start; gap: 12px; }
+		.group-code {
+			display: grid;
+			place-items: center;
+			width: 44px;
+			height: 44px;
+			border-radius: 11px;
+			color: #fff;
+			font-size: 10px;
+			font-weight: 850;
+			letter-spacing: 0.04em;
+		}
+		.group-copy { min-width: 0; }
+		.group-copy strong { display: block; font-size: 16px; }
+		.group-copy small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+		.book-shelf {
+			display: flex;
+			align-items: flex-end;
+			gap: 7px;
+			height: 103px;
+			margin-top: 17px;
+			padding: 12px 13px 9px;
+			border: 8px solid #65452f;
+			border-top-width: 5px;
+			border-radius: 5px;
+			background: #e6d2b7;
+			box-shadow: inset 0 -8px 0 #8b6547, 0 4px 0 #4f3628;
+		}
+		.mini-book {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: min(52px, 22%);
+			height: 67px;
+			padding: 4px;
+			border-radius: 3px 6px 2px 2px;
+			color: #fff;
+			box-shadow: inset 5px 0 rgba(0,0,0,.14);
+			font-size: 8px;
+			font-weight: 850;
+			line-height: 1.15;
+			text-align: center;
+		}
+		.group-open { display: block; margin-top: 16px; color: var(--blue); font-size: 12px; font-weight: 800; }
+		.book-group-intro {
+			margin-bottom: 18px;
+			padding: 15px 17px;
+			border: 1px solid var(--line);
+			border-radius: 13px;
+			background: var(--surface);
+			color: var(--muted);
+			font-size: 12px;
+			line-height: 1.55;
+		}
+		.book-card {
+			position: relative;
+			overflow: hidden;
+			min-height: 290px;
+			padding: 0;
+			border: 0;
+			border-radius: 17px;
+			background: transparent;
+			color: var(--ink);
+			text-align: left;
+			transition: transform 160ms ease, box-shadow 160ms ease;
+		}
+		.book-card:hover { transform: translateY(-5px); box-shadow: var(--shadow); }
+		.book-cover {
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			justify-content: space-between;
+			height: 220px;
+			padding: 19px 17px 17px 26px;
+			border-radius: 16px 16px 7px 7px;
+			color: #fff;
+			box-shadow: inset 9px 0 0 rgba(0, 0, 0, 0.16), inset 11px 0 0 rgba(255, 255, 255, 0.1);
+		}
+		.book-cover::before {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background-image: radial-gradient(circle at 8px 8px, rgba(255,255,255,.1) 2px, transparent 2.5px);
+			background-size: 16px 16px;
+			mix-blend-mode: screen;
+			pointer-events: none;
+		}
+		.book-po { background: #b54d3e; }
+		.book-grn { background: #326e91; }
+		.book-pi { background: #784f75; }
+		.book-ipd { background: #a26b25; }
+		.book-wo { background: #39705b; }
+		.book-dc { background: #62548b; }
+		.book-code { position: relative; z-index: 1; font-size: 11px; font-weight: 800; letter-spacing: 0.11em; opacity: 0.85; }
+		.book-label {
+			position: relative;
+			z-index: 1;
+			padding: 15px 13px;
+			border: 1px solid rgba(255, 255, 255, 0.42);
+			border-radius: 4px;
+			background: rgba(255, 249, 220, 0.92);
+			color: #382f26;
+			box-shadow: 0 2px 0 rgba(0, 0, 0, 0.13);
+			text-align: center;
+		}
+		.book-label strong { display: block; font-family: Georgia, "Times New Roman", serif; font-size: 18px; line-height: 1.08; }
+		.book-label small { display: block; margin-top: 6px; color: #76695b; font-size: 10px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+		.book-meta {
+			display: flex;
+			align-items: center;
+			gap: 9px;
+			min-height: 70px;
+			padding: 13px 4px 0;
+		}
+		.book-meta strong { display: block; font-size: 13px; }
+		.book-meta small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+		.book-open { margin-left: auto; color: var(--blue); font-size: 12px; font-weight: 800; }
+
+		.module-identity {
+			display: grid;
+			place-items: center;
+			width: 54px;
+			height: 64px;
+			border-radius: 6px 11px 11px 6px;
+			color: #fff;
+			font-size: 12px;
+			font-weight: 850;
+			box-shadow: inset 6px 0 0 rgba(0,0,0,.15);
+		}
+
+		.toolbar {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			margin-bottom: 14px;
+			padding: 12px;
+			border: 1px solid var(--line);
+			border-radius: 13px;
+			background: var(--surface);
+		}
+		.search-wrap { position: relative; flex: 1; max-width: 420px; }
+		.search-wrap span { position: absolute; left: 12px; top: 10px; color: var(--muted); }
+		.search-input {
+			width: 100%;
+			height: 39px;
+			padding: 8px 12px 8px 34px;
+			border: 1px solid var(--line);
+			border-radius: 9px;
+			background: var(--surface-soft);
+			color: var(--ink);
+		}
+		.filter-set { display: flex; gap: 6px; margin-left: auto; }
+		.filter-chip {
+			min-height: 34px;
+			padding: 6px 11px;
+			border: 1px solid var(--line);
+			border-radius: 999px;
+			background: #fff;
+			color: var(--muted);
+			font-size: 11px;
+			font-weight: 750;
+		}
+		.filter-chip.active { border-color: var(--navy); background: var(--navy); color: #fff; }
+		.list-count { min-width: 92px; color: var(--muted); font-size: 11px; text-align: right; }
+
+		.list-card {
+			overflow: hidden;
+			border: 1px solid var(--line);
+			border-radius: 15px;
+			background: var(--surface);
+			box-shadow: 0 5px 20px rgba(23, 32, 51, 0.035);
+		}
+		.data-table { width: 100%; border-collapse: collapse; }
+		.data-table th {
+			padding: 11px 15px;
+			border-bottom: 1px solid var(--line);
+			background: var(--surface-soft);
+			color: var(--muted);
+			font-size: 10px;
+			font-weight: 800;
+			letter-spacing: 0.06em;
+			text-align: left;
+			text-transform: uppercase;
+			white-space: nowrap;
+		}
+		.data-table td { padding: 14px 15px; border-bottom: 1px solid #efede8; vertical-align: middle; }
+		.data-table tr:last-child td { border-bottom: 0; }
+		.data-table tbody tr { cursor: pointer; transition: background 120ms ease; }
+		.data-table tbody tr:hover { background: #f8fafc; }
+		.record-id { color: var(--blue); font-weight: 780; }
+		.cell-main { font-weight: 650; }
+		.cell-sub { margin-top: 3px; color: var(--muted); font-size: 11px; }
+		.row-arrow { color: #a9a39a; font-size: 18px; text-align: right; }
+		.empty-list { padding: 50px 20px; color: var(--muted); text-align: center; }
+
+		.status {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			padding: 4px 9px;
+			border-radius: 999px;
+			font-size: 10px;
+			font-weight: 800;
+			white-space: nowrap;
+		}
+		.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+		.status-open, .status-in-progress, .status-partly-received { background: var(--blue-soft); color: var(--blue); }
+		.status-completed, .status-received, .status-active { background: var(--green-soft); color: var(--green); }
+		.status-approved { background: var(--green-soft); color: var(--green); }
+		.status-draft, .status-pending, .status-approval-pending { background: var(--amber-soft); color: var(--amber); }
+		.status-closed, .status-cancelled, .status-disabled { background: #f0f1f3; color: #6b7280; }
+
+		.detail-hero {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr) auto;
+			gap: 18px;
+			align-items: center;
+			margin-bottom: 16px;
+			padding: 22px;
+			border: 1px solid var(--line);
+			border-radius: 16px;
+			background: var(--surface);
+			box-shadow: 0 5px 22px rgba(23, 32, 51, 0.04);
+		}
+		.detail-id { margin-bottom: 6px; color: var(--blue); font-size: 12px; font-weight: 800; letter-spacing: 0.04em; }
+		.detail-hero h1 { margin-bottom: 7px; font-size: clamp(23px, 3vw, 33px); }
+		.detail-hero p { margin-bottom: 0; color: var(--muted); }
+		.detail-status { align-self: start; }
+
+		.fact-grid {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 1px;
+			overflow: hidden;
+			margin-bottom: 16px;
+			border: 1px solid var(--line);
+			border-radius: 14px;
+			background: var(--line);
+		}
+		.fact { min-height: 88px; padding: 16px; background: var(--surface); }
+		.fact-label { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+		.fact-value { margin-top: 7px; font-size: 15px; font-weight: 720; line-height: 1.35; }
+
+		.process-card, .section-card {
+			margin-bottom: 16px;
+			border: 1px solid var(--line);
+			border-radius: 15px;
+			background: var(--surface);
+			overflow: hidden;
+		}
+		.card-head { display: flex; align-items: center; gap: 9px; padding: 14px 17px; border-bottom: 1px solid var(--line); }
+		.card-head h2 { margin: 0; font-size: 14px; }
+		.card-head p { margin: 0 0 0 auto; color: var(--muted); font-size: 11px; }
+		.journey {
+			display: grid;
+			grid-template-columns: repeat(6, minmax(0, 1fr));
+			padding: 20px;
+		}
+		.journey-step { position: relative; min-width: 0; text-align: center; }
+		.journey-step::before {
+			content: "";
+			position: absolute;
+			top: 13px;
+			left: -50%;
+			width: 100%;
+			height: 2px;
+			background: var(--line);
+		}
+		.journey-step:first-child::before { display: none; }
+		.journey-dot { position: relative; z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; margin: 0 auto 8px; border: 2px solid var(--line); border-radius: 50%; background: #fff; color: var(--muted); font-size: 9px; font-weight: 800; }
+		.journey-step.current .journey-dot { border-color: var(--navy); background: var(--navy); color: #fff; }
+		.journey-step.linked .journey-dot { border-color: var(--green); background: var(--green-soft); color: var(--green); }
+		.journey-step button { max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--ink); font-size: 11px; font-weight: 720; }
+		.journey-step button:hover { color: var(--blue); text-decoration: underline; }
+		.journey-step small { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+		.detail-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, 0.65fr); gap: 16px; }
+		.section-body { padding: 16px; }
+		.detail-table-wrap { overflow-x: auto; }
+		.detail-table { width: 100%; border-collapse: collapse; }
+		.detail-table th { padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; text-align: left; text-transform: uppercase; }
+		.detail-table td { padding: 12px; border-bottom: 1px solid #efede8; font-size: 12px; }
+		.detail-table tr:last-child td { border-bottom: 0; }
+		.related-stack { display: flex; flex-direction: column; gap: 9px; }
+		.related-card {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			width: 100%;
+			padding: 11px;
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			background: var(--surface-soft);
+			color: var(--ink);
+			text-align: left;
+		}
+		.related-card:hover { border-color: #b8b2a8; background: #fff; }
+		.related-code { display: grid; place-items: center; width: 34px; height: 38px; border-radius: 7px; color: #fff; font-size: 9px; font-weight: 850; }
+		.related-card strong { display: block; font-size: 11px; }
+		.related-card small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+		.related-card span:last-child { margin-left: auto; color: #a5a099; }
+
+		.attachment {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding: 11px 0;
+			border-bottom: 1px solid #efede8;
+		}
+		.attachment:last-child { border-bottom: 0; }
+		.file-icon { display: grid; place-items: center; width: 35px; height: 42px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 850; }
+		.attachment strong { display: block; font-size: 11px; }
+		.attachment small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+		.view-tag { margin-left: auto; color: var(--blue); font-size: 10px; font-weight: 750; }
+
+		.prototype-note {
+			margin-top: 18px;
+			padding: 12px 14px;
+			border: 1px dashed #cfc9be;
+			border-radius: 10px;
+			background: #fffdf8;
+			color: var(--muted);
+			font-size: 11px;
+			line-height: 1.5;
+		}
+
+		.toast {
+			position: fixed;
+			right: 22px;
+			bottom: 22px;
+			z-index: 90;
+			max-width: 330px;
+			padding: 13px 15px;
+			border-radius: 11px;
+			background: var(--navy);
+			color: #fff;
+			box-shadow: 0 12px 35px rgba(23, 32, 51, 0.3);
+			font-size: 12px;
+			animation: toast-in 180ms ease;
+		}
+		@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
+
+		.mobile-cards { display: none; }
+		@media (max-width: 1120px) {
+			.book-grid, .group-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			.manage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			.kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			.hero { grid-template-columns: 1fr; }
+			.flow-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+			.flow-step:nth-child(3) { border-right: 0; }
+			.detail-grid, .entry-layout { grid-template-columns: 1fr; }
+		}
+
+		@media (max-width: 760px) {
+			.topbar { height: 58px; padding: 0 16px; }
+			.topbar-divider, .topbar-title, .prototype-chip { display: none; }
+			.page { padding: 22px 16px 45px; }
+			.hero { padding: 22px; border-radius: 16px; }
+			.book-grid, .group-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			.book-card { min-height: 260px; }
+			.book-cover { height: 196px; }
+			.flow-strip { grid-template-columns: 1fr; }
+			.flow-step { min-height: 62px; border-right: 0; border-bottom: 1px solid var(--line); }
+			.flow-step:last-child { border-bottom: 0; }
+			.flow-step::after { top: 19px; }
+			.heading-actions { width: 100%; margin-left: 0; }
+			.page-heading { flex-wrap: wrap; }
+			.toolbar { align-items: stretch; flex-direction: column; }
+			.search-wrap { max-width: none; }
+			.filter-set { overflow-x: auto; margin-left: 0; }
+			.list-count { text-align: left; }
+			.list-card { display: none; }
+			.mobile-cards { display: grid; gap: 10px; }
+			.master-mobile-list { display: grid; gap: 10px; }
+			.mobile-row { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+			.mobile-row-head { display: flex; align-items: center; gap: 8px; }
+			.mobile-row-head .status { margin-left: auto; }
+			.mobile-row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 13px; }
+			.mobile-row small { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+			.mobile-row span { display: block; margin-top: 3px; font-size: 11px; font-weight: 650; }
+			.detail-hero { grid-template-columns: auto minmax(0, 1fr); padding: 17px; }
+			.detail-status { grid-column: 1 / -1; }
+			.fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			.field-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+			.journey { grid-template-columns: 1fr; gap: 8px; }
+			.journey-step { display: grid; grid-template-columns: 34px 1fr; align-items: center; text-align: left; }
+			.journey-step::before { top: -13px; left: 13px; width: 2px; height: 26px; }
+			.journey-dot { margin: 0; }
+			.journey-step small { margin-left: 0; }
+		}
+
+		@media (max-width: 480px) {
+			.book-grid, .group-grid, .manage-grid, .kpi-grid, .field-grid, .field-grid.three { grid-template-columns: 1fr; }
+			.field-with-action { grid-template-columns: 1fr; }
+			.field-with-action .btn { justify-self: start; }
+			.book-cover { height: 180px; }
+			.fact-grid { grid-template-columns: 1fr; }
+		}
+	</style>
+</head>
+<body>
+	<div class="app-shell">
+		<header class="topbar">
+			<button class="brand" type="button" data-route="home" aria-label="Go to workspace home">
+				<span class="brand-mark">MGK</span>
+				<span><strong>MGK Clothing</strong><span>Operations Workspace</span></span>
+			</button>
+			<div class="topbar-divider"></div>
+			<div class="topbar-title" id="topbar-context"><strong>All Books</strong> · Operations workspace</div>
+			<div class="topbar-right">
+				<span class="prototype-chip">INTERACTIVE · SAMPLE DATA</span>
+				<span class="avatar" title="Administrator">AD</span>
+			</div>
+		</header>
+		<main id="app"></main>
+	</div>
+	<div id="toast-root" aria-live="polite"></div>
+	<div id="modal-root"></div>
+
+	<script>
+		const MODULE_ORDER = ["po", "grn", "pi", "ipd", "wo", "dc"];
+		const MODULES = {
+			po: {
+				code: "PO", label: "Purchase Order", short: "Purchase Orders", coverClass: "book-po",
+				description: "Orders placed with yarn and material suppliers.",
+				books: [
+					{ key: "karigan-order", label: "Karigan Order Book", short: "Karigan Order", note: "Entries only for Karigan purchases." },
+					{ key: "salavai-cone-order", label: "Salavai Cone Order Book", short: "Salavai Cone Order", note: "Entries only for Salavai Cone purchases." },
+					{ key: "other-orders", label: "Other Orders Book", short: "Other Orders", note: "All remaining purchase orders." }
+				],
+				columns: ["Order", "Supplier", "Order Date", "Material", "Quantity", "Status"],
+				records: [
+					{
+						id: "PO-2026-01058", title: "40s Weft Cotton Autoconer Yarn", party: "Shambhu Vengu Yarn Mills Pvt Ltd",
+						book: "salavai-cone-order",
+						date: "09 Jun 2026", status: "Partly Received", quantity: "600.000 kg", reference: "10 bags", amount: "₹1,70,100",
+						facts: [["Supplier", "Shambhu Vengu Yarn Mills Pvt Ltd"], ["Order date", "09 Jun 2026"], ["Ordered quantity", "600.000 kg"], ["Expected packing", "10 bags"]],
+						items: [["40s", "Weft Cotton Autoconer Yarn", "600.000 kg", "₹270.00", "₹1,62,000"]],
+						links: [{ module: "grn", id: "GRN-2026-01093", label: "Received against this PO" }, { module: "pi", id: "PI-2026-00109", label: "Supplier billing" }, { module: "ipd", id: "IPD-COTTON-040", label: "Material process definition" }, { module: "wo", id: "WO-2026-00201", label: "Dyeing work order" }],
+						attachments: [["Supplier quotation.pdf", "Supplier document"], ["PO approval note.jpg", "Notebook reference"]]
+					},
+					{
+						id: "PO-2026-01074", title: "2/40 Cotton Yarn — Colour Lot", party: "Rangadurai Yarn",
+						book: "karigan-order",
+						date: "25 Jun 2026", status: "Received", quantity: "720.000 kg", reference: "12 bags", amount: "₹1,77,660",
+						facts: [["Supplier", "Rangadurai Yarn"], ["Order date", "25 Jun 2026"], ["Ordered quantity", "720.000 kg"], ["Colour lines", "4"]],
+						items: [["2/40", "Colour 31", "180.000 kg", "₹235.00", "₹42,300"], ["2/40", "Colour 61", "180.000 kg", "₹235.00", "₹42,300"], ["2/40", "Colour 62", "180.000 kg", "₹235.00", "₹42,300"], ["2/40", "Colour 64", "180.000 kg", "₹235.00", "₹42,300"]],
+						links: [{ module: "grn", id: "GRN-2026-01101", label: "Completed goods receipt" }, { module: "pi", id: "PI-2026-00074", label: "Supplier billing" }, { module: "ipd", id: "IPD-COTTON-240", label: "Material process definition" }],
+						attachments: [["Purchase order scan.pdf", "Approved order"]]
+					},
+					{
+						id: "PO-2026-01065", title: "2/40 Cotton Yarn — Dyeing Requirement", party: "RMS Textiles",
+						book: "karigan-order",
+						date: "11 Jun 2026", status: "Open", quantity: "440.000 kg", reference: "Planned", amount: "₹1,18,800",
+						facts: [["Supplier", "RMS Textiles"], ["Order date", "11 Jun 2026"], ["Ordered quantity", "440.000 kg"], ["Receipt status", "Awaiting goods"]],
+						items: [["2/40", "Cotton Yarn", "440.000 kg", "₹270.00", "₹1,18,800"]],
+						links: [], attachments: [["PO note.jpg", "Notebook reference"]]
+					},
+					{
+						id: "PO-2026-01067", title: "40s Cotton Yarn", party: "Sri Varpi Textiles",
+						book: "other-orders",
+						date: "14 Jun 2026", status: "Draft", quantity: "230.200 kg", reference: "Under review", amount: "₹62,154",
+						facts: [["Supplier", "Sri Varpi Textiles"], ["Order date", "14 Jun 2026"], ["Ordered quantity", "230.200 kg"], ["Approval", "Pending"]],
+						items: [["40s", "Cotton Yarn", "230.200 kg", "₹270.00", "₹62,154"]], links: [], attachments: []
+					}
+				]
+			},
+			grn: {
+				code: "GRN", label: "Goods Received Note", short: "Goods Received Notes", coverClass: "book-grn",
+				description: "Supplier bill, MGK receipt slip and actual bundle weights together.",
+				books: [{ key: "goods-received-note", label: "Goods Received Note Book", short: "Goods Received Note", note: "All incoming material receipts." }],
+				columns: ["Receipt", "Supplier", "Invoice", "Receipt Date", "Actual Quantity", "Status"],
+				records: [
+					{
+						id: "GRN-2026-01093", title: "Receipt No. 1093", party: "Shambhu Vengu Yarn Mills Pvt Ltd", date: "09 Jun 2026",
+						book: "goods-received-note",
+						status: "Completed", quantity: "600.000 kg", reference: "Invoice 109", amount: "₹1,70,100",
+						facts: [["Supplier invoice", "109 · 09 Jun 2026"], ["MGK receipt", "1093"], ["Actual quantity", "600.000 kg"], ["Packing", "10 bags"]],
+						items: [["40s", "Cotton Autoconer Yarn", "10 bags", "600.000 kg", "Accepted"]],
+						links: [{ module: "po", id: "PO-2026-01058", label: "Source Purchase Order" }, { module: "pi", id: "PI-2026-00109", label: "Supplier billing" }, { module: "ipd", id: "IPD-COTTON-040", label: "Material process definition" }, { module: "wo", id: "WO-2026-00201", label: "Material issued to Work Order" }],
+						attachments: [["Supplier invoice 109.pdf", "Tax invoice"], ["MGK receipt 1093.jpg", "Internal receipt slip"], ["Bundle weights.jpg", "Weight verification"]]
+					},
+					{
+						id: "GRN-2026-01101", title: "Receipt No. 1101", party: "Rangadurai Yarn", date: "25 Jun 2026",
+						book: "goods-received-note",
+						status: "Completed", quantity: "720.000 kg", reference: "Invoice 74/26-27", amount: "₹1,77,660",
+						facts: [["Supplier invoice", "74/26-27"], ["MGK receipt", "1101"], ["Actual quantity", "720.000 kg"], ["Colour lines", "4"]],
+						items: [["2/40", "Colour 31", "3 bags", "180.000 kg", "Accepted"], ["2/40", "Colour 61", "3 bags", "180.000 kg", "Accepted"], ["2/40", "Colour 62", "3 bags", "180.000 kg", "Accepted"], ["2/40", "Colour 64", "3 bags", "180.000 kg", "Accepted"]],
+						links: [{ module: "po", id: "PO-2026-01074", label: "Source Purchase Order" }, { module: "pi", id: "PI-2026-00074", label: "Supplier billing" }, { module: "ipd", id: "IPD-COTTON-240", label: "Material process definition" }],
+						attachments: [["Rangadurai invoice.jpg", "Supplier tax invoice"], ["MGK receipt 1101.jpg", "Internal receipt slip"]]
+					},
+					{
+						id: "GRN-2026-01108", title: "Dyeing Return Receipt", party: "A. Marimuthu (Bleaching & Colours)", date: "02 Jun 2026",
+						book: "goods-received-note",
+						status: "Received", quantity: "210.000 kg", reference: "Invoice 778", amount: "₹29,767",
+						facts: [["Supplier invoice", "778 · 02 Jun 2026"], ["Job-work challan", "201"], ["Returned quantity", "210.000 kg"], ["Process", "Dyeing"]],
+						items: [["2/40", "Dyed colour lot", "5 colour lines", "210.000 kg", "Accepted"]],
+						links: [{ module: "pi", id: "PI-2026-00778", label: "Job-work billing" }, { module: "wo", id: "WO-2026-00201", label: "Completed Work Order" }, { module: "dc", id: "DC-2026-00201", label: "Material outward challan" }],
+						attachments: [["Dyeing invoice 778.jpg", "Supplier service invoice"], ["Return weighment.jpg", "Bundle weights"]]
+					}
+				]
+			},
+			pi: {
+				code: "PI", label: "Billing", short: "Purchase Invoices", coverClass: "book-pi",
+				description: "Supplier and job-work bills kept separately from operational books.",
+				books: [{ key: "purchase-invoice", label: "Purchase Invoice Book", short: "Purchase Invoice", note: "Material and job-work supplier bills." }],
+				columns: ["Invoice", "Supplier", "Source Receipt", "Invoice Date", "Amount", "Status"],
+				records: [
+					{
+						id: "PI-2026-00109", title: "Supplier Invoice 109", party: "Shambhu Vengu Yarn Mills Pvt Ltd", book: "purchase-invoice",
+						date: "09 Jun 2026", status: "Received", quantity: "600.000 kg", reference: "GRN-2026-01093", amount: "₹1,70,100",
+						facts: [["Supplier invoice", "109"], ["Invoice date", "09 Jun 2026"], ["Source receipt", "GRN-2026-01093"], ["Invoice total", "₹1,70,100"]],
+						items: [["40s", "Weft Cotton Autoconer Yarn", "600.000 kg", "Material bill", "₹1,70,100"]],
+						links: [{ module: "po", id: "PO-2026-01058", label: "Source Purchase Order" }, { module: "grn", id: "GRN-2026-01093", label: "Goods receipt matched to this bill" }],
+						attachments: [["Supplier invoice 109.pdf", "Tax invoice"]]
+					},
+					{
+						id: "PI-2026-00074", title: "Supplier Invoice 74/26-27", party: "Rangadurai Yarn", book: "purchase-invoice",
+						date: "25 Jun 2026", status: "Received", quantity: "720.000 kg", reference: "GRN-2026-01101", amount: "₹1,77,660",
+						facts: [["Supplier invoice", "74/26-27"], ["Invoice date", "25 Jun 2026"], ["Source receipt", "GRN-2026-01101"], ["Invoice total", "₹1,77,660"]],
+						items: [["2/40", "Colour Cotton Yarn", "720.000 kg", "Material bill", "₹1,77,660"]],
+						links: [{ module: "po", id: "PO-2026-01074", label: "Source Purchase Order" }, { module: "grn", id: "GRN-2026-01101", label: "Goods receipt matched to this bill" }],
+						attachments: [["Rangadurai invoice.jpg", "Supplier tax invoice"]]
+					},
+					{
+						id: "PI-2026-00778", title: "Dyeing Invoice 778", party: "A. Marimuthu (Bleaching & Colours)", book: "purchase-invoice",
+						date: "02 Jun 2026", status: "Received", quantity: "210.000 kg", reference: "GRN-2026-01108", amount: "₹29,767",
+						facts: [["Supplier invoice", "778"], ["Invoice date", "02 Jun 2026"], ["Job-work receipt", "GRN-2026-01108"], ["Invoice total", "₹29,767"]],
+						items: [["2/40", "External dyeing service", "210.000 kg", "Job-work bill", "₹29,767"]],
+						links: [{ module: "grn", id: "GRN-2026-01108", label: "Dyeing return receipt" }, { module: "wo", id: "WO-2026-00201", label: "Source Dyeing Work Order" }, { module: "dc", id: "DC-2026-00201", label: "Material outward challan" }],
+						attachments: [["Dyeing invoice 778.jpg", "Supplier service invoice"]]
+					}
+				]
+			},
+			ipd: {
+				code: "IPD", label: "Item Production Detail", short: "Item Production Details", coverClass: "book-ipd",
+				description: "The approved route that explains how each material is processed.",
+				books: [{ key: "item-production-detail", label: "Item Production Detail Book", short: "Item Production Detail", note: "Approved material process routes." }],
+				columns: ["Production Detail", "Material", "Version", "Process Route", "Output", "Status"],
+				records: [
+					{
+						id: "IPD-COTTON-040", title: "40s Cotton Yarn Process Route", party: "Cotton Yarn", date: "Version 2",
+						book: "item-production-detail",
+						status: "Active", quantity: "600 kg batch", reference: "Dyeing → Stock", amount: "Dyed yarn",
+						facts: [["Input material", "40s Cotton Yarn"], ["Current version", "2"], ["Process route", "Dyeing → Quality → Stock"], ["Output", "Dyed Cotton Yarn"]],
+						items: [["1", "Dyeing", "Raw cotton yarn", "Dyed yarn", "Weight tracked"], ["2", "Quality check", "Dyed yarn", "Accepted yarn", "Bundle-wise"], ["3", "Stock receipt", "Accepted yarn", "Available stock", "Warehouse"]],
+						links: [{ module: "po", id: "PO-2026-01058", label: "Purchase Order using this material" }, { module: "grn", id: "GRN-2026-01093", label: "Available received material" }, { module: "wo", id: "WO-2026-00201", label: "Work Order using this route" }], attachments: []
+					},
+					{
+						id: "IPD-COTTON-240", title: "2/40 Cotton Yarn Process Route", party: "Cotton Yarn", date: "Version 1",
+						book: "item-production-detail",
+						status: "Active", quantity: "720 kg batch", reference: "Receive → Stock", amount: "Colour yarn",
+						facts: [["Input material", "2/40 Cotton Yarn"], ["Current version", "1"], ["Process route", "Receipt → Quality → Stock"], ["Output", "Colour Cotton Yarn"]],
+						items: [["1", "Receipt", "Supplier yarn", "Received yarn", "PO matched"], ["2", "Quality check", "Received yarn", "Accepted yarn", "Colour-wise"], ["3", "Stock", "Accepted yarn", "Available stock", "Warehouse"]],
+						links: [{ module: "po", id: "PO-2026-01074", label: "Purchase Order using this material" }, { module: "grn", id: "GRN-2026-01101", label: "Received material" }, { module: "wo", id: "WO-2026-00202", label: "Work Order using this route" }], attachments: []
+					},
+					{
+						id: "IPD-DYED-240", title: "2/40 Dyed Yarn Return Route", party: "Dyed Yarn", date: "Version 1",
+						book: "item-production-detail",
+						status: "Draft", quantity: "210 kg batch", reference: "Dyeing return", amount: "Accepted dyed yarn",
+						facts: [["Input material", "2/40 Cotton Yarn"], ["Current version", "1"], ["Process route", "Dyeing → Return inspection"], ["Output", "Accepted Dyed Yarn"]],
+						items: [["1", "External dyeing", "Raw yarn", "Dyed yarn", "Challan tracked"], ["2", "Return inspection", "Dyed yarn", "Accepted yarn", "Invoice matched"]],
+						links: [{ module: "wo", id: "WO-2026-00203", label: "Planned Work Order" }, { module: "dc", id: "DC-2026-00204", label: "Outward material challan" }], attachments: []
+					}
+				]
+			},
+			wo: {
+				code: "WO", label: "Work Order", short: "Work Orders", coverClass: "book-wo",
+				description: "Material issued to a process supplier and its current progress.",
+				books: [
+					{ key: "dyeing", label: "Dyeing Work Order Book", short: "Dyeing", note: "Only dyeing job-work entries." },
+					{ key: "doubling", label: "Doubling Work Order Book", short: "Doubling", note: "Only yarn doubling entries." },
+					{ key: "other-job-work", label: "Other Job Work Book", short: "Other Job Work", note: "All remaining process work orders." }
+				],
+				columns: ["Work Order", "Process Supplier", "Process", "Planned Date", "Quantity", "Status"],
+				records: [
+					{
+						id: "WO-2026-00201", title: "Dyeing — 40s Cotton Yarn", party: "A. Marimuthu (Bleaching & Colours)", date: "01 Jun 2026",
+						book: "dyeing",
+						status: "In Progress", quantity: "210.000 kg", reference: "Dyeing", amount: "Return due 08 Jun",
+						facts: [["Process supplier", "A. Marimuthu (Bleaching & Colours)"], ["Process", "Dyeing"], ["Planned quantity", "210.000 kg"], ["Expected return", "08 Jun 2026"]],
+						items: [["2/40", "Cotton Yarn", "210.000 kg", "External dyeing", "In Progress"]],
+						links: [{ module: "po", id: "PO-2026-01058", label: "Material Purchase Order" }, { module: "grn", id: "GRN-2026-01093", label: "Source Goods Receipt" }, { module: "pi", id: "PI-2026-00778", label: "Dyeing supplier bill" }, { module: "ipd", id: "IPD-COTTON-040", label: "Approved process route" }, { module: "dc", id: "DC-2026-00201", label: "Material outward challan" }],
+						attachments: [["Dyeing order note.jpg", "Notebook instruction"]]
+					},
+					{
+						id: "WO-2026-00202", title: "Quality Sorting — 2/40 Colour Yarn", party: "MGK Clothing — Vennandur", date: "26 Jun 2026",
+						book: "other-job-work",
+						status: "Open", quantity: "720.000 kg", reference: "Internal quality", amount: "4 colour lines",
+						facts: [["Processing unit", "MGK Clothing — Vennandur"], ["Process", "Quality Sorting"], ["Planned quantity", "720.000 kg"], ["Colour lines", "4"]],
+						items: [["2/40", "Colour yarn", "720.000 kg", "Quality sorting", "Open"]],
+						links: [{ module: "grn", id: "GRN-2026-01101", label: "Source Goods Receipt" }, { module: "ipd", id: "IPD-COTTON-240", label: "Approved process route" }], attachments: []
+					},
+					{
+						id: "WO-2026-00203", title: "External Dyeing — 2/40 Cotton Yarn", party: "A. Marimuthu (Bleaching & Colours)", date: "30 Jun 2026",
+						book: "dyeing",
+						status: "Draft", quantity: "295.000 kg", reference: "Dyeing", amount: "Awaiting issue",
+						facts: [["Process supplier", "A. Marimuthu (Bleaching & Colours)"], ["Process", "Dyeing"], ["Planned quantity", "295.000 kg"], ["Material issue", "Not yet issued"]],
+						items: [["2/40", "Cotton Yarn", "295.000 kg", "External dyeing", "Pending"]],
+						links: [{ module: "ipd", id: "IPD-DYED-240", label: "Planned process route" }, { module: "dc", id: "DC-2026-00204", label: "Draft outward challan" }], attachments: []
+					},
+					{
+						id: "WO-2026-00205", title: "Doubling — 2/40 Cotton Yarn", party: "RMS Textiles", date: "28 Jun 2026",
+						book: "doubling",
+						status: "Open", quantity: "300.000 kg", reference: "Doubling", amount: "Return due 05 Jul",
+						facts: [["Process supplier", "RMS Textiles"], ["Process", "Doubling"], ["Planned quantity", "300.000 kg"], ["Expected return", "05 Jul 2026"]],
+						items: [["2/40", "Cotton Yarn", "300.000 kg", "External doubling", "Open"]],
+						links: [{ module: "po", id: "PO-2026-01065", label: "Material Purchase Order" }, { module: "ipd", id: "IPD-COTTON-240", label: "Approved process route" }],
+						attachments: [["Doubling order note.jpg", "Notebook instruction"]]
+					}
+				]
+			},
+			dc: {
+				code: "DC", label: "Delivery Challan", short: "Delivery Challans", coverClass: "book-dc",
+				description: "Material sent outside for job work, with quantity and receiver tracking.",
+				books: [{ key: "delivery-challan", label: "Delivery Challan Book", short: "Delivery Challan", note: "All outward material challans." }],
+				columns: ["Challan", "Receiving Party", "Work Order", "Dispatch Date", "Quantity", "Status"],
+				records: [
+					{
+						id: "DC-2026-00201", title: "Job Work Delivery — Dyeing", party: "A. Marimuthu (Bleaching & Colours)", date: "04 Apr 2026",
+						book: "delivery-challan",
+						status: "Completed", quantity: "210.000 kg", reference: "WO-2026-00201", amount: "Delivery Note 201",
+						facts: [["Receiving party", "A. Marimuthu (Bleaching & Colours)"], ["Dispatch date", "04 Apr 2026"], ["Dispatched quantity", "210.000 kg"], ["Purpose", "Job work only — Dyeing"]],
+						items: [["2/40", "Cotton Yarn", "5 colour lines", "210.000 kg", "Received"]],
+						links: [{ module: "grn", id: "GRN-2026-01108", label: "Material returned through GRN" }, { module: "pi", id: "PI-2026-00778", label: "Job-work billing" }, { module: "ipd", id: "IPD-COTTON-040", label: "Process definition" }, { module: "wo", id: "WO-2026-00201", label: "Source Work Order" }],
+						attachments: [["Delivery note 201.jpg", "Signed outward slip"], ["Receiver acknowledgement.jpg", "Job-worker acknowledgement"]]
+					},
+					{
+						id: "DC-2026-00204", title: "Material Issue — External Dyeing", party: "A. Marimuthu (Bleaching & Colours)", date: "30 Jun 2026",
+						book: "delivery-challan",
+						status: "Draft", quantity: "295.000 kg", reference: "WO-2026-00203", amount: "Awaiting dispatch",
+						facts: [["Receiving party", "A. Marimuthu (Bleaching & Colours)"], ["Dispatch date", "Not dispatched"], ["Planned quantity", "295.000 kg"], ["Purpose", "Job work only — Dyeing"]],
+						items: [["2/40", "Cotton Yarn", "Planned bundles", "295.000 kg", "Draft"]],
+						links: [{ module: "ipd", id: "IPD-DYED-240", label: "Process definition" }, { module: "wo", id: "WO-2026-00203", label: "Source Work Order" }], attachments: []
+					},
+					{
+						id: "DC-2026-00211", title: "Colour Yarn Transfer", party: "MGK Clothing — Vennandur", date: "27 Jun 2026",
+						book: "delivery-challan",
+						status: "Completed", quantity: "150.000 kg", reference: "Internal transfer", amount: "Receipt confirmed",
+						facts: [["Receiving unit", "MGK Clothing — Vennandur"], ["Dispatch date", "27 Jun 2026"], ["Dispatched quantity", "150.000 kg"], ["Purpose", "Internal transfer"]],
+						items: [["2/40", "Colour Yarn", "3 bags", "150.000 kg", "Received"]], links: [], attachments: [["Transfer slip.jpg", "Signed delivery slip"]]
+					}
+				]
+			}
+		};
+
+		const state = { filters: {} };
+		for (const key of MODULE_ORDER) {
+			for (const book of MODULES[key].books) state.filters[`${key}:${book.key}`] = { status: "All", search: "" };
+		}
+		const demoState = {
+			items: [
+				{ name: "2/40 Cotton Yarn", itemGroup: "Yarn", uom: "kg", hsn: "5205", brand: "", isStock: true, isPurchase: true, status: "Active" },
+				{ name: "40s Cotton Yarn", itemGroup: "Yarn", uom: "kg", hsn: "5205", brand: "", isStock: true, isPurchase: true, status: "Active" },
+				{ name: "Grey Knitted Fabric", itemGroup: "Fabric", uom: "kg", hsn: "6006", brand: "MGK", isStock: true, isPurchase: false, status: "Active" },
+			],
+			suppliers: [
+				{ name: "Rangadurai Yarn", gstin: "33AABCR2741M1Z8", pan: "AABCR2741M", address1: "14, Mill Road", address2: "Near Main Market", city: "Erode", state: "Tamil Nadu", pincode: "638001", phone: "98420 11074" },
+				{ name: "Shambhu Vengu Yarn Mills Pvt Ltd", gstin: "33AAKCS7109Q1Z4", pan: "AAKCS7109Q", address1: "82, Textile Nagar", address2: "", city: "Coimbatore", state: "Tamil Nadu", pincode: "641014", phone: "98430 22109" },
+			],
+			agents: [
+				{ name: "Kumar Yarn Agent", terms: "Commission settled outside the purchase invoice." },
+			],
+			warehouses: [
+				{ name: "MGK Main Stores", supplier: "", status: "Active" },
+				{ name: "MGK Vennandur Stores", supplier: "", status: "Active" },
+				{ name: "Rangadurai Supplier Warehouse", supplier: "Rangadurai Yarn", status: "Active" },
+			],
+			prices: [
+				{ item: "2/40 Cotton Yarn", supplier: "Rangadurai Yarn", uom: "kg", fromDate: "2026-06-01", tax: "GST 5%", moq: 0, rate: 235, leadTime: 7, status: "Approved" },
+				{ item: "40s Cotton Yarn", supplier: "Shambhu Vengu Yarn Mills Pvt Ltd", uom: "kg", fromDate: "2026-06-01", tax: "GST 5%", moq: 0, rate: 270, leadTime: 5, status: "Approved" },
+			],
+			processCosts: [
+				{ name: "PC-2026-00017", process: "Dyeing", item: "2/40 Cotton Yarn", supplier: "Rangadurai Yarn", uom: "kg", fromDate: "2026-06-01", tax: "GST 5%", moq: 0, rate: 18.5, status: "Approved" },
+				{ name: "PC-2026-00018", process: "Doubling", item: "40s Cotton Yarn", supplier: "Shambhu Vengu Yarn Mills Pvt Ltd", uom: "kg", fromDate: "2026-06-01", tax: "GST 5%", moq: 0, rate: 12, status: "Approved" },
+			],
+			users: [
+				{ email: "Administrator", firstName: "Administrator", mobile: "", roles: ["System Manager"], enabled: true },
+				{ email: "purchase@mgk.local", firstName: "Purchase Operator", mobile: "98420 12001", roles: ["Purchase User"], enabled: true },
+				{ email: "production@mgk.local", firstName: "Production Operator", mobile: "98420 12002", roles: ["Production User"], enabled: true },
+			],
+			poDraft: {
+				book: "karigan-order", supplier: "", agent: "", orderDate: "2026-08-06", deliveryDate: "2026-08-13",
+				warehouse: "MGK Main Stores", goodsRouting: "Direct", handlingSupplier: "", item: "2/40 Cotton Yarn", qty: 720,
+				rate: null, tax: "", priceStatus: "Missing",
+			},
+			pendingPrice: null,
+		};
+
+		function esc(value) {
+			return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+		}
+
+		function slug(value) {
+			return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+		}
+
+		function route(path) { window.location.hash = path; }
+		function moduleRoute(key) { return `group/${key}`; }
+		function bookRoute(key, bookKey) { return `list/${key}/${encodeURIComponent(bookKey)}`; }
+		function recordRoute(key, id) { return `detail/${key}/${encodeURIComponent(id)}`; }
+		function bookInfo(key, bookKey) { return MODULES[key]?.books.find(book => book.key === bookKey) || null; }
+		function supplierInfo(name) { return demoState.suppliers.find(supplier => supplier.name === name) || null; }
+		function agentInfo(name) { return demoState.agents.find(agent => agent.name === name) || null; }
+		function itemInfo(name) { return demoState.items.find(item => item.name === name) || null; }
+		function warehouseInfo(name) { return demoState.warehouses.find(warehouse => warehouse.name === name) || null; }
+		function processCostInfo(name) { return demoState.processCosts.find(cost => cost.name === name) || null; }
+		function userInfo(email) { return demoState.users.find(user => user.email === email) || null; }
+		function approvedPrice(item, supplier) {
+			return demoState.prices.find(price => price.item === item && price.supplier === supplier && price.status === "Approved") || null;
+		}
+		function formatMoney(value) {
+			return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value || 0));
+		}
+		function syncDraftPrice() {
+			const price = approvedPrice(demoState.poDraft.item, demoState.poDraft.supplier);
+			demoState.poDraft.rate = price?.rate ?? null;
+			demoState.poDraft.tax = price?.tax || "";
+			demoState.poDraft.priceStatus = price ? "Approved" : "Missing";
+		}
+
+		function breadcrumbs(items) {
+			return `<div class="breadcrumbs">${items.map((item, index) => {
+				const separator = index ? `<span>›</span>` : "";
+				return separator + (item.route ? `<button class="crumb-link" type="button" data-route="${esc(item.route)}">${esc(item.label)}</button>` : `<span>${esc(item.label)}</span>`);
+			}).join("")}</div>`;
+		}
+
+		function statusBadge(status) {
+			return `<span class="status status-${slug(status)}">${esc(status)}</span>`;
+		}
+
+		function bookIdentity(key, small = false) {
+			const module = MODULES[key];
+			return `<span class="module-identity ${module.coverClass}"${small ? ` style="width:40px;height:48px;font-size:9px"` : ""}>${module.code}</span>`;
+		}
+
+		function setTopbar(label) {
+			document.getElementById("topbar-context").innerHTML = `<strong>${esc(label)}</strong> · Operations workspace`;
+		}
+
+		function renderHome() {
+			setTopbar("All Books");
+			return `<div class="page">
+				<div class="section-head" style="margin-top:8px;margin-bottom:20px"><h2 style="font-size:28px">Your Digital Books</h2><button class="btn" type="button" data-route="manage" style="margin-left:auto">Manage Suppliers, Agents & Prices</button></div>
+				<section class="group-grid">${MODULE_ORDER.map(key => {
+					const module = MODULES[key];
+					return `<button class="group-card" type="button" data-route="${moduleRoute(key)}">
+						<span class="group-top"><span class="group-code ${module.coverClass}">${esc(module.code)}</span><span class="group-copy"><strong>${esc(module.label)}</strong><small>${esc(module.description)}</small></span></span>
+						<span class="book-shelf">${module.books.map((book, index) => `<span class="mini-book ${module.coverClass}" style="height:${62 + (index % 2) * 8}px">${esc(book.short)}</span>`).join("")}</span>
+						<span class="group-open">Open · ${module.books.length} book${module.books.length === 1 ? "" : "s"} ›</span>
+					</button>`;
+				}).join("")}</section>
+			</div>`;
+		}
+
+		function renderBookGroup(key) {
+			const module = MODULES[key];
+			if (!module) return renderNotFound();
+			setTopbar(module.label);
+			return `<div class="page">
+				${breadcrumbs([{ label: "All Books", route: "home" }, { label: module.label }])}
+				<div class="page-heading">
+					${bookIdentity(key)}
+					<div class="heading-copy"><div class="eyebrow">Digital books</div><h1>${esc(module.label)}</h1><p>Choose the familiar working book for this entry.</p></div>
+					<div class="heading-actions"><button class="btn" type="button" data-route="home">← All Books</button></div>
+				</div>
+				<div class="book-group-intro">Choose from <strong>${module.books.length} book${module.books.length === 1 ? "" : "s"}</strong>. Each book opens only its own entries, matching the current notebook workflow.</div>
+				<section class="book-grid">${module.books.map((book, index) => `<button class="book-card" type="button" data-route="${bookRoute(key, book.key)}">
+					<span class="book-cover ${module.coverClass}" style="filter:${index === 1 ? "brightness(.9)" : index === 2 ? "brightness(.78)" : "none"}">
+						<span class="book-code">${esc(module.code)} · BOOK ${index + 1}</span>
+						<span class="book-label"><strong>${esc(book.label)}</strong><small>Working register · 2026–27</small></span>
+					</span>
+					<span class="book-meta"><span><strong>${esc(book.short)}</strong><small>${esc(book.note)}</small></span><span class="book-open">Open ›</span></span>
+				</button>`).join("")}</section>
+			</div>`;
+		}
+
+		function rowValues(key, record) {
+			const values = {
+				po: [record.id, record.party, record.date, record.title, record.quantity, record.status],
+				grn: [record.id, record.party, record.reference, record.date, record.quantity, record.status],
+				pi: [record.id, record.party, record.reference, record.date, record.amount, record.status],
+				ipd: [record.id, record.party, record.date, record.reference, record.amount, record.status],
+				wo: [record.id, record.party, record.reference, record.date, record.quantity, record.status],
+				dc: [record.id, record.party, record.reference, record.date, record.quantity, record.status]
+			};
+			return values[key];
+		}
+
+		function renderList(key, bookKey) {
+			const module = MODULES[key];
+			const book = bookInfo(key, bookKey);
+			if (!module || !book) return renderNotFound();
+			const records = module.records.filter(record => record.book === bookKey);
+			setTopbar(book.label);
+			const statuses = ["All", ...new Set(records.map(record => record.status))];
+			const filter = state.filters[`${key}:${bookKey}`];
+			const rows = records.map(record => {
+				const values = rowValues(key, record);
+				return `<tr tabindex="0" data-record-route="${recordRoute(key, record.id)}" data-status="${esc(record.status)}" data-search="${esc(values.join(" ").toLowerCase())}">
+					${values.map((value, index) => `<td>${index === 0 ? `<span class="record-id">${esc(value)}</span>` : index === values.length - 1 ? statusBadge(value) : `<div class="cell-main">${esc(value)}</div>${index === 1 ? `<div class="cell-sub">Click to see complete details</div>` : ""}`}</td>`).join("")}
+					<td class="row-arrow">›</td>
+				</tr>`;
+			}).join("");
+			const mobileRows = records.map(record => {
+				const values = rowValues(key, record);
+				return `<button class="mobile-row" type="button" data-record-route="${recordRoute(key, record.id)}" data-status="${esc(record.status)}" data-search="${esc(values.join(" ").toLowerCase())}" style="text-align:left;width:100%">
+					<div class="mobile-row-head"><strong class="record-id">${esc(record.id)}</strong>${statusBadge(record.status)}</div>
+					<div class="mobile-row-grid"><div><small>${esc(module.columns[1])}</small><span>${esc(values[1])}</span></div><div><small>${esc(module.columns[2])}</small><span>${esc(values[2])}</span></div><div><small>${esc(module.columns[3])}</small><span>${esc(values[3])}</span></div><div><small>${esc(module.columns[4])}</small><span>${esc(values[4])}</span></div></div>
+				</button>`;
+			}).join("");
+			return `<div class="page">
+				${breadcrumbs([{ label: "All Books", route: "home" }, { label: module.label, route: moduleRoute(key) }, { label: book.label }])}
+				<div class="page-heading">
+					${bookIdentity(key)}
+					<div class="heading-copy"><div class="eyebrow">${esc(module.label)}</div><h1>${esc(book.label)}</h1><p>${esc(book.note)} Select any row to see the complete document and its connected records.</p></div>
+					<div class="heading-actions"><button class="btn" type="button" data-route="${moduleRoute(key)}">← ${esc(module.label)}</button>${key === "po" ? `<button class="btn primary" type="button" data-route="entry/po/${esc(bookKey)}">+ New Entry</button>` : ""}</div>
+				</div>
+				<div class="toolbar">
+					<div class="search-wrap"><span>⌕</span><input id="list-search" class="search-input" type="search" value="${esc(filter.search)}" placeholder="Search number, supplier or material…" aria-label="Search records"></div>
+					<div class="filter-set">${statuses.map(status => `<button class="filter-chip${filter.status === status ? " active" : ""}" type="button" data-status-filter="${esc(status)}">${esc(status)}</button>`).join("")}</div>
+					<div class="list-count" id="list-count">${records.length} records</div>
+				</div>
+				<div class="list-card"><table class="data-table"><thead><tr>${module.columns.map(column => `<th>${esc(column)}</th>`).join("")}<th></th></tr></thead><tbody id="record-table-body">${rows}</tbody></table><div class="empty-list" id="list-empty" hidden>No matching records found.</div></div>
+				<div class="mobile-cards" id="record-mobile-list">${mobileRows}</div>
+				<div class="prototype-note">Select a row to review it. Purchase Order books now also demonstrate the frontend data-entry and supporting-master flow.</div>
+			</div>`;
+		}
+
+		function renderManage() {
+			setTopbar("Manage");
+			return `<div class="page">
+				${breadcrumbs([{ label: "All Books", route: "home" }, { label: "Manage" }])}
+				<div class="page-heading">
+					<div class="heading-copy"><div class="eyebrow">Masters and access</div><h1>Manage</h1><p>Open a list, review existing records, or create the master data required by Purchase Order, GRN, Purchase Invoice and production.</p></div>
+					<div class="heading-actions"><button class="btn" type="button" data-route="home">← All Books</button></div>
+				</div>
+				<section class="manage-grid">
+					<article class="manage-card"><span class="manage-icon">ITM</span><h2>Items</h2><p>Create yarn, fabric and other stock or purchase items with their group and UOM.</p><div class="master-usage"><span>Purchase Order</span><span>GRN</span><span>Purchase Invoice</span><span>Production</span></div><div class="manage-card-footer"><button class="btn primary small" type="button" data-open-modal="item" data-create-master>+ New Item</button><button class="manage-open" type="button" data-route="manage/items">View list ›</button><span class="manage-count">${demoState.items.length}</span></div></article>
+					<article class="manage-card"><span class="manage-icon">SUP</span><h2>Suppliers & Addresses</h2><p>Review suppliers and their addresses, or create both through one operator form.</p><div class="master-usage"><span>Purchase Order</span><span>GRN</span><span>Purchase Invoice</span></div><div class="manage-card-footer"><button class="btn primary small" type="button" data-open-modal="supplier" data-create-master>+ New Supplier</button><button class="manage-open" type="button" data-route="manage/suppliers">View list ›</button><span class="manage-count">${demoState.suppliers.length}</span></div></article>
+					<article class="manage-card"><span class="manage-icon">AGT</span><h2>MGK Agents</h2><p>Review and create agents with their commission terms for Purchase Orders.</p><div class="master-usage"><span>Purchase Order</span></div><div class="manage-card-footer"><button class="btn primary small" type="button" data-open-modal="agent" data-create-master>+ New Agent</button><button class="manage-open" type="button" data-route="manage/agents">View list ›</button><span class="manage-count">${demoState.agents.length}</span></div></article>
+					<article class="manage-card"><span class="manage-icon">WH</span><h2>Warehouses</h2><p>Manage company stores and supplier-linked warehouses used for receiving and routing.</p><div class="master-usage"><span>Purchase Order</span><span>GRN</span><span>Stock</span></div><div class="manage-card-footer"><button class="btn primary small" type="button" data-open-modal="warehouse" data-create-master>+ New Warehouse</button><button class="manage-open" type="button" data-route="manage/warehouses">View list ›</button><span class="manage-count">${demoState.warehouses.length}</span></div></article>
+					<article class="manage-card"><span class="manage-icon">₹</span><h2>Item Prices</h2><p>Review supplier-wise prices or enter MOQ, rate, tax, validity and lead time.</p><div class="master-usage"><span>Purchase Order</span><span>Purchase Invoice</span></div><div class="manage-card-footer"><button class="btn primary small" type="button" data-open-modal="price" data-create-master>+ New Item Price</button><button class="manage-open" type="button" data-route="manage/item-prices">View list ›</button><span class="manage-count">${demoState.prices.length}</span></div></article>
+					<article class="manage-card"><span class="manage-icon">PC</span><h2>Process Costs</h2><p>Manage supplier and process-specific rates used by job-work and production flows.</p><div class="master-usage"><span>Item Production Detail</span><span>Work Order</span></div><div class="manage-card-footer"><button class="btn primary small" type="button" data-open-modal="process-cost" data-create-master>+ New Process Cost</button><button class="manage-open" type="button" data-route="manage/process-costs">View list ›</button><span class="manage-count">${demoState.processCosts.length}</span></div></article>
+					<article class="manage-card"><span class="manage-icon">USR</span><h2>Users & Access</h2><p>Create users, assign roles, select their UI Layout, and limit permitted warehouses.</p><div class="master-usage"><span>Administrator only</span><span>Roles</span><span>UI Preference</span></div><div class="manage-card-footer"><button class="btn primary small" type="button" data-open-modal="user" data-create-master>+ New User</button><button class="manage-open" type="button" data-route="manage/users">View list ›</button><span class="manage-count">${demoState.users.length}</span></div></article>
+				</section>
+				<div class="prototype-note"><strong>Permission rule:</strong> each card and action follows live Frappe permissions. User creation and access assignment are restricted to Administrator/System Manager; master-data access is role-specific.</div>
+			</div>`;
+		}
+
+		function renderMasterList(masterKey) {
+			let config;
+			if (masterKey === "items") config = {
+				title: "Items", eyebrow: "Item master", description: "Items available to purchasing, receiving, billing and production.", modal: "item", createLabel: "+ New Item",
+				columns: ["Item", "Item Group", "UOM", "HSN", "Use", "Status"],
+				rows: demoState.items.map(row => ({ cells: [`<span class="record-id">${esc(row.name)}</span>`, esc(row.itemGroup), esc(row.uom), esc(row.hsn || "—"), esc([row.isStock ? "Stock" : "", row.isPurchase ? "Purchase" : ""].filter(Boolean).join(" + ") || "Reference"), statusBadge(row.status)], summary: `${row.itemGroup} · ${row.uom} · HSN ${row.hsn || "not set"}`, attrs: `data-open-modal="item" data-edit-name="${esc(row.name)}"` })),
+			};
+			else if (masterKey === "suppliers") config = {
+				title: "Suppliers & Addresses", eyebrow: "Party master", description: "Supplier records with their primary linked Address visible in the same list.", modal: "supplier", createLabel: "+ New Supplier",
+				columns: ["Supplier", "Primary Address", "GSTIN", "Phone", "Status"],
+				rows: demoState.suppliers.map(row => ({ cells: [`<span class="record-id">${esc(row.name)}</span>`, esc([row.address1, row.city, row.state, row.pincode].filter(Boolean).join(", ")), esc(row.gstin || "—"), esc(row.phone || "—"), statusBadge("Active")], summary: `${[row.address1, row.city, row.state, row.pincode].filter(Boolean).join(", ")} · ${row.gstin || "GSTIN not set"}`, attrs: `data-open-modal="supplier" data-edit-name="${esc(row.name)}"` })),
+			};
+			else if (masterKey === "agents") config = {
+				title: "MGK Agents", eyebrow: "Agent master", description: "Agents available on Purchase Orders with their commission reference.", modal: "agent", createLabel: "+ New Agent",
+				columns: ["Agent", "Commission Terms", "Status"],
+				rows: demoState.agents.map(row => ({ cells: [`<span class="record-id">${esc(row.name)}</span>`, esc(row.terms || "—"), statusBadge("Active")], summary: row.terms || "No commission terms", attrs: `data-open-modal="agent" data-edit-name="${esc(row.name)}"` })),
+			};
+			else if (masterKey === "warehouses") config = {
+				title: "Warehouses", eyebrow: "Stock master", description: "Company warehouses and warehouses linked to a Supplier.", modal: "warehouse", createLabel: "+ New Warehouse",
+				columns: ["Warehouse", "Linked Supplier", "Type", "Status"],
+				rows: demoState.warehouses.map(row => ({ cells: [`<span class="record-id">${esc(row.name)}</span>`, esc(row.supplier || "—"), esc(row.supplier ? "Supplier Warehouse" : "Company Warehouse"), statusBadge(row.status)], summary: `${row.supplier ? `Supplier: ${row.supplier}` : "Company Warehouse"}`, attrs: `data-open-modal="warehouse" data-edit-name="${esc(row.name)}"` })),
+			};
+			else if (masterKey === "item-prices") config = {
+				title: "Item Prices", eyebrow: "Purchase pricing", description: "Approved supplier/item/UOM prices available to Purchase Orders.", modal: "price", createLabel: "+ New Item Price",
+				columns: ["Item", "Supplier", "UOM", "Rate", "Valid From", "Status"],
+				rows: demoState.prices.map(row => ({ cells: [`<span class="record-id">${esc(row.item)}</span>`, esc(row.supplier), esc(row.uom), esc(formatMoney(row.rate)), esc(row.fromDate), statusBadge(row.status)], summary: `${row.supplier} · ${formatMoney(row.rate)} / ${row.uom}`, attrs: `data-open-modal="price" data-price-item="${esc(row.item)}" data-price-supplier="${esc(row.supplier)}"` })),
+			};
+			else if (masterKey === "process-costs") config = {
+				title: "Process Costs", eyebrow: "Production costing", description: "Supplier and process-specific approved job-work rates.", modal: "process-cost", createLabel: "+ New Process Cost",
+				columns: ["Process Cost", "Process", "Item", "Supplier", "Rate", "Status"],
+				rows: demoState.processCosts.map(row => ({ cells: [`<span class="record-id">${esc(row.name)}</span>`, esc(row.process), esc(row.item), esc(row.supplier), esc(`${formatMoney(row.rate)} / ${row.uom}`), statusBadge(row.status)], summary: `${row.process} · ${row.item} · ${row.supplier} · ${formatMoney(row.rate)} / ${row.uom}`, attrs: `data-open-modal="process-cost" data-edit-name="${esc(row.name)}"` })),
+			};
+			else if (masterKey === "users") config = {
+				title: "Users & Access", eyebrow: "Administrator only", description: "Login, roles, Registered Experience assignment and permitted-warehouse scope.", modal: "user", createLabel: "+ New User",
+				columns: ["User", "Email", "Roles", "UI Layout", "Data Scope", "Status"],
+				rows: demoState.users.map(row => ({ cells: [`<span class="record-id">${esc(row.firstName)}</span>`, esc(row.email), esc([row.roleProfile ? `Profile: ${row.roleProfile}` : "", `Roles: ${row.roles.join(", ")}`].filter(Boolean).join(" · ")), esc(row.uiLayout || "MGK Operations Workspace"), esc([row.suppliers?.length ? `Suppliers: ${row.suppliers.join(", ")}` : "", row.warehouses?.length ? `Warehouses: ${row.warehouses.join(", ")}` : ""].filter(Boolean).join(" · ") || "All permitted by role"), statusBadge(row.enabled ? "Active" : "Disabled")], summary: `${row.email} · ${row.roles.join(", ")} · ${row.uiLayout || "MGK Operations Workspace"}`, attrs: `data-open-modal="user" data-edit-name="${esc(row.email)}"` })),
+			};
+			else return renderNotFound();
+
+			setTopbar(config.title);
+			const desktopRows = config.rows.map(row => `<tr>${row.cells.map(cell => `<td>${cell}</td>`).join("")}<td class="row-arrow"><button class="btn small" type="button" ${row.attrs}>Open</button></td></tr>`).join("");
+			const mobileRows = config.rows.map(row => `<article class="master-mobile-row"><strong>${row.cells[0]}</strong><span>${esc(row.summary)}</span><button class="btn small" type="button" ${row.attrs}>Open</button></article>`).join("");
+			return `<div class="page">
+				${breadcrumbs([{ label: "All Books", route: "home" }, { label: "Manage", route: "manage" }, { label: config.title }])}
+				<div class="page-heading"><div class="heading-copy"><div class="eyebrow">${esc(config.eyebrow)}</div><h1>${esc(config.title)}</h1><p>${esc(config.description)}</p></div><div class="heading-actions"><button class="btn" type="button" data-route="manage">← Manage</button><button class="btn primary" type="button" data-open-modal="${esc(config.modal)}" data-create-master>${esc(config.createLabel)}</button></div></div>
+				<div class="toolbar"><div class="list-count">${config.rows.length} record${config.rows.length === 1 ? "" : "s"}</div></div>
+				<div class="list-card"><table class="data-table"><thead><tr>${config.columns.map(column => `<th>${esc(column)}</th>`).join("")}<th></th></tr></thead><tbody>${desktopRows}</tbody></table></div>
+				<div class="master-mobile-list">${mobileRows}</div>
+				<div class="prototype-note">This is sample data. The real Registered Experience will read these lists through permission-checked Frappe APIs.</div>
+			</div>`;
+		}
+
+		function renderPurchaseOrderEntry(bookKey) {
+			const module = MODULES.po;
+			const book = bookInfo("po", bookKey);
+			if (!book) return renderNotFound();
+			demoState.poDraft.book = bookKey;
+			syncDraftPrice();
+			const draft = demoState.poDraft;
+			const supplier = supplierInfo(draft.supplier);
+			const agent = agentInfo(draft.agent);
+			const price = approvedPrice(draft.item, draft.supplier);
+			const subtotal = Number(draft.qty || 0) * Number(draft.rate || 0);
+			const taxAmount = draft.tax.includes("5") ? subtotal * .05 : 0;
+			const grandTotal = subtotal + taxAmount;
+			const supplierOptions = [`<option value="">Choose supplier</option>`, ...demoState.suppliers.map(row => `<option value="${esc(row.name)}"${row.name === draft.supplier ? " selected" : ""}>${esc(row.name)}</option>`)].join("");
+			const agentOptions = [`<option value="">No agent</option>`, ...demoState.agents.map(row => `<option value="${esc(row.name)}"${row.name === draft.agent ? " selected" : ""}>${esc(row.name)}</option>`)].join("");
+			const itemOptions = demoState.items.map(row => `<option value="${esc(row.name)}"${row.name === draft.item ? " selected" : ""}>${esc(row.name)}</option>`).join("");
+			const warehouseOptions = demoState.warehouses.map(row => `<option value="${esc(row.name)}"${row.name === draft.warehouse ? " selected" : ""}>${esc(row.name)}${row.supplier ? ` · ${esc(row.supplier)}` : ""}</option>`).join("");
+			const pricePanel = !draft.supplier
+				? `<div class="price-alert"><div><strong>Select a Supplier first</strong><small>Item Price is supplier-specific. Choose or create the supplier before validating the rate.</small></div></div>`
+				: price
+					? `<div class="price-alert success"><div><strong>Approved Item Price applied automatically</strong><small>${esc(price.item)} · ${esc(price.supplier)} · ${formatMoney(price.rate)} / ${esc(price.uom)} · ${esc(price.tax)}</small></div><button class="btn small" type="button" data-open-modal="price">View Price</button></div>`
+					: `<div class="price-alert"><div><strong>Item Price is missing</strong><small>Create and approve a price for ${esc(draft.item)} and ${esc(draft.supplier)} before submitting this Purchase Order.</small></div><button class="btn primary small" type="button" data-open-modal="price">+ Create Item Price</button></div>`;
+			setTopbar(`New · ${book.short}`);
+			return `<div class="page">
+				${breadcrumbs([{ label: "All Books", route: "home" }, { label: module.label, route: moduleRoute("po") }, { label: book.label, route: bookRoute("po", bookKey) }, { label: "New Entry" }])}
+				<div class="page-heading">
+					${bookIdentity("po")}
+					<div class="heading-copy"><div class="eyebrow">New Purchase Order</div><h1>${esc(book.label)}</h1><p>The selected book is stored automatically. The user only enters the order information.</p></div>
+					<div class="heading-actions"><button class="btn" type="button" data-route="${bookRoute("po", bookKey)}">← Cancel</button><button class="btn" type="button" data-route="manage">Manage</button></div>
+				</div>
+				<div class="entry-layout">
+					<div>
+						<section class="form-section"><div class="form-section-head"><h2>Supplier and order</h2><p>Step 1</p></div><div class="form-section-body">
+							<div class="field-grid three">
+								<div class="field full"><label>Supplier <span class="required">*</span></label><div class="field-with-action"><select data-po-field="supplier">${supplierOptions}</select><button class="btn small" type="button" data-open-modal="supplier">+ New Supplier & Address</button></div>
+									${supplier ? `<div class="selected-summary"><strong>${esc(supplier.name)}</strong><span>${esc([supplier.address1, supplier.address2, supplier.city, supplier.state, supplier.pincode].filter(Boolean).join(", "))}<br>${esc(supplier.gstin || "GSTIN not entered")} · ${esc(supplier.phone || "Phone not entered")}</span><button class="btn small" type="button" data-open-modal="supplier" data-edit-supplier="${esc(supplier.name)}" style="margin-top:9px">Edit Supplier / Address</button></div>` : `<span class="field-hint">Create a Supplier and its Address from the same popup.</span>`}
+								</div>
+								<div class="field"><label>MGK Agent</label><div class="field-with-action"><select data-po-field="agent">${agentOptions}</select><button class="btn small" type="button" data-open-modal="agent">+ New Agent</button></div>${agent ? `<span class="field-hint">${esc(agent.terms)}</span>` : ""}</div>
+								<div class="field"><label>PO Date <span class="required">*</span></label><input type="date" value="${esc(draft.orderDate)}" data-po-field="orderDate"></div>
+								<div class="field"><label>Expected Delivery</label><input type="date" value="${esc(draft.deliveryDate)}" data-po-field="deliveryDate"></div>
+								<div class="field"><label>Delivery Warehouse <span class="required">*</span></label><div class="field-with-action"><select data-po-field="warehouse">${warehouseOptions}</select><button class="btn small" type="button" data-open-modal="warehouse" data-create-master>+ New Warehouse</button></div></div>
+								<div class="field"><label>Goods Routing</label><select data-po-field="goodsRouting"><option${draft.goodsRouting === "Direct" ? " selected" : ""}>Direct</option><option${draft.goodsRouting === "Through Vendor" ? " selected" : ""}>Through Vendor</option></select></div>
+								${draft.goodsRouting === "Through Vendor" ? `<div class="field"><label>Handling Supplier <span class="required">*</span></label><select data-po-field="handlingSupplier">${supplierOptions}</select></div>` : ""}
+							</div>
+						</div></section>
+
+						<section class="form-section"><div class="form-section-head"><h2>Items and price</h2><p>Step 2</p></div><div class="form-section-body">
+							<div class="entry-table-wrap"><table class="entry-table"><thead><tr><th style="width:30%">Item</th><th>Qty</th><th>UOM</th><th>Rate</th><th>Tax</th><th>Amount</th></tr></thead><tbody><tr>
+								<td><select data-po-field="item">${itemOptions}</select><button class="btn small" type="button" data-open-modal="item" data-create-master style="margin-top:6px">+ New Item</button></td>
+								<td><input type="number" min="0" step="0.001" value="${esc(draft.qty)}" data-po-field="qty"></td><td><input value="kg" disabled></td><td><input value="${draft.rate == null ? "—" : esc(formatMoney(draft.rate))}" disabled></td><td><input value="${esc(draft.tax || "—")}" disabled></td><td><input value="${draft.rate == null ? "—" : esc(formatMoney(subtotal))}" disabled></td>
+							</tr></tbody></table></div>
+							${pricePanel}
+						</div></section>
+					</div>
+					<aside>
+						<section class="form-section"><div class="form-section-head"><h2>Order summary</h2></div><div class="form-section-body"><div class="summary-stack"><div class="summary-row"><span>Book</span><strong>${esc(book.short)}</strong></div><div class="summary-row"><span>Supplier</span><strong>${esc(draft.supplier || "Not selected")}</strong></div><div class="summary-row"><span>Agent</span><strong>${esc(draft.agent || "None")}</strong></div><div class="summary-row"><span>Subtotal</span><strong>${formatMoney(subtotal)}</strong></div><div class="summary-row"><span>Tax</span><strong>${formatMoney(taxAmount)}</strong></div><div class="summary-row"><span>Grand Total</span><strong>${formatMoney(grandTotal)}</strong></div></div><div class="entry-actions"><button class="btn" type="button" data-po-save>Save Draft</button><button class="btn success" type="button" data-po-submit${price ? "" : " disabled"}>Submit Purchase Order</button></div></div></section>
+						<div class="flow-help"><strong>How this works in the real frontend</strong><br>Supplier and Agent are created through Frappe permissions. Supplier Address is created as a linked Address document. Item Price follows its approval workflow. The server validates all four again when the PO is saved or submitted.</div>
+					</aside>
+				</div>
+			</div>`;
+		}
+
+		function closeModal() {
+			document.getElementById("modal-root").innerHTML = "";
+		}
+
+		function modalFieldValue(id) {
+			return document.getElementById(id)?.value?.trim() || "";
+		}
+
+		function openSupplierModal(editName = "") {
+			const current = supplierInfo(editName) || {};
+			document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="supplier-modal-title">
+				<div class="modal-head"><div><h2 id="supplier-modal-title">${current.name ? "Edit" : "Create"} Supplier & Address</h2><p>One frontend flow creates the Supplier first and then its linked Address.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div>
+				<div class="modal-body">
+					<div class="modal-section"><h3 class="modal-section-title">Supplier details</h3><div class="field-grid three">
+						<div class="field"><label>Supplier Name <span class="required">*</span></label><input id="supplier-name" value="${esc(current.name || "")}" placeholder="e.g. New Yarn Supplier"></div>
+						<div class="field"><label>GSTIN / UIN</label><input id="supplier-gstin" value="${esc(current.gstin || "")}" placeholder="33AAAAA0000A1Z5"></div>
+						<div class="field"><label>PAN</label><input id="supplier-pan" value="${esc(current.pan || "")}" placeholder="AAAAA0000A"></div>
+					</div></div>
+					<div class="modal-section"><h3 class="modal-section-title">Primary Address</h3><div class="field-grid three">
+						<div class="field"><label>Address Line 1 <span class="required">*</span></label><input id="supplier-address1" value="${esc(current.address1 || "")}" placeholder="Building / Street"></div>
+						<div class="field"><label>Address Line 2</label><input id="supplier-address2" value="${esc(current.address2 || "")}" placeholder="Area / Landmark"></div>
+						<div class="field"><label>City <span class="required">*</span></label><input id="supplier-city" value="${esc(current.city || "")}" placeholder="Erode"></div>
+						<div class="field"><label>State <span class="required">*</span></label><select id="supplier-state"><option${current.state === "Tamil Nadu" || !current.state ? " selected" : ""}>Tamil Nadu</option><option${current.state === "Karnataka" ? " selected" : ""}>Karnataka</option></select></div>
+						<div class="field"><label>Pincode <span class="required">*</span></label><input id="supplier-pincode" value="${esc(current.pincode || "")}" inputmode="numeric" placeholder="638001"></div>
+						<div class="field"><label>Phone</label><input id="supplier-phone" value="${esc(current.phone || "")}" placeholder="98420 00000"></div>
+					</div><span class="field-hint">The real component saves this as a separate Address linked to the new Supplier; the operator experiences it as one form.</span></div>
+				</div>
+				<div class="modal-footer"><button class="btn" type="button" data-close-modal>Cancel</button><button class="btn primary" type="button" data-save-supplier data-original-name="${esc(current.name || "")}">Save Supplier & Address</button></div>
+			</section></div>`;
+		}
+
+		function openAgentModal(editName = "") {
+			const current = agentInfo(editName) || {};
+			document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
+				<div class="modal-head"><div><h2 id="agent-modal-title">${current.name ? "Edit" : "Create"} MGK Agent</h2><p>Create the agent inside this frontend and return directly to the Purchase Order.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div>
+				<div class="modal-body"><div class="field-grid">
+					<div class="field full"><label>Agent Name <span class="required">*</span></label><input id="agent-name" value="${esc(current.name || "")}" placeholder="e.g. Selvam Yarn Agent"></div>
+					<div class="field full"><label>Commission Terms</label><textarea id="agent-terms" placeholder="Enter the agreed commission notes">${esc(current.terms || "")}</textarea><span class="field-hint">Free-text reference only; it does not create a separate supplier bill.</span></div>
+				</div></div>
+				<div class="modal-footer"><button class="btn" type="button" data-close-modal>Cancel</button><button class="btn primary" type="button" data-save-agent data-original-name="${esc(current.name || "")}">Save MGK Agent</button></div>
+			</section></div>`;
+		}
+
+		function openItemModal(editName = "") {
+			const current = itemInfo(editName) || {};
+			document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+				<div class="modal-head"><div><h2 id="item-modal-title">${current.name ? "Edit" : "Create"} Item</h2><p>Create the item once, then use it in Purchase Order, GRN, Purchase Invoice and production.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div>
+				<div class="modal-body"><div class="field-grid three">
+					<div class="field full"><label>Item Name <span class="required">*</span></label><input id="item-name" value="${esc(current.name || "")}" placeholder="e.g. 30s Cotton Yarn"></div>
+					<div class="field"><label>Item Group <span class="required">*</span></label><select id="item-group"><option${current.itemGroup === "Yarn" || !current.itemGroup ? " selected" : ""}>Yarn</option><option${current.itemGroup === "Fabric" ? " selected" : ""}>Fabric</option><option${current.itemGroup === "Packing Material" ? " selected" : ""}>Packing Material</option><option${current.itemGroup === "Other" ? " selected" : ""}>Other</option></select></div>
+					<div class="field"><label>Default UOM <span class="required">*</span></label><select id="item-uom"><option${current.uom === "kg" || !current.uom ? " selected" : ""}>kg</option><option${current.uom === "Nos" ? " selected" : ""}>Nos</option><option${current.uom === "Metre" ? " selected" : ""}>Metre</option></select></div>
+					<div class="field"><label>HSN Code</label><input id="item-hsn" value="${esc(current.hsn || "")}" placeholder="5205"></div>
+					<div class="field"><label>Brand</label><input id="item-brand" value="${esc(current.brand || "")}" placeholder="Optional"></div>
+					<div class="field full"><label>Item Use</label><div class="check-grid"><label class="check-row"><input id="item-stock" type="checkbox"${current.isStock !== false ? " checked" : ""}> Stock Item</label><label class="check-row"><input id="item-purchase" type="checkbox"${current.isPurchase !== false ? " checked" : ""}> Purchase Item</label></div></div>
+				</div></div>
+				<div class="modal-footer"><button class="btn" type="button" data-close-modal>Cancel</button><button class="btn primary" type="button" data-save-item data-original-name="${esc(current.name || "")}">Save Item</button></div>
+			</section></div>`;
+		}
+
+		function openWarehouseModal(editName = "") {
+			const current = warehouseInfo(editName) || {};
+			const supplierOptions = [`<option value="">Company Warehouse · no Supplier</option>`, ...demoState.suppliers.map(row => `<option value="${esc(row.name)}"${row.name === current.supplier ? " selected" : ""}>${esc(row.name)}</option>`)].join("");
+			document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true" aria-labelledby="warehouse-modal-title">
+				<div class="modal-head"><div><h2 id="warehouse-modal-title">${current.name ? "Edit" : "Create"} Warehouse</h2><p>Leave Supplier empty for an MGK store, or select a Supplier for its linked warehouse.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div>
+				<div class="modal-body"><div class="field-grid">
+					<div class="field full"><label>Warehouse Name <span class="required">*</span></label><input id="warehouse-name" value="${esc(current.name || "")}" placeholder="e.g. Vendor Dyeing Warehouse"></div>
+					<div class="field full"><label>Supplier</label><select id="warehouse-supplier">${supplierOptions}</select><span class="field-hint">This uses the Supplier link already available on the Warehouse DocType.</span></div>
+					<div class="field full"><label class="check-row"><input id="warehouse-disabled" type="checkbox"${current.status === "Disabled" ? " checked" : ""}> Disabled</label></div>
+				</div></div>
+				<div class="modal-footer"><button class="btn" type="button" data-close-modal>Cancel</button><button class="btn primary" type="button" data-save-warehouse data-original-name="${esc(current.name || "")}">Save Warehouse</button></div>
+			</section></div>`;
+		}
+
+		function openProcessCostModal(editName = "") {
+			const current = processCostInfo(editName) || {};
+			const itemOptions = demoState.items.map(row => `<option value="${esc(row.name)}"${row.name === current.item ? " selected" : ""}>${esc(row.name)}</option>`).join("");
+			const supplierOptions = demoState.suppliers.map(row => `<option value="${esc(row.name)}"${row.name === current.supplier ? " selected" : ""}>${esc(row.name)}</option>`).join("");
+			document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="process-cost-modal-title">
+				<div class="modal-head"><div><h2 id="process-cost-modal-title">${current.name ? "Edit" : "Create"} Process Cost</h2><p>Define the supplier and process-specific rate used by production and job-work documents.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div>
+				<div class="modal-body"><div class="field-grid three">
+					<div class="field"><label>Process <span class="required">*</span></label><select id="process-cost-process"><option${current.process === "Dyeing" || !current.process ? " selected" : ""}>Dyeing</option><option${current.process === "Doubling" ? " selected" : ""}>Doubling</option><option${current.process === "Karigan" ? " selected" : ""}>Karigan</option><option${current.process === "Other Job Work" ? " selected" : ""}>Other Job Work</option></select></div>
+					<div class="field"><label>Item <span class="required">*</span></label><select id="process-cost-item">${itemOptions}</select></div>
+					<div class="field"><label>Supplier <span class="required">*</span></label><select id="process-cost-supplier">${supplierOptions}</select></div>
+					<div class="field"><label>UOM <span class="required">*</span></label><select id="process-cost-uom"><option${current.uom === "kg" || !current.uom ? " selected" : ""}>kg</option><option${current.uom === "Nos" ? " selected" : ""}>Nos</option></select></div>
+					<div class="field"><label>From Date <span class="required">*</span></label><input id="process-cost-from-date" type="date" value="${esc(current.fromDate || "2026-08-06")}"></div>
+					<div class="field"><label>Tax Slab <span class="required">*</span></label><select id="process-cost-tax"><option${current.tax === "GST 5%" || !current.tax ? " selected" : ""}>GST 5%</option><option${current.tax === "GST 12%" ? " selected" : ""}>GST 12%</option></select></div>
+				</div><div class="modal-section"><h3 class="modal-section-title">Cost value</h3><div class="field-grid"><div class="field"><label>Minimum Order Qty <span class="required">*</span></label><input id="process-cost-moq" type="number" min="0" value="${esc(current.moq ?? 0)}"></div><div class="field"><label>Cost <span class="required">*</span></label><input id="process-cost-rate" type="number" min="0" step="0.001" value="${esc(current.rate || "")}" placeholder="0.000"></div></div><span class="field-hint">Attribute-dependent rates can add the existing Item Attribute Value column in the real form.</span></div></div>
+				<div class="modal-footer"><button class="btn" type="button" data-close-modal>Cancel</button><button class="btn primary" type="button" data-save-process-cost data-original-name="${esc(current.name || "")}">Save Process Cost</button></div>
+			</section></div>`;
+		}
+
+		function openUserModal(editEmail = "") {
+			const current = userInfo(editEmail) || {};
+			const roles = ["Purchase User", "Purchase Manager", "Production User", "Production Manager", "Stock User", "Stock Manager", "System Manager"];
+			const selectedRoles = current.roles || [];
+			const selectedWarehouses = current.warehouses || [];
+			const selectedSuppliers = current.suppliers || [];
+			document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="user-modal-title">
+				<div class="modal-head"><div><h2 id="user-modal-title">${current.email ? "Edit" : "Create"} User & Access</h2><p>Administrator setup for login, roles, UI experience and permission scope.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div>
+				<div class="modal-body">
+					<div class="modal-section"><h3 class="modal-section-title">User details</h3><div class="field-grid three"><div class="field"><label>Email / Login <span class="required">*</span></label><input id="user-email" type="email" value="${esc(current.email || "")}" placeholder="user@mgk.local"></div><div class="field"><label>First Name <span class="required">*</span></label><input id="user-first-name" value="${esc(current.firstName || "")}" placeholder="Operator name"></div><div class="field"><label>Mobile</label><input id="user-mobile" value="${esc(current.mobile || "")}" placeholder="98420 00000"></div></div><div class="check-grid" style="margin-top:14px"><label class="check-row"><input id="user-enabled" type="checkbox"${current.enabled !== false ? " checked" : ""}> Enabled</label><label class="check-row"><input id="user-welcome-email" type="checkbox"${current.email ? "" : " checked"}> Send Welcome Email</label></div></div>
+					<div class="modal-section"><h3 class="modal-section-title">Roles</h3><div class="check-grid">${roles.map(role => `<label class="check-row"><input type="checkbox" data-user-role value="${esc(role)}"${selectedRoles.includes(role) ? " checked" : ""}> ${esc(role)}</label>`).join("")}</div><span class="field-hint">Roles control DocType permissions. The frontend cannot grant access beyond Frappe's server-side permissions.</span></div>
+					<div class="modal-section"><h3 class="modal-section-title">Experience and permission scope</h3><div class="field-grid">
+						<div class="field"><label>UI Layout <span class="required">*</span></label><select id="user-ui-layout"><option${!current.uiLayout || current.uiLayout === "MGK Operations Workspace" ? " selected" : ""}>MGK Operations Workspace</option><option${current.uiLayout === "Default Configurable Layout" ? " selected" : ""}>Default Configurable Layout</option></select><span class="field-hint">The real save also creates or updates this user's YRP UI Preference.</span></div>
+						<div class="field"><label>Role Profile</label><select id="user-role-profile"><option value="">Manual role selection</option><option${current.roleProfile === "Purchase Operator" ? " selected" : ""}>Purchase Operator</option><option${current.roleProfile === "Purchase Manager" ? " selected" : ""}>Purchase Manager</option><option${current.roleProfile === "Production Operator" ? " selected" : ""}>Production Operator</option><option${current.roleProfile === "Stock Operator" ? " selected" : ""}>Stock Operator</option></select><span class="field-hint">A Role Profile is a shortcut; the effective roles above remain visible.</span></div>
+						<div class="field"><label>Permitted Suppliers</label><div class="check-grid">${demoState.suppliers.map(row => `<label class="check-row"><input type="checkbox" data-user-supplier value="${esc(row.name)}"${selectedSuppliers.includes(row.name) ? " checked" : ""}> ${esc(row.name)}</label>`).join("")}</div><span class="field-hint">Saved as Frappe User Permission records when a supplier restriction is required.</span></div>
+						<div class="field"><label>Permitted Warehouses</label><div class="check-grid">${demoState.warehouses.map(row => `<label class="check-row"><input type="checkbox" data-user-warehouse value="${esc(row.name)}"${selectedWarehouses.includes(row.name) ? " checked" : ""}> ${esc(row.name)}</label>`).join("")}</div><span class="field-hint">No selection means all warehouses allowed by the assigned roles and User Permissions.</span></div>
+					</div></div>
+				</div>
+				<div class="modal-footer"><button class="btn" type="button" data-close-modal>Cancel</button><button class="btn primary" type="button" data-save-user data-original-name="${esc(current.email || "")}">Save User & Access</button></div>
+			</section></div>`;
+		}
+
+		function openPriceModal(showPending = false) {
+			if (showPending && demoState.pendingPrice) {
+				const pending = demoState.pendingPrice;
+				document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>Item Price saved</h2><p>The price follows the existing Item Price approval workflow.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div><div class="modal-body"><div class="workflow-box">${statusBadge("Approval Pending")}<h3>${esc(pending.item)} · ${formatMoney(pending.rate)} / ${esc(pending.uom)}</h3><p>Purchase User submits the price. Purchase Manager approves it. Only then can this price be applied to a submitted Purchase Order.</p></div></div><div class="modal-footer"><button class="btn" type="button" data-close-modal>Leave Pending</button><button class="btn success" type="button" data-approve-price>Approve & Use Price</button></div></section></div>`;
+				return;
+			}
+			const draft = demoState.poDraft;
+			const existing = approvedPrice(draft.item, draft.supplier);
+			const itemOptions = demoState.items.map(row => `<option value="${esc(row.name)}"${row.name === draft.item ? " selected" : ""}>${esc(row.name)}</option>`).join("");
+			const supplierOptions = [`<option value="">Choose supplier</option>`, ...demoState.suppliers.map(row => `<option value="${esc(row.name)}"${row.name === draft.supplier ? " selected" : ""}>${esc(row.name)}</option>`)].join("");
+			document.getElementById("modal-root").innerHTML = `<div class="modal-backdrop" data-modal-backdrop><section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="price-modal-title">
+				<div class="modal-head"><div><h2 id="price-modal-title">${existing ? "View / Update" : "Create"} Item Price</h2><p>Supplier-wise prices are entered here, then approved before a PO can use them.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close">×</button></div>
+				<div class="modal-body">
+					<div class="field-grid three"><div class="field"><label>Item <span class="required">*</span></label><select id="price-item">${itemOptions}</select></div><div class="field"><label>Supplier <span class="required">*</span></label><select id="price-supplier">${supplierOptions}</select></div><div class="field"><label>UOM <span class="required">*</span></label><select id="price-uom"><option>kg</option></select></div><div class="field"><label>From Date <span class="required">*</span></label><input id="price-from-date" type="date" value="${esc(existing?.fromDate || "2026-08-06")}"></div><div class="field"><label>To Date</label><input id="price-to-date" type="date" value=""></div><div class="field"><label>Tax Slab <span class="required">*</span></label><select id="price-tax"><option>GST 5%</option><option>GST 12%</option></select></div></div>
+					<div class="modal-section"><h3 class="modal-section-title">Price values</h3><div class="entry-table-wrap"><table class="entry-table"><thead><tr><th>MOQ</th><th>Price</th><th>Lead Time (days)</th></tr></thead><tbody><tr><td><input id="price-moq" type="number" min="0" value="${esc(existing?.moq ?? 0)}"></td><td><input id="price-rate" type="number" min="0" step="0.001" value="${esc(existing?.rate || "")}" placeholder="0.000"></td><td><input id="price-lead-time" type="number" min="0" value="${esc(existing?.leadTime || 7)}"></td></tr></tbody></table></div><span class="field-hint">If the price depends on Colour or another Item Attribute, the real form will show an Attribute Value column as well.</span></div>
+				</div>
+				<div class="modal-footer"><button class="btn" type="button" data-close-modal>Cancel</button><button class="btn primary" type="button" data-save-price>Save & Submit for Approval</button></div>
+			</section></div>`;
+		}
+
+		function findRecord(key, id) {
+			return MODULES[key]?.records.find(record => record.id === id) || null;
+		}
+
+		function journeyFor(key, record) {
+			return MODULE_ORDER.map(stepKey => {
+				const module = MODULES[stepKey];
+				const isCurrent = stepKey === key;
+				const linked = record.links.find(link => link.module === stepKey);
+				const stepId = isCurrent ? record.id : linked?.id;
+				const classes = isCurrent ? "current" : linked ? "linked" : "";
+				const button = stepId ? `<button type="button" data-route="${recordRoute(stepKey, stepId)}">${esc(module.code)} · ${esc(module.short)}</button>` : `<button type="button" disabled>${esc(module.code)} · ${esc(module.short)}</button>`;
+				return `<div class="journey-step ${classes}"><span class="journey-dot">${isCurrent ? "NOW" : linked ? "✓" : "·"}</span><div>${button}<small>${stepId ? esc(stepId) : "No linked record"}</small></div></div>`;
+			}).join("");
+		}
+
+		function renderDetail(key, id) {
+			const module = MODULES[key];
+			const record = findRecord(key, id);
+			if (!module || !record) return renderNotFound();
+			const book = bookInfo(key, record.book);
+			setTopbar(`${module.code} · ${record.id}`);
+			const lineHeaders = key === "ipd" ? ["Sequence", "Process", "Input", "Output", "Control"] : ["Count / Item", "Description", "Packing / Detail", "Quantity", "Result / Amount"];
+			const related = record.links.length ? record.links.map(link => {
+				const target = MODULES[link.module];
+				return `<button class="related-card" type="button" data-route="${recordRoute(link.module, link.id)}"><span class="related-code ${target.coverClass}">${target.code}</span><span><strong>${esc(link.id)}</strong><small>${esc(link.label)}</small></span><span>›</span></button>`;
+			}).join("") : `<div style="color:var(--muted);font-size:11px">No linked documents in this sample.</div>`;
+			const attachments = record.attachments.length ? record.attachments.map(file => `<div class="attachment"><span class="file-icon">FILE</span><span><strong>${esc(file[0])}</strong><small>${esc(file[1])}</small></span><button class="view-tag" type="button" data-preview-file="${esc(file[0])}" style="border:0;background:transparent">Preview</button></div>`).join("") : `<div style="color:var(--muted);font-size:11px">No attachments in this sample.</div>`;
+			return `<div class="page">
+				${breadcrumbs([{ label: "All Books", route: "home" }, { label: module.label, route: moduleRoute(key) }, { label: book.label, route: bookRoute(key, book.key) }, { label: record.id }])}
+				<section class="detail-hero">
+					${bookIdentity(key)}
+					<div><div class="detail-id">${esc(record.id)}</div><h1>${esc(record.title)}</h1><p>${esc(record.party)}</p></div>
+					<div class="detail-status">${statusBadge(record.status)}</div>
+				</section>
+				<section class="fact-grid">${record.facts.map(fact => `<div class="fact"><div class="fact-label">${esc(fact[0])}</div><div class="fact-value">${esc(fact[1])}</div></div>`).join("")}</section>
+				<section class="process-card"><div class="card-head"><h2>Document journey</h2><p>Click a completed step to follow the connection</p></div><div class="journey">${journeyFor(key, record)}</div></section>
+				<div class="detail-grid">
+					<div>
+						<section class="section-card"><div class="card-head"><h2>${key === "ipd" ? "Process route" : "Items and quantities"}</h2><p>${record.items.length} row${record.items.length === 1 ? "" : "s"}</p></div><div class="detail-table-wrap"><table class="detail-table"><thead><tr>${lineHeaders.map(header => `<th>${esc(header)}</th>`).join("")}</tr></thead><tbody>${record.items.map(row => `<tr>${row.map(cell => `<td>${esc(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></section>
+						<section class="section-card"><div class="card-head"><h2>Source notes</h2><p>What the user needs to understand</p></div><div class="section-body" style="color:var(--muted);font-size:12px;line-height:1.65">This view keeps the document number, supplier, material, quantity and status visible first. Paper scans stay attached to the same record, while connected documents are one click away.</div></section>
+					</div>
+					<aside>
+						<section class="section-card"><div class="card-head"><h2>Connected records</h2></div><div class="section-body"><div class="related-stack">${related}</div></div></section>
+						<section class="section-card"><div class="card-head"><h2>Paper attachments</h2></div><div class="section-body">${attachments}</div></section>
+						<button class="btn" type="button" data-route="${bookRoute(key, book.key)}" style="width:100%">← Back to ${esc(book.label)}</button>
+					</aside>
+				</div>
+				<div class="prototype-note"><strong>Interactive prototype:</strong> the Preview buttons simulate where invoice, receipt and weighment images will open. No real file or database call is made.</div>
+			</div>`;
+		}
+
+		function renderNotFound() {
+			setTopbar("Not found");
+			return `<div class="page">${breadcrumbs([{ label: "All Books", route: "home" }, { label: "Not found" }])}<div class="section-card"><div class="section-body" style="padding:50px;text-align:center"><h1 style="font-size:26px">This sample page was not found.</h1><p style="color:var(--muted)">Return to the book groups and choose another book.</p><button class="btn primary" type="button" data-route="home">Go to All Books</button></div></div></div>`;
+		}
+
+		function parseRoute() {
+			const raw = window.location.hash.replace(/^#\/?/, "") || "home";
+			return raw.split("/").filter(Boolean).map(decodeURIComponent);
+		}
+
+		function render() {
+			const parts = parseRoute();
+			let html;
+			if (parts[0] === "home") html = renderHome();
+			else if (parts[0] === "manage" && parts[1]) html = renderMasterList(parts[1]);
+			else if (parts[0] === "manage") html = renderManage();
+			else if (parts[0] === "group" && parts[1]) html = renderBookGroup(parts[1]);
+			else if (parts[0] === "list" && parts[1] && parts[2]) html = renderList(parts[1], parts[2]);
+			else if (parts[0] === "entry" && parts[1] === "po" && parts[2]) html = renderPurchaseOrderEntry(parts[2]);
+			else if (parts[0] === "detail" && parts[1] && parts[2]) html = renderDetail(parts[1], parts[2]);
+			else html = renderNotFound();
+			document.getElementById("app").innerHTML = html;
+			window.scrollTo({ top: 0, behavior: "instant" });
+			if (parts[0] === "list" && MODULES[parts[1]] && bookInfo(parts[1], parts[2])) {
+				const input = document.getElementById("list-search");
+				if (input) input.addEventListener("input", event => {
+					state.filters[`${parts[1]}:${parts[2]}`].search = event.target.value;
+					applyListFilter(parts[1], parts[2]);
+				});
+				applyListFilter(parts[1], parts[2]);
+			}
+		}
+
+		function applyListFilter(key, bookKey) {
+			const filter = state.filters[`${key}:${bookKey}`];
+			const search = filter.search.trim().toLowerCase();
+			const candidates = [...document.querySelectorAll("[data-record-route]")];
+			let visibleDesktop = 0;
+			for (const node of candidates) {
+				const visible = (!search || node.dataset.search.includes(search)) && (filter.status === "All" || node.dataset.status === filter.status);
+				node.hidden = !visible;
+				if (visible && node.tagName === "TR") visibleDesktop += 1;
+			}
+			const count = document.getElementById("list-count");
+			const total = MODULES[key].records.filter(record => record.book === bookKey).length;
+			if (count) count.textContent = `${visibleDesktop} of ${total} records`;
+			const empty = document.getElementById("list-empty");
+			if (empty) empty.hidden = visibleDesktop !== 0;
+		}
+
+		function showToast(message) {
+			const root = document.getElementById("toast-root");
+			root.innerHTML = `<div class="toast">${esc(message)}</div>`;
+			window.clearTimeout(showToast.timer);
+			showToast.timer = window.setTimeout(() => { root.innerHTML = ""; }, 2600);
+		}
+
+		document.addEventListener("click", event => {
+			const routeTarget = event.target.closest("[data-route]");
+			if (routeTarget && !routeTarget.disabled) {
+				closeModal();
+				route(routeTarget.dataset.route);
+				return;
+			}
+			const row = event.target.closest("[data-record-route]");
+			if (row) {
+				route(row.dataset.recordRoute);
+				return;
+			}
+			const status = event.target.closest("[data-status-filter]");
+			if (status) {
+				const parts = parseRoute();
+				const key = parts[1];
+				const bookKey = parts[2];
+				state.filters[`${key}:${bookKey}`].status = status.dataset.statusFilter;
+				render();
+				return;
+			}
+			if (event.target.closest("[data-close-modal]") || event.target.matches("[data-modal-backdrop]")) {
+				closeModal();
+				return;
+			}
+			const modalButton = event.target.closest("[data-open-modal]");
+			if (modalButton) {
+				const editName = modalButton.dataset.editName || "";
+				if (modalButton.dataset.openModal === "supplier") openSupplierModal(editName || modalButton.dataset.editSupplier || "");
+				if (modalButton.dataset.openModal === "agent") openAgentModal(editName || modalButton.dataset.editAgent || "");
+				if (modalButton.dataset.openModal === "item") openItemModal(editName);
+				if (modalButton.dataset.openModal === "warehouse") openWarehouseModal(editName);
+				if (modalButton.dataset.openModal === "process-cost") openProcessCostModal(editName);
+				if (modalButton.dataset.openModal === "user") openUserModal(editName);
+				if (modalButton.dataset.openModal === "price") {
+					if (modalButton.dataset.priceItem) {
+						demoState.poDraft.item = modalButton.dataset.priceItem;
+						demoState.poDraft.supplier = modalButton.dataset.priceSupplier || "";
+					} else if (modalButton.hasAttribute("data-create-master") && parseRoute()[0] === "manage") {
+						demoState.poDraft.item = demoState.items[0]?.name || "";
+						demoState.poDraft.supplier = "";
+					}
+					openPriceModal(false);
+				}
+				return;
+			}
+			const saveSupplier = event.target.closest("[data-save-supplier]");
+			if (saveSupplier) {
+				const name = modalFieldValue("supplier-name");
+				const address1 = modalFieldValue("supplier-address1");
+				const city = modalFieldValue("supplier-city");
+				const pincode = modalFieldValue("supplier-pincode");
+				if (!name || !address1 || !city || !pincode) {
+					showToast("Supplier Name, Address Line 1, City and Pincode are required.");
+					return;
+				}
+				const original = saveSupplier.dataset.originalName;
+				const record = {
+					name, gstin: modalFieldValue("supplier-gstin"), pan: modalFieldValue("supplier-pan"),
+					address1, address2: modalFieldValue("supplier-address2"), city,
+					state: modalFieldValue("supplier-state"), pincode, phone: modalFieldValue("supplier-phone"),
+				};
+				const index = demoState.suppliers.findIndex(row => row.name === original);
+				if (index >= 0) demoState.suppliers[index] = record;
+				else demoState.suppliers.push(record);
+				if (parseRoute()[0] === "entry") demoState.poDraft.supplier = name;
+				closeModal();
+				render();
+				showToast(`${name} and its primary Address are ready to use.`);
+				return;
+			}
+			const saveAgent = event.target.closest("[data-save-agent]");
+			if (saveAgent) {
+				const name = modalFieldValue("agent-name");
+				if (!name) { showToast("Agent Name is required."); return; }
+				const record = { name, terms: modalFieldValue("agent-terms") };
+				const index = demoState.agents.findIndex(row => row.name === saveAgent.dataset.originalName);
+				if (index >= 0) demoState.agents[index] = record;
+				else demoState.agents.push(record);
+				if (parseRoute()[0] === "entry") demoState.poDraft.agent = name;
+				closeModal();
+				render();
+				showToast(`${name} is ready to select.`);
+				return;
+			}
+			const saveItem = event.target.closest("[data-save-item]");
+			if (saveItem) {
+				const name = modalFieldValue("item-name");
+				const itemGroup = modalFieldValue("item-group");
+				const uom = modalFieldValue("item-uom");
+				if (!name || !itemGroup || !uom) { showToast("Item Name, Item Group and Default UOM are required."); return; }
+				const original = saveItem.dataset.originalName;
+				const record = { name, itemGroup, uom, hsn: modalFieldValue("item-hsn"), brand: modalFieldValue("item-brand"), isStock: document.getElementById("item-stock").checked, isPurchase: document.getElementById("item-purchase").checked, status: "Active" };
+				const index = demoState.items.findIndex(row => row.name === original);
+				if (index >= 0) demoState.items[index] = record;
+				else demoState.items.push(record);
+				if (original && original !== name) {
+					demoState.prices.forEach(row => { if (row.item === original) row.item = name; });
+					demoState.processCosts.forEach(row => { if (row.item === original) row.item = name; });
+				}
+				if (parseRoute()[0] === "entry" || demoState.poDraft.item === original) demoState.poDraft.item = name;
+				syncDraftPrice();
+				closeModal(); render(); showToast(`${name} is ready to use.`);
+				return;
+			}
+			const saveWarehouse = event.target.closest("[data-save-warehouse]");
+			if (saveWarehouse) {
+				const name = modalFieldValue("warehouse-name");
+				if (!name) { showToast("Warehouse Name is required."); return; }
+				const original = saveWarehouse.dataset.originalName;
+				const record = { name, supplier: modalFieldValue("warehouse-supplier"), status: document.getElementById("warehouse-disabled").checked ? "Disabled" : "Active" };
+				const index = demoState.warehouses.findIndex(row => row.name === original);
+				if (index >= 0) demoState.warehouses[index] = record;
+				else demoState.warehouses.push(record);
+				if (parseRoute()[0] === "entry" || demoState.poDraft.warehouse === original) demoState.poDraft.warehouse = name;
+				closeModal(); render(); showToast(`${name} is ready to select.`);
+				return;
+			}
+			const saveProcessCost = event.target.closest("[data-save-process-cost]");
+			if (saveProcessCost) {
+				const process = modalFieldValue("process-cost-process");
+				const item = modalFieldValue("process-cost-item");
+				const supplier = modalFieldValue("process-cost-supplier");
+				const rate = Number(modalFieldValue("process-cost-rate"));
+				if (!process || !item || !supplier || !(rate > 0)) { showToast("Process, Item, Supplier and a Cost greater than zero are required."); return; }
+				const original = saveProcessCost.dataset.originalName;
+				const name = original || `PC-2026-${String(demoState.processCosts.length + 19).padStart(5, "0")}`;
+				const record = { name, process, item, supplier, uom: modalFieldValue("process-cost-uom"), fromDate: modalFieldValue("process-cost-from-date"), tax: modalFieldValue("process-cost-tax"), moq: Number(modalFieldValue("process-cost-moq") || 0), rate, status: original ? (processCostInfo(original)?.status || "Draft") : "Draft" };
+				const index = demoState.processCosts.findIndex(row => row.name === original);
+				if (index >= 0) demoState.processCosts[index] = record;
+				else demoState.processCosts.push(record);
+				closeModal(); render(); showToast(`${name} was saved.`);
+				return;
+			}
+			const saveUser = event.target.closest("[data-save-user]");
+			if (saveUser) {
+				const email = modalFieldValue("user-email");
+				const firstName = modalFieldValue("user-first-name");
+				const roles = [...document.querySelectorAll("[data-user-role]:checked")].map(node => node.value);
+				const suppliers = [...document.querySelectorAll("[data-user-supplier]:checked")].map(node => node.value);
+				const warehouses = [...document.querySelectorAll("[data-user-warehouse]:checked")].map(node => node.value);
+				if (!email || !firstName || !roles.length) { showToast("Email, First Name and at least one Role are required."); return; }
+				const original = saveUser.dataset.originalName;
+				const record = { email, firstName, mobile: modalFieldValue("user-mobile"), roles, roleProfile: modalFieldValue("user-role-profile"), suppliers, warehouses, uiLayout: modalFieldValue("user-ui-layout"), enabled: document.getElementById("user-enabled").checked };
+				const index = demoState.users.findIndex(row => row.email === original);
+				if (index >= 0) demoState.users[index] = record;
+				else demoState.users.push(record);
+				const welcome = document.getElementById("user-welcome-email").checked && !original;
+				closeModal(); render(); showToast(`${email} and its access settings were saved${welcome ? "; welcome email queued" : ""}.`);
+				return;
+			}
+			if (event.target.closest("[data-save-price]")) {
+				const item = modalFieldValue("price-item");
+				const supplier = modalFieldValue("price-supplier");
+				const rate = Number(modalFieldValue("price-rate"));
+				if (!item || !supplier || !(rate > 0)) { showToast("Item, Supplier and a Price greater than zero are required."); return; }
+				demoState.pendingPrice = {
+					item, supplier, uom: modalFieldValue("price-uom"), fromDate: modalFieldValue("price-from-date"),
+					toDate: modalFieldValue("price-to-date"), tax: modalFieldValue("price-tax"), moq: Number(modalFieldValue("price-moq") || 0),
+					rate, leadTime: Number(modalFieldValue("price-lead-time") || 0), status: "Approval Pending",
+				};
+				openPriceModal(true);
+				showToast("Item Price saved and submitted for approval.");
+				return;
+			}
+			if (event.target.closest("[data-approve-price]")) {
+				const price = { ...demoState.pendingPrice, status: "Approved" };
+				demoState.prices = demoState.prices.filter(row => !(row.item === price.item && row.supplier === price.supplier));
+				demoState.prices.push(price);
+				demoState.pendingPrice = null;
+				syncDraftPrice();
+				closeModal();
+				render();
+				showToast(`Approved price ${formatMoney(price.rate)} applied to the Purchase Order.`);
+				return;
+			}
+			if (event.target.closest("[data-po-save]")) {
+				showToast("Purchase Order draft saved in this prototype.");
+				return;
+			}
+			if (event.target.closest("[data-po-submit]")) {
+				if (!approvedPrice(demoState.poDraft.item, demoState.poDraft.supplier)) {
+					showToast("Approve the Item Price before submitting this Purchase Order.");
+					return;
+				}
+				showToast("Purchase Order submitted. The server will validate permissions and Item Price again.");
+				return;
+			}
+			const file = event.target.closest("[data-preview-file]");
+			if (file) showToast(`${file.dataset.previewFile} would open here in the real UI.`);
+		});
+
+		document.addEventListener("change", event => {
+			const field = event.target.closest("[data-po-field]");
+			if (!field) return;
+			const key = field.dataset.poField;
+			demoState.poDraft[key] = key === "qty" ? Number(field.value || 0) : field.value;
+			if (key === "supplier" || key === "item") syncDraftPrice();
+			render();
+		});
+
+		document.addEventListener("keydown", event => {
+			if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-record-route]")) {
+				event.preventDefault();
+				route(event.target.dataset.recordRoute);
+			}
+		});
+
+		window.addEventListener("hashchange", render);
+		if (!window.location.hash) window.location.hash = "home";
+		else render();
+	</script>
+</body>
+</html>

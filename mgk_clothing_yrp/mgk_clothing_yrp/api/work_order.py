@@ -12,6 +12,12 @@ import frappe
 from frappe import _
 from frappe.utils import cstr, flt, now_datetime
 
+from mgk_clothing_yrp.yarn_process import (
+	build_route_io,
+	get_process_route_context,
+	has_yarn_process_route,
+)
+
 
 def _guard_not_modified(doc, modified):
 	"""Reject a stale write, mirroring the standard REST PUT's check_if_latest().
@@ -122,18 +128,20 @@ def get_approval_state(work_order):
 # Calculate Deliverables (MGK)
 #
 # On a saved Work Order, "Calculate Deliverables" turns each `mgk_items`
-# row into a yarn deliverable + receivable pair. The behaviour depends on
-# the WO's Process:
-#   - is_yarn_process == 1  -> direct-yarn mode (implemented below). Each
-#     row resolves the IPD's `yarn_item` to an Item Variant from the
-#     user-picked attribute values, and produces:
+# row into a deliverable + receivable pair. A Yarn IPD with an MGK route
+# uses explicit transformation mode:
+#   - Doubling: route Input Item variant -> route Output Item variant.
+#   - Dyeing: route From Colour variant -> route To Colour variant.
+# All unchanged attributes carry through and the configured quantity ratio
+# scales the output.
+#
+# Older Yarn IPDs without route rows retain the direct-yarn fallback. Each row
+# resolves the IPD's `yarn_item` to an Item Variant from the user-picked
+# attribute values, and produces:
 #         deliverable.qty = weight                       (received_type = Accepted)
 #         receivable.qty  = weight * (1 - wastage% + excess%)
-#     where wastage/excess come from the Process defaults.
-#   - otherwise -> IPD-Process-Matrix mode (not yet implemented).
-#
-# The dispatcher (`calculate_deliverables`) keeps a clean seam between the
-# two modes; only the yarn path exists today.
+# where wastage/excess come from the Process defaults.
+# Non-yarn WOs continue to use the existing IPD-Process-Matrix engine.
 # ======================================================================
 
 
@@ -281,8 +289,23 @@ def get_yarn_deliverable_rows(work_order):
 	process = _get_wo_process(wo)
 	is_yarn_process = bool(process.get("is_yarn_process"))
 
-	rows = []
+	legacy_rows = []
+	transformation_rows = []
+	missing_routes = []
+	has_any_route_configuration = False
 	for item_row in wo.get("mgk_items") or []:
+		route_rows = get_process_route_context(
+			item_row.production_detail,
+			wo.process_name,
+		) if item_row.production_detail else []
+		for route_row in route_rows:
+			transformation_rows.append({
+				**route_row,
+				"idx": item_row.idx,
+				"item": item_row.item,
+				"production_detail": item_row.production_detail,
+			})
+
 		yarn_item = _yarn_item_for_detail(item_row.production_detail)
 		row = {
 			"idx": item_row.idx,
@@ -298,15 +321,33 @@ def get_yarn_deliverable_rows(work_order):
 			row["yarn_item_name"] = yarn_item
 			row["uom"] = frappe.get_cached_value("Item", yarn_item, "default_unit_of_measure")
 			row["attributes"] = _item_attribute_options(yarn_item)
-		rows.append(row)
+		legacy_rows.append(row)
+
+		if not route_rows and item_row.production_detail:
+			ipd = frappe.get_cached_doc("Item Production Detail", item_row.production_detail)
+			if ipd.get("mgk_yarn_process_routes"):
+				has_any_route_configuration = True
+			missing_routes.append(item_row.production_detail)
+
+	if missing_routes and (
+		transformation_rows or has_any_route_configuration
+	):
+		frappe.throw(
+			_(
+				"Process {0} is not configured in Item Production Detail(s): {1}. "
+				"Remove those Item rows from this Work Order or add the matching "
+				"Yarn Process step in the IPD."
+			).format(wo.process_name, ", ".join(sorted(set(missing_routes))))
+		)
 
 	return {
 		"work_order": wo.name,
 		"process_name": wo.process_name,
 		"is_yarn_process": is_yarn_process,
+		"mode": "transformation" if transformation_rows else "legacy",
 		"default_wastage": flt(process.get("default_wastage")),
 		"default_excess": flt(process.get("default_excess")),
-		"rows": rows,
+		"rows": transformation_rows or legacy_rows,
 	}
 
 
@@ -315,7 +356,8 @@ def calculate_deliverables(work_order, rows, modified=None):
 	"""Dispatcher: pick the calculation mode from the WO's Process.
 
 	`rows` is a JSON list (str or list already-parsed) of per-split inputs.
-	is_yarn_process -> direct-yarn path; otherwise the matrix mode (TODO).
+	Configured MGK route -> transformation; legacy yarn -> direct yarn;
+	otherwise -> the existing matrix mode.
 	`modified` is the client's loaded timestamp for the stale-write guard.
 	"""
 	rows = frappe.parse_json(rows) if isinstance(rows, str) else rows
@@ -327,10 +369,173 @@ def calculate_deliverables(work_order, rows, modified=None):
 		frappe.throw(_("Calculate Deliverables can only update a draft Work Order."))
 
 	process = _get_wo_process(wo)
+	has_configured_route = False
+	has_any_route_configuration = False
+	missing_process_details = []
+	for row in wo.get("mgk_items") or []:
+		if not row.production_detail:
+			continue
+		ipd = frappe.get_cached_doc(
+			"Item Production Detail",
+			row.production_detail,
+		)
+		has_any_route_configuration = (
+			has_any_route_configuration
+			or bool(ipd.get("mgk_yarn_process_routes"))
+		)
+		detail_has_process = has_yarn_process_route(
+			row.production_detail,
+			wo.process_name,
+		)
+		has_configured_route = has_configured_route or detail_has_process
+		if not detail_has_process:
+			missing_process_details.append(row.production_detail)
+	if has_configured_route:
+		if missing_process_details:
+			frappe.throw(
+				_(
+					"Process {0} is not configured in Item Production "
+					"Detail(s): {1}."
+				).format(
+					wo.process_name,
+					", ".join(sorted(set(missing_process_details))),
+				)
+			)
+		return _calculate_yarn_transformations(wo, rows)
+	if has_any_route_configuration:
+		frappe.throw(
+			_(
+				"Process {0} is not configured on this Work Order's Yarn "
+				"Process Flow."
+			).format(wo.process_name)
+		)
 	if process.get("is_yarn_process"):
 		return _calculate_yarn_deliverables(wo, process, rows)
 
 	return _calculate_matrix_deliverables(wo, rows)
+
+
+def _prepare_yarn_transformation_items(wo, rows):
+	"""Build calculated Work Order input/output rows from configured IPD routes."""
+	if not rows:
+		frappe.throw(_("Enter at least one route with an input quantity greater than zero."))
+
+	detail_set = {
+		row.production_detail
+		for row in wo.get("mgk_items") or []
+		if row.production_detail
+	}
+	deliverables_by_variant = {}
+	receivables_by_variant = {}
+
+	for raw in rows:
+		if not isinstance(raw, dict):
+			frappe.throw(_("Each Yarn Process calculation row must be an object."))
+
+		production_detail = raw.get("production_detail")
+		if not production_detail or production_detail not in detail_set:
+			frappe.throw(
+				_("Item Production Detail {0} is not part of Work Order {1}.").format(
+					production_detail or _("(blank)"),
+					wo.name,
+				)
+			)
+		route_name = raw.get("route_name")
+		if not route_name:
+			frappe.throw(
+				_("Select a Yarn Process route for Item Production Detail {0}.").format(
+					production_detail
+				)
+			)
+
+		ipd = frappe.get_doc("Item Production Detail", production_detail)
+		io = build_route_io(
+			ipd,
+			wo.process_name,
+			route_name,
+			raw.get("attribute_values") or {},
+			raw.get("weight") or raw.get("qty"),
+		)
+		input_variant = _resolve_yarn_variant(io["input_item"], io["input_attrs"])
+		output_variant = _resolve_yarn_variant(io["output_item"], io["output_attrs"])
+
+		deliverable_key = (input_variant, io["input_uom"])
+		deliverable = deliverables_by_variant.setdefault(
+			deliverable_key,
+			{
+				"item_variant": input_variant,
+				"qty": 0,
+				"pending_quantity": 0,
+				"uom": io["input_uom"],
+				"received_type": "Accepted",
+				"is_calculated": 1,
+			},
+		)
+		deliverable["qty"] += io["input_qty"]
+		deliverable["pending_quantity"] += io["input_qty"]
+
+		receivable_key = (output_variant, io["output_uom"])
+		receivable = receivables_by_variant.setdefault(
+			receivable_key,
+			{
+				"item_variant": output_variant,
+				"qty": 0,
+				"pending_quantity": 0,
+				"uom": io["output_uom"],
+			},
+		)
+		receivable["qty"] += io["output_qty"]
+		receivable["pending_quantity"] += io["output_qty"]
+
+	return list(deliverables_by_variant.values()), list(receivables_by_variant.values())
+
+
+def _calculate_yarn_transformations(wo, rows):
+	"""Persist explicit Yarn Item/Colour transformations for one Work Order."""
+	new_deliverables, new_receivables = _prepare_yarn_transformation_items(wo, rows)
+	if not new_deliverables or not new_receivables:
+		frappe.throw(_("No Yarn Process inputs or outputs were calculated."))
+
+	kept_deliverables = [
+		row
+		for row in (wo.get("deliverables") or [])
+		if not row.get("is_calculated")
+	]
+	base_index = 0
+	for row in kept_deliverables:
+		base_index = max(
+			base_index,
+			_int_or_zero(row.get("table_index")),
+			_int_or_zero(row.get("row_index")),
+		)
+	if kept_deliverables:
+		base_index += 1
+	for offset, row in enumerate(new_deliverables):
+		row["table_index"] = base_index + offset
+		row["row_index"] = str(base_index + offset)
+	for offset, row in enumerate(new_receivables):
+		row["table_index"] = offset
+		row["row_index"] = str(offset)
+
+	wo.set("deliverables", [])
+	for row in kept_deliverables:
+		wo.append("deliverables", row.as_dict())
+	for row in new_deliverables:
+		wo.append("deliverables", row)
+	wo.set("receivables", new_receivables)
+
+	# Prevent Work Order.before_validate from rebuilding the flat rows from
+	# stale grouped-editor JSON.
+	wo.deliverable_details = None
+	wo.receivable_details = None
+	wo.save()
+
+	return {
+		"work_order": wo.name,
+		"mode": "transformation",
+		"deliverables": len(new_deliverables),
+		"receivables": len(new_receivables),
+	}
 
 
 def _calculate_yarn_deliverables(wo, process, rows):

@@ -1,0 +1,1615 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>MGK Yarn Process Register — UI Prototype</title>
+	<style>
+		:root {
+			--ink: #171b21;
+			--muted: #667085;
+			--subtle: #8a94a6;
+			--line: #e4e7ec;
+			--line-strong: #d0d5dd;
+			--canvas: #f5f6f8;
+			--card: #ffffff;
+			--nav: #18212f;
+			--nav-soft: #253146;
+			--blue: #2563eb;
+			--blue-soft: #eff6ff;
+			--green: #15803d;
+			--green-soft: #ecfdf3;
+			--orange: #b54708;
+			--orange-soft: #fff7ed;
+			--red: #b42318;
+			--red-soft: #fef3f2;
+			--violet: #6941c6;
+			--violet-soft: #f4f3ff;
+			--shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+		}
+
+		* { box-sizing: border-box; }
+
+		body {
+			margin: 0;
+			background: var(--canvas);
+			color: var(--ink);
+			font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			font-size: 14px;
+		}
+
+		button, input, select, textarea { font: inherit; }
+		button { cursor: pointer; }
+
+		.app-shell {
+			display: grid;
+			grid-template-columns: 230px minmax(0, 1fr);
+			min-height: 100vh;
+		}
+
+		.sidebar {
+			position: sticky;
+			top: 0;
+			height: 100vh;
+			padding: 18px 14px;
+			background: var(--nav);
+			color: #dbe4f0;
+		}
+
+		.brand {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding: 2px 8px 22px;
+		}
+
+		.brand-mark {
+			display: grid;
+			place-items: center;
+			width: 34px;
+			height: 34px;
+			border-radius: 9px;
+			background: #fff;
+			color: var(--nav);
+			font-weight: 800;
+			letter-spacing: -0.04em;
+		}
+
+		.brand strong { display: block; color: #fff; font-size: 14px; }
+		.brand span { color: #95a3b8; font-size: 11px; }
+
+		.nav-label {
+			padding: 14px 10px 7px;
+			color: #7f8ca1;
+			font-size: 10px;
+			font-weight: 700;
+			letter-spacing: 0.09em;
+			text-transform: uppercase;
+		}
+
+		.nav-item {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			width: 100%;
+			margin-bottom: 4px;
+			padding: 10px 11px;
+			border: 0;
+			border-radius: 8px;
+			background: transparent;
+			color: #b8c4d4;
+			text-align: left;
+		}
+
+		.nav-item.active {
+			background: var(--nav-soft);
+			color: #fff;
+		}
+
+		.nav-icon {
+			display: grid;
+			place-items: center;
+			width: 22px;
+			height: 22px;
+			border-radius: 6px;
+			background: rgba(255, 255, 255, 0.08);
+			font-size: 11px;
+			font-weight: 700;
+		}
+
+		.nav-count {
+			margin-left: auto;
+			padding: 2px 7px;
+			border-radius: 999px;
+			background: rgba(255, 255, 255, 0.1);
+			font-size: 11px;
+		}
+
+		.sidebar-note {
+			position: absolute;
+			right: 14px;
+			bottom: 18px;
+			left: 14px;
+			padding: 12px;
+			border: 1px solid rgba(255, 255, 255, 0.08);
+			border-radius: 9px;
+			background: rgba(255, 255, 255, 0.04);
+			color: #9caabd;
+			font-size: 11px;
+			line-height: 1.45;
+		}
+
+		.main {
+			min-width: 0;
+		}
+
+		.topbar {
+			display: flex;
+			align-items: center;
+			height: 58px;
+			padding: 0 28px;
+			border-bottom: 1px solid var(--line);
+			background: rgba(255, 255, 255, 0.92);
+			backdrop-filter: blur(8px);
+		}
+
+		.crumbs { color: var(--muted); font-size: 12px; }
+		.crumbs strong { color: var(--ink); font-weight: 600; }
+
+		.top-actions {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			margin-left: auto;
+		}
+
+		.language-switch {
+			display: inline-flex;
+			padding: 3px;
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			background: #f2f4f7;
+		}
+
+		.language-switch button {
+			min-height: 28px;
+			padding: 4px 9px;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--muted);
+			font-size: 11px;
+			font-weight: 700;
+		}
+
+		.language-switch button.active {
+			background: #fff;
+			color: var(--ink);
+			box-shadow: var(--shadow);
+		}
+
+		.search {
+			width: 230px;
+			padding: 8px 11px;
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			background: #f9fafb;
+			color: var(--ink);
+			outline: none;
+		}
+
+		.avatar {
+			display: grid;
+			place-items: center;
+			width: 32px;
+			height: 32px;
+			border-radius: 50%;
+			background: #dbeafe;
+			color: #1d4ed8;
+			font-size: 11px;
+			font-weight: 800;
+		}
+
+		.page {
+			max-width: 1480px;
+			margin: 0 auto;
+			padding: 25px 28px 48px;
+		}
+
+		.page-head {
+			display: flex;
+			align-items: flex-start;
+			gap: 20px;
+			margin-bottom: 18px;
+		}
+
+		.eyebrow {
+			margin-bottom: 4px;
+			color: var(--muted);
+			font-size: 11px;
+			font-weight: 700;
+			letter-spacing: 0.07em;
+			text-transform: uppercase;
+		}
+
+		h1 {
+			margin: 0;
+			font-size: 25px;
+			letter-spacing: -0.025em;
+		}
+
+		.page-subtitle {
+			margin: 5px 0 0;
+			color: var(--muted);
+		}
+
+		.page-actions {
+			display: flex;
+			gap: 8px;
+			margin-left: auto;
+		}
+
+		.language-demo {
+			margin-bottom: 16px;
+			padding: 15px 18px;
+			border: 1px solid #bfdbfe;
+			border-radius: 10px;
+			background: #f8fbff;
+			box-shadow: var(--shadow);
+		}
+
+		.language-demo-head {
+			display: flex;
+			align-items: flex-start;
+			gap: 16px;
+			margin-bottom: 13px;
+		}
+
+		.language-demo-head strong { display: block; font-size: 13px; }
+		.language-demo-head span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+		.language-demo-note {
+			margin-left: auto;
+			padding: 4px 8px;
+			border-radius: 999px;
+			background: #dbeafe;
+			color: #1d4ed8;
+			font-size: 10px;
+			font-weight: 700;
+			white-space: nowrap;
+		}
+
+		.policy-grid {
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+			gap: 8px;
+		}
+
+		.policy-card {
+			min-width: 0;
+			padding: 10px;
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			background: #fff;
+		}
+
+		.policy-label {
+			display: flex;
+			align-items: center;
+			gap: 5px;
+			color: var(--muted);
+			font-size: 9px;
+			font-weight: 700;
+			text-transform: uppercase;
+		}
+
+		.policy-label code {
+			padding: 1px 4px;
+			border-radius: 4px;
+			background: #f2f4f7;
+			color: #475467;
+			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			font-size: 8px;
+			text-transform: none;
+		}
+
+		.policy-value {
+			display: block;
+			margin-top: 7px;
+			overflow: hidden;
+			font-size: 11px;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.btn {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 7px;
+			min-height: 36px;
+			padding: 8px 13px;
+			border: 1px solid var(--line-strong);
+			border-radius: 8px;
+			background: #fff;
+			color: #344054;
+			font-weight: 600;
+			box-shadow: var(--shadow);
+		}
+
+		.btn:hover { background: #f9fafb; }
+		.btn.primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+		.btn.primary:hover { background: #1d4ed8; }
+		.btn.soft { border-color: #bfdbfe; background: var(--blue-soft); color: #1d4ed8; }
+		.btn.small { min-height: 30px; padding: 6px 10px; font-size: 12px; }
+		.btn.ghost { border-color: transparent; background: transparent; box-shadow: none; }
+
+		.status {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			padding: 4px 9px;
+			border-radius: 999px;
+			font-size: 11px;
+			font-weight: 700;
+		}
+
+		.status::before {
+			content: "";
+			width: 6px;
+			height: 6px;
+			border-radius: 50%;
+			background: currentColor;
+		}
+
+		.status.green { background: var(--green-soft); color: var(--green); }
+		.status.orange { background: var(--orange-soft); color: var(--orange); }
+		.status.blue { background: var(--blue-soft); color: var(--blue); }
+		.status.gray { background: #f2f4f7; color: #667085; }
+		.status.red { background: var(--red-soft); color: var(--red); }
+
+		.route-card {
+			margin-bottom: 16px;
+			padding: 15px 18px;
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			background: var(--card);
+			box-shadow: var(--shadow);
+		}
+
+		.route-top {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 14px;
+		}
+
+		.route-top strong { font-size: 13px; }
+		.route-top span { color: var(--muted); font-size: 12px; }
+		.route-top .status { margin-left: auto; }
+
+		.route {
+			display: grid;
+			grid-template-columns: repeat(5, minmax(120px, 1fr));
+			align-items: center;
+			gap: 10px;
+		}
+
+		.route-step {
+			position: relative;
+			padding: 12px 12px 11px 42px;
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			background: #fafbfc;
+		}
+
+		.route-step:not(:last-child)::after {
+			content: "→";
+			position: absolute;
+			top: 50%;
+			right: -18px;
+			z-index: 2;
+			width: 16px;
+			transform: translateY(-50%);
+			background: #fff;
+			color: #98a2b3;
+			text-align: center;
+		}
+
+		.route-number {
+			position: absolute;
+			top: 50%;
+			left: 11px;
+			display: grid;
+			place-items: center;
+			width: 22px;
+			height: 22px;
+			transform: translateY(-50%);
+			border-radius: 50%;
+			background: #e4e7ec;
+			color: #475467;
+			font-size: 10px;
+			font-weight: 800;
+		}
+
+		.route-step.done .route-number { background: #dcfae6; color: var(--green); }
+		.route-step.active { border-color: #93c5fd; background: var(--blue-soft); }
+		.route-step.active .route-number { background: var(--blue); color: #fff; }
+		.route-step strong { display: block; font-size: 12px; }
+		.route-step small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+
+		.kpis {
+			display: grid;
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+			gap: 12px;
+			margin-bottom: 16px;
+		}
+
+		.kpi {
+			padding: 14px 15px;
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			background: var(--card);
+			box-shadow: var(--shadow);
+		}
+
+		.kpi-label {
+			color: var(--muted);
+			font-size: 11px;
+			font-weight: 600;
+		}
+
+		.kpi-value {
+			margin-top: 7px;
+			font-size: 22px;
+			font-weight: 750;
+			letter-spacing: -0.03em;
+		}
+
+		.kpi-value small {
+			margin-left: 3px;
+			color: var(--muted);
+			font-size: 11px;
+			font-weight: 600;
+		}
+
+		.kpi-foot {
+			margin-top: 4px;
+			color: var(--subtle);
+			font-size: 10px;
+		}
+
+		.tabs {
+			display: flex;
+			gap: 4px;
+			margin-bottom: 14px;
+			padding: 4px;
+			border: 1px solid var(--line);
+			border-radius: 9px;
+			background: #fff;
+		}
+
+		.tab {
+			padding: 8px 13px;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: var(--muted);
+			font-weight: 650;
+		}
+
+		.tab.active { background: #f2f4f7; color: var(--ink); }
+		.tab .tab-count {
+			margin-left: 5px;
+			padding: 1px 6px;
+			border-radius: 999px;
+			background: #e4e7ec;
+			font-size: 10px;
+		}
+
+		.panel { display: none; }
+		.panel.active { display: block; }
+
+		.layout {
+			display: grid;
+			grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.75fr);
+			gap: 14px;
+		}
+
+		.stack { display: grid; gap: 14px; align-content: start; }
+
+		.card {
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			background: var(--card);
+			box-shadow: var(--shadow);
+			overflow: hidden;
+		}
+
+		.card-head {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			min-height: 52px;
+			padding: 12px 15px;
+			border-bottom: 1px solid var(--line);
+		}
+
+		.card-head h2 {
+			margin: 0;
+			font-size: 14px;
+			letter-spacing: -0.01em;
+		}
+
+		.card-head p {
+			margin: 2px 0 0;
+			color: var(--muted);
+			font-size: 10px;
+		}
+
+		.card-head .right { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+		.card-body { padding: 15px; }
+
+		.ref-grid {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 12px;
+		}
+
+		.ref {
+			min-width: 0;
+		}
+
+		.ref-label {
+			margin-bottom: 4px;
+			color: var(--muted);
+			font-size: 10px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+		}
+
+		.ref-value {
+			overflow: hidden;
+			color: #344054;
+			font-size: 12px;
+			font-weight: 650;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.flow-compare {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr);
+			align-items: stretch;
+			gap: 10px;
+		}
+
+		.material {
+			padding: 14px;
+			border: 1px solid var(--line);
+			border-radius: 9px;
+			background: #fafbfc;
+		}
+
+		.material-label {
+			color: var(--muted);
+			font-size: 10px;
+			font-weight: 700;
+			text-transform: uppercase;
+		}
+
+		.material strong { display: block; margin-top: 6px; font-size: 15px; }
+		.material-meta { margin-top: 6px; color: var(--muted); font-size: 11px; }
+
+		.flow-arrow {
+			display: grid;
+			place-items: center;
+			color: var(--blue);
+			font-size: 22px;
+		}
+
+		.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+
+		.chip {
+			display: inline-flex;
+			align-items: center;
+			gap: 5px;
+			padding: 4px 7px;
+			border: 1px solid var(--line);
+			border-radius: 999px;
+			background: #fff;
+			color: #475467;
+			font-size: 10px;
+			font-weight: 600;
+		}
+
+		.dot {
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			background: var(--dot, #98a2b3);
+			box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+		}
+
+		.table-wrap { overflow-x: auto; }
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 12px;
+		}
+
+		th {
+			padding: 9px 11px;
+			border-bottom: 1px solid var(--line);
+			background: #fafbfc;
+			color: var(--muted);
+			font-size: 10px;
+			font-weight: 700;
+			letter-spacing: 0.03em;
+			text-align: left;
+			text-transform: uppercase;
+			white-space: nowrap;
+		}
+
+		td {
+			padding: 10px 11px;
+			border-bottom: 1px solid #eef0f3;
+			color: #344054;
+			vertical-align: middle;
+		}
+
+		tr:last-child td { border-bottom: 0; }
+		td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
+		td strong { color: var(--ink); }
+		.table-note { display: block; margin-top: 2px; color: var(--subtle); font-size: 10px; }
+
+		.type {
+			display: inline-flex;
+			align-items: center;
+			gap: 5px;
+			font-size: 11px;
+			font-weight: 700;
+		}
+
+		.type.out { color: var(--orange); }
+		.type.in { color: var(--green); }
+		.type::before { content: "↑"; }
+		.type.in::before { content: "↓"; }
+
+		.reconcile {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 8px;
+		}
+
+		.reconcile-item {
+			padding: 11px;
+			border-radius: 8px;
+			background: #f8fafc;
+		}
+
+		.reconcile-item span { display: block; color: var(--muted); font-size: 10px; }
+		.reconcile-item strong { display: block; margin-top: 5px; font-size: 15px; }
+		.reconcile-item.warn { background: var(--orange-soft); }
+		.reconcile-item.warn strong { color: var(--orange); }
+
+		.progress {
+			height: 7px;
+			margin-top: 13px;
+			overflow: hidden;
+			border-radius: 999px;
+			background: #eaecf0;
+		}
+
+		.progress > span {
+			display: block;
+			width: var(--progress);
+			height: 100%;
+			border-radius: inherit;
+			background: var(--blue);
+		}
+
+		.doc-list { display: grid; gap: 2px; }
+
+		.doc-row {
+			display: grid;
+			grid-template-columns: 34px minmax(0, 1fr) auto;
+			align-items: center;
+			gap: 10px;
+			padding: 10px 2px;
+			border-bottom: 1px solid #eef0f3;
+		}
+
+		.doc-row:last-child { border-bottom: 0; }
+
+		.doc-icon {
+			display: grid;
+			place-items: center;
+			width: 32px;
+			height: 32px;
+			border-radius: 8px;
+			background: #f2f4f7;
+			color: #475467;
+			font-size: 10px;
+			font-weight: 800;
+		}
+
+		.doc-title { overflow: hidden; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+		.doc-meta { margin-top: 2px; color: var(--muted); font-size: 10px; }
+		.doc-check { color: var(--green); font-weight: 900; }
+
+		.alert {
+			padding: 11px 12px;
+			border: 1px solid #fedf89;
+			border-radius: 8px;
+			background: #fffaeb;
+			color: #93370d;
+			font-size: 11px;
+			line-height: 1.45;
+		}
+
+		.colour-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 9px;
+		}
+
+		.colour-card {
+			padding: 12px;
+			border: 1px solid var(--line);
+			border-radius: 9px;
+		}
+
+		.colour-head {
+			display: flex;
+			align-items: center;
+			gap: 7px;
+			margin-bottom: 10px;
+		}
+
+		.colour-head strong { font-size: 12px; }
+		.colour-head span:last-child { margin-left: auto; color: var(--muted); font-size: 10px; }
+		.colour-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+		.colour-stats div { padding: 7px; border-radius: 6px; background: #f8fafc; }
+		.colour-stats span { display: block; color: var(--muted); font-size: 9px; }
+		.colour-stats strong { display: block; margin-top: 3px; font-size: 12px; }
+
+		.money-row {
+			display: flex;
+			align-items: center;
+			padding: 8px 0;
+			border-bottom: 1px solid #eef0f3;
+			font-size: 11px;
+		}
+
+		.money-row:last-child { border-bottom: 0; }
+		.money-row span { color: var(--muted); }
+		.money-row strong { margin-left: auto; font-variant-numeric: tabular-nums; }
+		.money-row.total { padding-top: 11px; font-size: 13px; }
+		.money-row.total span, .money-row.total strong { color: var(--ink); }
+
+		.audit {
+			position: relative;
+			display: grid;
+			gap: 13px;
+			padding-left: 17px;
+		}
+
+		.audit::before {
+			content: "";
+			position: absolute;
+			top: 4px;
+			bottom: 4px;
+			left: 4px;
+			width: 1px;
+			background: var(--line);
+		}
+
+		.audit-row { position: relative; }
+		.audit-row::before {
+			content: "";
+			position: absolute;
+			top: 4px;
+			left: -17px;
+			width: 8px;
+			height: 8px;
+			border: 2px solid #fff;
+			border-radius: 50%;
+			background: #98a2b3;
+			box-shadow: 0 0 0 1px #d0d5dd;
+		}
+
+		.audit-row.done::before { background: var(--green); }
+		.audit-row strong { display: block; font-size: 11px; }
+		.audit-row span { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+
+		.empty-state {
+			padding: 50px 20px;
+			color: var(--muted);
+			text-align: center;
+		}
+
+		.modal-backdrop {
+			position: fixed;
+			inset: 0;
+			z-index: 20;
+			display: none;
+			place-items: center;
+			padding: 20px;
+			background: rgba(16, 24, 40, 0.45);
+			backdrop-filter: blur(2px);
+		}
+
+		.modal-backdrop.open { display: grid; }
+
+		.modal {
+			width: min(620px, 100%);
+			border-radius: 12px;
+			background: #fff;
+			box-shadow: 0 24px 48px rgba(16, 24, 40, 0.2);
+			overflow: hidden;
+		}
+
+		.modal-head, .modal-foot {
+			display: flex;
+			align-items: center;
+			padding: 15px 18px;
+		}
+
+		.modal-head { border-bottom: 1px solid var(--line); }
+		.modal-head h2 { margin: 0; font-size: 16px; }
+		.modal-head button { margin-left: auto; }
+		.modal-body { padding: 18px; }
+		.modal-foot { justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); }
+
+		.form-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 13px;
+		}
+
+		.field.full { grid-column: 1 / -1; }
+
+		.field label {
+			display: block;
+			margin-bottom: 5px;
+			color: #475467;
+			font-size: 11px;
+			font-weight: 650;
+		}
+
+		.control {
+			width: 100%;
+			min-height: 37px;
+			padding: 8px 10px;
+			border: 1px solid var(--line-strong);
+			border-radius: 7px;
+			background: #fff;
+			color: var(--ink);
+			outline: none;
+		}
+
+		.control:focus { border-color: #84adff; box-shadow: 0 0 0 3px #eff6ff; }
+
+		.toast {
+			position: fixed;
+			right: 22px;
+			bottom: 22px;
+			z-index: 30;
+			display: flex;
+			align-items: center;
+			gap: 9px;
+			padding: 12px 14px;
+			border: 1px solid #abefc6;
+			border-radius: 9px;
+			background: #ecfdf3;
+			color: #067647;
+			font-weight: 650;
+			box-shadow: 0 10px 30px rgba(16, 24, 40, 0.12);
+			opacity: 0;
+			transform: translateY(12px);
+			pointer-events: none;
+			transition: 180ms ease;
+		}
+
+		.toast.show { opacity: 1; transform: translateY(0); }
+
+		@media (max-width: 1100px) {
+			.app-shell { grid-template-columns: 76px minmax(0, 1fr); }
+			.sidebar { padding: 18px 10px; }
+			.brand { justify-content: center; padding: 2px 0 22px; }
+			.brand div:last-child, .nav-item > span:not(.nav-icon), .nav-label, .sidebar-note { display: none; }
+			.nav-item { justify-content: center; padding: 10px; }
+			.nav-count { display: none; }
+			.route { grid-template-columns: repeat(3, 1fr); }
+			.route-step::after { display: none; }
+			.kpis { grid-template-columns: repeat(3, 1fr); }
+			.policy-grid { grid-template-columns: repeat(3, 1fr); }
+			.layout { grid-template-columns: 1fr; }
+		}
+
+		@media (max-width: 760px) {
+			.app-shell { display: block; }
+			.sidebar { display: none; }
+			.topbar { padding: 0 16px; }
+			.search { display: none; }
+			.language-switch button { padding: 4px 7px; }
+			.page { padding: 18px 14px 36px; }
+			.page-head { display: block; }
+			.page-actions { margin-top: 14px; }
+			.route { grid-template-columns: 1fr; }
+			.kpis { grid-template-columns: repeat(2, 1fr); }
+			.policy-grid { grid-template-columns: 1fr; }
+			.language-demo-head { display: block; }
+			.language-demo-note { display: inline-block; margin: 8px 0 0; }
+			.tabs { overflow-x: auto; }
+			.tab { white-space: nowrap; }
+			.ref-grid, .reconcile { grid-template-columns: repeat(2, 1fr); }
+			.flow-compare { grid-template-columns: 1fr; }
+			.flow-arrow { transform: rotate(90deg); }
+			.colour-grid { grid-template-columns: 1fr; }
+			.form-grid { grid-template-columns: 1fr; }
+			.field.full { grid-column: auto; }
+		}
+	</style>
+</head>
+<body>
+	<div class="app-shell">
+		<aside class="sidebar">
+			<div class="brand">
+				<div class="brand-mark">MGK</div>
+				<div>
+					<strong>MGK Clothing</strong>
+					<span>YRP Operations</span>
+				</div>
+			</div>
+
+			<div class="nav-label">Operations</div>
+			<button class="nav-item"><span class="nav-icon">PO</span><span>Purchase Orders</span></button>
+			<button class="nav-item"><span class="nav-icon">GR</span><span>Goods Received</span><span class="nav-count">6</span></button>
+			<button class="nav-item active"><span class="nav-icon">YR</span><span>Yarn Register</span><span class="nav-count">4</span></button>
+			<button class="nav-item"><span class="nav-icon">WO</span><span>Work Orders</span><span class="nav-count">8</span></button>
+			<button class="nav-item"><span class="nav-icon">DC</span><span>Delivery Challans</span></button>
+
+			<div class="nav-label">Masters</div>
+			<button class="nav-item"><span class="nav-icon">IP</span><span>Item Production Detail</span></button>
+			<button class="nav-item"><span class="nav-icon">SU</span><span>Suppliers</span></button>
+			<button class="nav-item"><span class="nav-icon">IT</span><span>Yarn Items</span></button>
+
+			<div class="sidebar-note">
+				<strong style="color:#dbe4f0">Prototype scope</strong><br>
+				Desk UI for Doubling and Dyeing execution. IPD remains the process-definition master.
+			</div>
+		</aside>
+
+		<main class="main">
+			<header class="topbar">
+				<div class="crumbs">Manufacturing &nbsp;/&nbsp; Yarn Register &nbsp;/&nbsp; <strong>YPR-2026-0012</strong></div>
+				<div class="top-actions">
+					<div class="language-switch" role="group" aria-label="Interface language">
+						<button type="button" class="active" data-language="en">English</button>
+						<button type="button" data-language="ta">தமிழ்</button>
+					</div>
+					<input class="search" type="search" placeholder="Search WO, DC, supplier slip…" data-placeholder-en="Search WO, DC, supplier slip…" data-placeholder-ta="WO, DC, சப்ளையர் சீட்டைத் தேடவும்…">
+					<div class="avatar">AR</div>
+				</div>
+			</header>
+
+			<div class="page">
+				<div class="page-head">
+					<div>
+						<div class="eyebrow" data-i18n-en="Yarn Process Register" data-i18n-ta="நூல் செயல்முறை பதிவேடு">Yarn Process Register</div>
+						<h1>YPR-2026-0012 <span class="status orange" style="vertical-align:middle" data-i18n-en="In process" data-i18n-ta="செயல்பாட்டில்">In process</span></h1>
+						<p class="page-subtitle"><span data-localized data-policy="user" data-en="MGK Sample Bath Towel" data-ta="பயனர் பதிவு செய்த தமிழ் பொருள் பெயர்">MGK Sample Bath Towel</span> · <span data-i18n-en="40s yarn converted to 2/40s, then dyed colour-wise" data-i18n-ta="40s நூல் 2/40s ஆக மாற்றப்பட்டு, பின்னர் நிற வாரியாக சாயமிடப்படுகிறது">40s yarn converted to 2/40s, then dyed colour-wise</span></p>
+					</div>
+					<div class="page-actions">
+						<button class="btn" data-toast="Register printed" data-i18n-en="Print register" data-i18n-ta="பதிவேட்டை அச்சிடு">Print register</button>
+						<button class="btn soft" id="reconcileButton" data-i18n-en="Reconcile" data-i18n-ta="ஒப்பீடு செய்">Reconcile</button>
+						<button class="btn primary" data-open-modal data-i18n-en="Record receipt" data-i18n-ta="வரவை பதிவு செய்">Record receipt</button>
+					</div>
+				</div>
+
+				<section class="language-demo" aria-label="Bilingual field behaviour">
+					<div class="language-demo-head">
+						<div>
+							<strong data-i18n-en="Bilingual field behaviour" data-i18n-ta="இருமொழி புலங்களின் செயல்பாடு">Bilingual field behaviour</strong>
+							<span data-i18n-en="The UI switch changes labels. Each business value still follows its own approved language rule." data-i18n-ta="UI மொழி மாற்றி லேபிள்களை மாற்றும். ஒவ்வொரு வணிக மதிப்பும் அதற்கான அங்கீகரிக்கப்பட்ட மொழி விதியைப் பின்பற்றும்.">The UI switch changes labels. Each business value still follows its own approved language rule.</span>
+						</div>
+						<div class="language-demo-note" data-i18n-en="No automatic business translation" data-i18n-ta="தானியங்கி வணிக மொழிபெயர்ப்பு இல்லை">No automatic business translation</div>
+					</div>
+					<div class="policy-grid">
+						<div class="policy-card">
+							<div class="policy-label"><span data-i18n-en="User language" data-i18n-ta="பயனர் மொழி">User language</span><code>user</code></div>
+							<strong class="policy-value" data-localized data-policy="user" data-en="30's GL Yarn" data-ta="பயனர் பதிவு செய்த தமிழ் பெயர்">30's GL Yarn</strong>
+						</div>
+						<div class="policy-card">
+							<div class="policy-label"><span data-i18n-en="Always Tamil" data-i18n-ta="எப்போதும் தமிழ்">Always Tamil</span><code>ta</code></div>
+							<strong class="policy-value" data-localized data-policy="ta" data-en="30's GL Yarn" data-ta="பயனர் பதிவு செய்த தமிழ் பெயர்">பயனர் பதிவு செய்த தமிழ் பெயர்</strong>
+						</div>
+						<div class="policy-card">
+							<div class="policy-label"><span data-i18n-en="Always English" data-i18n-ta="எப்போதும் ஆங்கிலம்">Always English</span><code>en</code></div>
+							<strong class="policy-value" data-localized data-policy="en" data-en="30's GL Yarn" data-ta="பயனர் பதிவு செய்த தமிழ் பெயர்">30's GL Yarn</strong>
+						</div>
+						<div class="policy-card">
+							<div class="policy-label"><span data-i18n-en="Show both" data-i18n-ta="இரண்டையும் காட்டு">Show both</span><code>both</code></div>
+							<strong class="policy-value" data-localized data-policy="both" data-en="30's GL Yarn" data-ta="பயனர் பதிவு செய்த தமிழ் பெயர்">பயனர் பதிவு செய்த தமிழ் பெயர் · 30's GL Yarn</strong>
+						</div>
+						<div class="policy-card">
+							<div class="policy-label"><span data-i18n-en="Technical" data-i18n-ta="தொழில்நுட்ப மதிப்பு">Technical</span><code>technical</code></div>
+							<strong class="policy-value" data-localized data-policy="technical" data-value="YARN-30-GL">YARN-30-GL</strong>
+						</div>
+					</div>
+				</section>
+
+				<section class="route-card">
+					<div class="route-top">
+						<div>
+							<strong data-i18n-en="IPD process route" data-i18n-ta="IPD செயல்முறை வழி">IPD process route</strong>
+							<span data-i18n-en="Read-only from Item Production Detail · existing MGK Yarn Flow" data-i18n-ta="Item Production Detail இலிருந்து படிக்க மட்டும் · தற்போதைய MGK Yarn Flow">Read-only from Item Production Detail · existing MGK Yarn Flow</span>
+						</div>
+						<span class="status green" data-i18n-en="Route configured" data-i18n-ta="வழி அமைக்கப்பட்டது">Route configured</span>
+					</div>
+					<div class="route">
+						<div class="route-step done">
+							<span class="route-number">1</span>
+							<strong data-i18n-en="Purchase receipt" data-i18n-ta="கொள்முதல் வரவு">Purchase receipt</strong>
+							<small>40s WEP Cotton · 600 KG</small>
+						</div>
+						<div class="route-step done">
+							<span class="route-number">2</span>
+							<strong>Doubling</strong>
+							<small>40s → 2/40s Yarn</small>
+						</div>
+						<div class="route-step active">
+							<span class="route-number">3</span>
+							<strong>Yarn Dyeing</strong>
+							<small data-i18n-en="4 colour outputs" data-i18n-ta="4 நிற வெளியீடுகள்">4 colour outputs</small>
+						</div>
+						<div class="route-step">
+							<span class="route-number">4</span>
+							<strong>Warping / Weaving</strong>
+							<small>Future phase</small>
+						</div>
+						<div class="route-step">
+							<span class="route-number">5</span>
+							<strong>Towel finishing</strong>
+							<small>Future phase</small>
+						</div>
+					</div>
+				</section>
+
+				<section class="kpis">
+					<div class="kpi">
+						<div class="kpi-label" data-i18n-en="Purchased" data-i18n-ta="வாங்கியது">Purchased</div>
+						<div class="kpi-value">600.000 <small>KG</small></div>
+						<div class="kpi-foot">Invoice 109 · 10 bags</div>
+					</div>
+					<div class="kpi">
+						<div class="kpi-label" data-i18n-en="Sent for current process" data-i18n-ta="தற்போதைய செயல்முறைக்கு அனுப்பியது">Sent for current process</div>
+						<div class="kpi-value">500.000 <small>KG</small></div>
+						<div class="kpi-foot">Dyeing DC 201</div>
+					</div>
+					<div class="kpi">
+						<div class="kpi-label" data-i18n-en="Received" data-i18n-ta="பெறப்பட்டது">Received</div>
+						<div class="kpi-value" id="receivedKpi">468.000 <small>KG</small></div>
+						<div class="kpi-foot">Across 4 colour lots</div>
+					</div>
+					<div class="kpi">
+						<div class="kpi-label" data-i18n-en="Pending at supplier" data-i18n-ta="சப்ளையரிடம் நிலுவை">Pending at supplier</div>
+						<div class="kpi-value" id="pendingKpi" style="color:var(--orange)">32.000 <small>KG</small></div>
+						<div class="kpi-foot">Needs receipt or shortage</div>
+					</div>
+					<div class="kpi">
+						<div class="kpi-label" data-i18n-en="Job-work value" data-i18n-ta="வேலை மதிப்பு">Job-work value</div>
+						<div class="kpi-value">₹67,500</div>
+						<div class="kpi-foot">500 KG × ₹135</div>
+					</div>
+				</section>
+
+				<nav class="tabs" aria-label="Register sections">
+					<button class="tab active" data-tab="summary" data-i18n-en="Job summary" data-i18n-ta="வேலை சுருக்கம்">Job summary</button>
+					<button class="tab" data-tab="doubling">Doubling <span class="tab-count">Closed</span></button>
+					<button class="tab" data-tab="dyeing">Dyeing <span class="tab-count">4 colours</span></button>
+					<button class="tab" data-tab="documents"><span data-i18n-en="Documents" data-i18n-ta="ஆவணங்கள்">Documents</span> <span class="tab-count">8</span></button>
+				</nav>
+
+				<section class="panel active" data-panel="summary">
+					<div class="layout">
+						<div class="stack">
+							<article class="card">
+								<div class="card-head">
+									<div>
+										<h2>Source and accountability references</h2>
+										<p>Digital equivalent of the invoice number, internal slip, page number and tick marks</p>
+									</div>
+									<div class="right"><span class="status green">Verified</span></div>
+								</div>
+								<div class="card-body">
+									<div class="ref-grid">
+										<div class="ref"><div class="ref-label">Purchase order</div><div class="ref-value">PO-2026-00003</div></div>
+										<div class="ref"><div class="ref-label">Supplier invoice</div><div class="ref-value">109 · 09-Jun-2026</div></div>
+										<div class="ref"><div class="ref-label">Internal receipt</div><div class="ref-value">Slip 1093</div></div>
+										<div class="ref"><div class="ref-label">Purchase GRN</div><div class="ref-value">GRN-2026-00006</div></div>
+										<div class="ref"><div class="ref-label">IPD</div><div class="ref-value">MGK Sample Bath Towel-1</div></div>
+										<div class="ref"><div class="ref-label">Current work order</div><div class="ref-value">WO-00020 · Dyeing</div></div>
+										<div class="ref"><div class="ref-label">Supplier</div><div class="ref-value">A. Marimuthu Colours</div></div>
+										<div class="ref"><div class="ref-label">Supplier DC / slip</div><div class="ref-value">778 / 201</div></div>
+									</div>
+								</div>
+							</article>
+
+							<article class="card">
+								<div class="card-head">
+									<div>
+										<h2>Movement ledger</h2>
+										<p>One chronological view replacing separate outward, inward and supplier notebooks</p>
+									</div>
+									<div class="right">
+										<select class="control" style="min-height:30px;padding:5px 8px;font-size:11px" id="movementFilter">
+											<option value="all">All movements</option>
+											<option value="out">Outward only</option>
+											<option value="in">Inward only</option>
+										</select>
+									</div>
+								</div>
+								<div class="table-wrap">
+									<table id="movementTable">
+										<thead>
+											<tr>
+												<th>Date</th>
+												<th>Movement</th>
+												<th>Process / Supplier</th>
+												<th>Reference</th>
+												<th>Yarn / Colour</th>
+												<th class="number">Bags</th>
+												<th class="number">Quantity</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr data-kind="out">
+												<td>10 Jun 2026<span class="table-note">10:40 AM</span></td>
+												<td><span class="type out">Outward</span></td>
+												<td><strong>Doubling</strong><span class="table-note">P. Venkatesan</span></td>
+												<td>DC-2026-00010<span class="table-note">Supplier page 31</span></td>
+												<td>40s WEP Cotton</td>
+												<td class="number">10</td>
+												<td class="number"><strong>600.000 KG</strong></td>
+											</tr>
+											<tr data-kind="in">
+												<td>19 Jun 2026<span class="table-note">04:15 PM</span></td>
+												<td><span class="type in">Inward</span></td>
+												<td><strong>Doubling</strong><span class="table-note">P. Venkatesan</span></td>
+												<td>GRN-2026-00012<span class="table-note">Slip 90</span></td>
+												<td>2/40s GL Yarn</td>
+												<td class="number">4</td>
+												<td class="number"><strong>232.360 KG</strong></td>
+											</tr>
+											<tr data-kind="in">
+												<td>20 Jun 2026<span class="table-note">02:30 PM</span></td>
+												<td><span class="type in">Inward</span></td>
+												<td><strong>Doubling</strong><span class="table-note">P. Venkatesan</span></td>
+												<td>GRN-2026-00013<span class="table-note">Slip 91</span></td>
+												<td>2/40s GL Yarn</td>
+												<td class="number">3</td>
+												<td class="number"><strong>185.850 KG</strong></td>
+											</tr>
+											<tr data-kind="out">
+												<td>01 Jul 2026<span class="table-note">09:25 AM</span></td>
+												<td><span class="type out">Outward</span></td>
+												<td><strong>Dyeing</strong><span class="table-note">A. Marimuthu Colours</span></td>
+												<td>DC-2026-00016<span class="table-note">Supplier DC 201</span></td>
+												<td>2/40s GL Yarn · 4 colours</td>
+												<td class="number">8</td>
+												<td class="number"><strong>500.000 KG</strong></td>
+											</tr>
+											<tr data-kind="in">
+												<td>08 Jul 2026<span class="table-note">05:10 PM</span></td>
+												<td><span class="type in">Inward</span></td>
+												<td><strong>Dyeing</strong><span class="table-note">A. Marimuthu Colours</span></td>
+												<td>GRN-2026-00020<span class="table-note">Invoice 778</span></td>
+												<td><span class="chip"><span class="dot" style="--dot:#eab308"></span>Golden Yellow</span></td>
+												<td class="number">2</td>
+												<td class="number"><strong>145.000 KG</strong></td>
+											</tr>
+											<tr data-kind="in">
+												<td>09 Jul 2026<span class="table-note">11:35 AM</span></td>
+												<td><span class="type in">Inward</span></td>
+												<td><strong>Dyeing</strong><span class="table-note">A. Marimuthu Colours</span></td>
+												<td>GRN-2026-00021<span class="table-note">Supplier slip 205</span></td>
+												<td><span class="chip"><span class="dot" style="--dot:#22c55e"></span>Leaf Green</span></td>
+												<td class="number">2</td>
+												<td class="number"><strong>118.000 KG</strong></td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</article>
+						</div>
+
+						<aside class="stack">
+							<article class="card">
+								<div class="card-head">
+									<div><h2>Current reconciliation</h2><p>Dyeing · DC-2026-00016</p></div>
+								</div>
+								<div class="card-body">
+									<div class="reconcile">
+										<div class="reconcile-item"><span>Sent</span><strong>500.000</strong></div>
+										<div class="reconcile-item"><span>Received</span><strong id="receivedMini">468.000</strong></div>
+										<div class="reconcile-item warn"><span>Pending</span><strong id="pendingMini">32.000</strong></div>
+										<div class="reconcile-item"><span>Shortage</span><strong>0.000</strong></div>
+									</div>
+									<div class="progress" title="93.6% received"><span id="progressBar" style="--progress:93.6%"></span></div>
+									<div style="display:flex;margin-top:8px;color:var(--muted);font-size:10px">
+										<span id="progressText">93.6% received</span><span style="margin-left:auto">Tolerance: 2.0%</span>
+									</div>
+									<div class="alert" style="margin-top:13px">
+										32 KG is still with the supplier. Record the remaining receipt or declare shortage before closing.
+									</div>
+								</div>
+							</article>
+
+							<article class="card">
+								<div class="card-head">
+									<div><h2>Document trail</h2><p>Matched records for this yarn lot</p></div>
+									<div class="right"><button class="btn small ghost" data-tab-link="documents">View all</button></div>
+								</div>
+								<div class="card-body">
+									<div class="doc-list">
+										<div class="doc-row"><div class="doc-icon">INV</div><div><div class="doc-title">Supplier Invoice 109</div><div class="doc-meta">600 KG · ₹1,70,100</div></div><span class="doc-check">✓</span></div>
+										<div class="doc-row"><div class="doc-icon">SLIP</div><div><div class="doc-title">MGK Internal Slip 1093</div><div class="doc-meta">Checked 10 Jun 2026</div></div><span class="doc-check">✓</span></div>
+										<div class="doc-row"><div class="doc-icon">DC</div><div><div class="doc-title">Dyeing DC 201</div><div class="doc-meta">500 KG · 4 colours</div></div><span class="doc-check">✓</span></div>
+										<div class="doc-row"><div class="doc-icon">BILL</div><div><div class="doc-title">Job-work Invoice 778</div><div class="doc-meta">₹67,500 before tax</div></div><span class="status orange">Review</span></div>
+									</div>
+								</div>
+							</article>
+						</aside>
+					</div>
+				</section>
+
+				<section class="panel" data-panel="doubling">
+					<div class="layout">
+						<div class="stack">
+							<article class="card">
+								<div class="card-head">
+									<div><h2>Doubling transformation</h2><p>Existing IPD item conversion, applied to actual Work Order quantities</p></div>
+									<div class="right"><span class="status green">Closed</span></div>
+								</div>
+								<div class="card-body">
+									<div class="flow-compare">
+										<div class="material">
+											<div class="material-label">Yarn sent</div>
+											<strong>40s WEP Cotton Yarn</strong>
+											<div class="material-meta">Greige · 10 bags · 600.000 KG</div>
+											<div class="chips"><span class="chip">Purchase GRN-00006</span><span class="chip">Invoice 109</span></div>
+										</div>
+										<div class="flow-arrow">→</div>
+										<div class="material">
+											<div class="material-label">Yarn received</div>
+											<strong>2/40s GL Yarn</strong>
+											<div class="material-meta">Greige · 3 partial GRNs · 585.810 KG</div>
+											<div class="chips"><span class="chip">1 : 1 output ratio</span><span class="chip">Item conversion</span></div>
+										</div>
+									</div>
+								</div>
+							</article>
+
+							<article class="card">
+								<div class="card-head">
+									<div><h2>Outward and inward entries</h2><p>Multiple receipts against one Doubling DC</p></div>
+									<div class="right"><button class="btn small" data-open-modal>Record receipt</button></div>
+								</div>
+								<div class="table-wrap">
+									<table>
+										<thead><tr><th>Entry</th><th>Date</th><th>Reference</th><th>Supplier slip</th><th class="number">Bags</th><th class="number">KG</th><th>Status</th></tr></thead>
+										<tbody>
+											<tr><td><span class="type out">Outward</span></td><td>10 Jun</td><td>DC-2026-00010</td><td>Page 31</td><td class="number">10</td><td class="number"><strong>600.000</strong></td><td><span class="status green">Submitted</span></td></tr>
+											<tr><td><span class="type in">Inward</span></td><td>19 Jun</td><td>GRN-2026-00012</td><td>Slip 90</td><td class="number">4</td><td class="number"><strong>232.360</strong></td><td><span class="status green">Accepted</span></td></tr>
+											<tr><td><span class="type in">Inward</span></td><td>20 Jun</td><td>GRN-2026-00013</td><td>Slip 91</td><td class="number">3</td><td class="number"><strong>185.850</strong></td><td><span class="status green">Accepted</span></td></tr>
+											<tr><td><span class="type in">Inward</span></td><td>24 Jun</td><td>GRN-2026-00014</td><td>Slip 96</td><td class="number">3</td><td class="number"><strong>167.600</strong></td><td><span class="status green">Accepted</span></td></tr>
+										</tbody>
+									</table>
+								</div>
+							</article>
+						</div>
+
+						<aside class="stack">
+							<article class="card">
+								<div class="card-head"><div><h2>Doubling reconciliation</h2><p>Quantity and shortage</p></div></div>
+								<div class="card-body">
+									<div class="money-row"><span>Outward quantity</span><strong>600.000 KG</strong></div>
+									<div class="money-row"><span>Inward quantity</span><strong>585.810 KG</strong></div>
+									<div class="money-row"><span>Shortage</span><strong style="color:var(--orange)">14.190 KG</strong></div>
+									<div class="money-row"><span>Shortage percentage</span><strong>2.365%</strong></div>
+									<div class="money-row"><span>Allowed tolerance</span><strong>2.500%</strong></div>
+									<div class="money-row total"><span>Result</span><strong style="color:var(--green)">Within tolerance</strong></div>
+								</div>
+							</article>
+
+							<article class="card">
+								<div class="card-head"><div><h2>Closure audit</h2><p>Replaces manual ticks and signature</p></div></div>
+								<div class="card-body">
+									<div class="audit">
+										<div class="audit-row done"><strong>DC submitted</strong><span>DC-2026-00010 · A. Radha</span></div>
+										<div class="audit-row done"><strong>All receipts verified</strong><span>3 GRNs · 24 Jun 2026</span></div>
+										<div class="audit-row done"><strong>Shortage approved</strong><span>2.365% · M. G. K.</span></div>
+										<div class="audit-row done"><strong>Work Order closed</strong><span>WO-00017 · 25 Jun 2026</span></div>
+									</div>
+								</div>
+							</article>
+						</aside>
+					</div>
+				</section>
+
+				<section class="panel" data-panel="dyeing">
+					<div class="layout">
+						<div class="stack">
+							<article class="card">
+								<div class="card-head">
+									<div><h2>Dyeing colour allocation</h2><p>One greige input divided into multiple colour outputs</p></div>
+									<div class="right"><button class="btn small" data-toast="Colour allocation is editable while Work Order is Draft">Edit allocation</button></div>
+								</div>
+								<div class="card-body">
+									<div class="flow-compare" style="margin-bottom:13px">
+										<div class="material">
+											<div class="material-label">Input</div>
+											<strong>2/40s GL Yarn · Greige</strong>
+											<div class="material-meta">DC-2026-00016 · 500.000 KG</div>
+										</div>
+										<div class="flow-arrow">→</div>
+										<div class="material">
+											<div class="material-label">Output</div>
+											<strong>2/40s GL Yarn · 4 colours</strong>
+											<div class="material-meta">Same item, Colour attribute changes</div>
+										</div>
+									</div>
+
+									<div class="colour-grid">
+										<div class="colour-card">
+											<div class="colour-head"><span class="dot" style="--dot:#eab308"></span><strong>Golden Yellow</strong><span>97% received</span></div>
+											<div class="colour-stats"><div><span>Planned</span><strong>150 KG</strong></div><div><span>Received</span><strong>145 KG</strong></div><div><span>Pending</span><strong>5 KG</strong></div></div>
+										</div>
+										<div class="colour-card">
+											<div class="colour-head"><span class="dot" style="--dot:#22c55e"></span><strong>Leaf Green</strong><span>98% received</span></div>
+											<div class="colour-stats"><div><span>Planned</span><strong>120 KG</strong></div><div><span>Received</span><strong>118 KG</strong></div><div><span>Pending</span><strong>2 KG</strong></div></div>
+										</div>
+										<div class="colour-card">
+											<div class="colour-head"><span class="dot" style="--dot:#2563eb"></span><strong>Royal Blue</strong><span>86% received</span></div>
+											<div class="colour-stats"><div><span>Planned</span><strong>110 KG</strong></div><div><span>Received</span><strong>95 KG</strong></div><div><span>Pending</span><strong>15 KG</strong></div></div>
+										</div>
+										<div class="colour-card">
+											<div class="colour-head"><span class="dot" style="--dot:#f43f5e"></span><strong>Rani Rose</strong><span>92% received</span></div>
+											<div class="colour-stats"><div><span>Planned</span><strong>120 KG</strong></div><div><span>Received</span><strong>110 KG</strong></div><div><span>Pending</span><strong>10 KG</strong></div></div>
+										</div>
+									</div>
+								</div>
+							</article>
+
+							<article class="card">
+								<div class="card-head">
+									<div><h2>Colour-wise receipts</h2><p>GRN rows retain supplier invoice, slip and colour accountability</p></div>
+									<div class="right"><button class="btn small primary" data-open-modal>Record receipt</button></div>
+								</div>
+								<div class="table-wrap">
+									<table>
+										<thead><tr><th>GRN</th><th>Date</th><th>Colour</th><th>Supplier slip</th><th class="number">Bundles</th><th class="number">KG</th><th>QC</th></tr></thead>
+										<tbody>
+											<tr><td><strong>GRN-2026-00020</strong></td><td>08 Jul</td><td><span class="chip"><span class="dot" style="--dot:#eab308"></span>Golden Yellow</span></td><td>778 / 201</td><td class="number">3</td><td class="number"><strong>145.000</strong></td><td><span class="status green">Accepted</span></td></tr>
+											<tr><td><strong>GRN-2026-00021</strong></td><td>09 Jul</td><td><span class="chip"><span class="dot" style="--dot:#22c55e"></span>Leaf Green</span></td><td>778 / 205</td><td class="number">3</td><td class="number"><strong>118.000</strong></td><td><span class="status green">Accepted</span></td></tr>
+											<tr><td><strong>GRN-2026-00022</strong></td><td>09 Jul</td><td><span class="chip"><span class="dot" style="--dot:#2563eb"></span>Royal Blue</span></td><td>780 / 208</td><td class="number">2</td><td class="number"><strong>95.000</strong></td><td><span class="status green">Accepted</span></td></tr>
+											<tr><td><strong>GRN-2026-00023</strong></td><td>10 Jul</td><td><span class="chip"><span class="dot" style="--dot:#f43f5e"></span>Rani Rose</span></td><td>780 / 211</td><td class="number">2</td><td class="number"><strong>110.000</strong></td><td><span class="status orange">Sample pending</span></td></tr>
+										</tbody>
+									</table>
+								</div>
+							</article>
+						</div>
+
+						<aside class="stack">
+							<article class="card">
+								<div class="card-head"><div><h2>Job-work bill</h2><p>Invoice 778 · A. Marimuthu</p></div><span class="status orange" style="margin-left:auto">Review</span></div>
+								<div class="card-body">
+									<div class="money-row"><span>Bill quantity</span><strong>500.000 KG</strong></div>
+									<div class="money-row"><span>Dyeing rate</span><strong>₹135.00 / KG</strong></div>
+									<div class="money-row"><span>Taxable amount</span><strong>₹67,500.00</strong></div>
+									<div class="money-row"><span>CGST 2.5%</span><strong>₹1,687.50</strong></div>
+									<div class="money-row"><span>SGST 2.5%</span><strong>₹1,687.50</strong></div>
+									<div class="money-row total"><span>Invoice total</span><strong>₹70,875.00</strong></div>
+									<button class="btn" style="width:100%;margin-top:13px" data-toast="Bill marked as checked">Verify against receipts</button>
+								</div>
+							</article>
+
+							<article class="card">
+								<div class="card-head"><div><h2>Close conditions</h2><p>All must pass</p></div></div>
+								<div class="card-body">
+									<div class="doc-list">
+										<div class="doc-row"><div class="doc-icon">1</div><div><div class="doc-title">Outward quantity verified</div><div class="doc-meta">500.000 KG</div></div><span class="doc-check">✓</span></div>
+										<div class="doc-row"><div class="doc-icon">2</div><div><div class="doc-title">All colour receipts complete</div><div class="doc-meta">32.000 KG pending</div></div><span class="status orange">Pending</span></div>
+										<div class="doc-row"><div class="doc-icon">3</div><div><div class="doc-title">Invoice checked</div><div class="doc-meta">Rate and tax</div></div><span class="status orange">Pending</span></div>
+										<div class="doc-row"><div class="doc-icon">4</div><div><div class="doc-title">MD approval</div><div class="doc-meta">After reconciliation</div></div><span class="status gray">Waiting</span></div>
+									</div>
+								</div>
+							</article>
+						</aside>
+					</div>
+				</section>
+
+				<section class="panel" data-panel="documents">
+					<div class="layout">
+						<div class="stack">
+							<article class="card">
+								<div class="card-head">
+									<div><h2>Documents and physical references</h2><p>Every paper in the photographs has one digital reference and attachment</p></div>
+									<div class="right"><button class="btn small primary" data-toast="Attachment picker opened">Attach document</button></div>
+								</div>
+								<div class="table-wrap">
+									<table>
+										<thead><tr><th>Document type</th><th>Reference</th><th>Date</th><th>Party / owner</th><th>Linked transaction</th><th>Status</th></tr></thead>
+										<tbody>
+											<tr><td><strong>Supplier tax invoice</strong></td><td>109</td><td>09 Jun 2026</td><td>Shambhu Vengu Yarn Mills</td><td>PO-2026-00003</td><td><span class="status green">Matched</span></td></tr>
+											<tr><td><strong>MGK internal receipt slip</strong></td><td>1093</td><td>10 Jun 2026</td><td>A. Radha</td><td>GRN-2026-00006</td><td><span class="status green">Checked</span></td></tr>
+											<tr><td><strong>Doubling delivery challan</strong></td><td>DC-2026-00010</td><td>10 Jun 2026</td><td>P. Venkatesan</td><td>WO-00017</td><td><span class="status green">Submitted</span></td></tr>
+											<tr><td><strong>Doubling supplier slips</strong></td><td>90, 91, 96</td><td>19–24 Jun</td><td>P. Venkatesan</td><td>3 process GRNs</td><td><span class="status green">Matched</span></td></tr>
+											<tr><td><strong>Dyeing delivery challan</strong></td><td>201</td><td>01 Jul 2026</td><td>A. Marimuthu</td><td>WO-00020</td><td><span class="status green">Submitted</span></td></tr>
+											<tr><td><strong>Dyeing supplier slips</strong></td><td>201, 205, 208, 211</td><td>08–10 Jul</td><td>A. Marimuthu</td><td>4 process GRNs</td><td><span class="status orange">One pending QC</span></td></tr>
+											<tr><td><strong>Job-work invoice</strong></td><td>778</td><td>08 Jul 2026</td><td>A. Marimuthu</td><td>Dyeing · 500 KG</td><td><span class="status orange">Review</span></td></tr>
+											<tr><td><strong>Payment reference</strong></td><td>Not posted</td><td>—</td><td>Accounts</td><td>Invoice 778</td><td><span class="status gray">Waiting</span></td></tr>
+										</tbody>
+									</table>
+								</div>
+							</article>
+						</div>
+
+						<aside class="stack">
+							<article class="card">
+								<div class="card-head"><div><h2>Reference mapping</h2><p>Paper habit → Desk field</p></div></div>
+								<div class="card-body">
+									<div class="money-row"><span>Notebook page number</span><strong>External Reference</strong></div>
+									<div class="money-row"><span>Handwritten tick</span><strong>Verified By / On</strong></div>
+									<div class="money-row"><span>Loose weight slip</span><strong>Process GRN row</strong></div>
+									<div class="money-row"><span>Supplier DC</span><strong>Supplier Slip No.</strong></div>
+									<div class="money-row"><span>Running balance</span><strong>Auto reconciliation</strong></div>
+									<div class="money-row"><span>Signature / stamp</span><strong>Approval audit</strong></div>
+								</div>
+							</article>
+						</aside>
+					</div>
+				</section>
+			</div>
+		</main>
+	</div>
+
+	<div class="modal-backdrop" id="receiptModal" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
+		<div class="modal">
+			<div class="modal-head">
+				<h2 id="receiptTitle">Record process receipt</h2>
+				<button class="btn small ghost" data-close-modal aria-label="Close">✕</button>
+			</div>
+			<div class="modal-body">
+				<div class="form-grid">
+					<div class="field">
+						<label>Work Order</label>
+						<select class="control"><option>WO-00020 · Dyeing</option><option>WO-00017 · Doubling</option></select>
+					</div>
+					<div class="field">
+						<label>Receipt date</label>
+						<input class="control" type="date" value="2026-07-10">
+					</div>
+					<div class="field">
+						<label>Supplier slip / DC</label>
+						<input class="control" value="212" placeholder="Supplier reference">
+					</div>
+					<div class="field">
+						<label>Colour</label>
+						<select class="control"><option>Royal Blue</option><option>Rani Rose</option><option>Golden Yellow</option><option>Leaf Green</option></select>
+					</div>
+					<div class="field">
+						<label>Bags / bundles</label>
+						<input class="control" type="number" min="0" value="1">
+					</div>
+					<div class="field">
+						<label>Received quantity (KG)</label>
+						<input class="control" id="receiptQty" type="number" min="0.001" step="0.001" value="12.000">
+					</div>
+					<div class="field">
+						<label>Supplier invoice</label>
+						<input class="control" value="778">
+					</div>
+					<div class="field">
+						<label>QC result</label>
+						<select class="control"><option>Accepted</option><option>Accepted with shortage</option><option>Rejected</option></select>
+					</div>
+					<div class="field full">
+						<label>Attachment</label>
+						<input class="control" type="file" accept="image/*,.pdf">
+					</div>
+				</div>
+			</div>
+			<div class="modal-foot">
+				<button class="btn" data-close-modal>Cancel</button>
+				<button class="btn primary" id="saveReceipt">Create Process GRN</button>
+			</div>
+		</div>
+	</div>
+
+	<div class="toast" id="toast">✓ <span id="toastText">Saved</span></div>
+
+	<script>
+		const tabs = [...document.querySelectorAll("[data-tab]")];
+		const panels = [...document.querySelectorAll("[data-panel]")];
+		const modal = document.getElementById("receiptModal");
+		const toast = document.getElementById("toast");
+		const toastText = document.getElementById("toastText");
+		let toastTimer;
+
+		function activateTab(name) {
+			tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === name));
+			panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === name));
+			window.scrollTo({ top: 0, behavior: "smooth" });
+		}
+
+		function showToast(message) {
+			clearTimeout(toastTimer);
+			toastText.textContent = message;
+			toast.classList.add("show");
+			toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
+		}
+
+		tabs.forEach((tab) => tab.addEventListener("click", () => activateTab(tab.dataset.tab)));
+		document.querySelectorAll("[data-tab-link]").forEach((button) => {
+			button.addEventListener("click", () => activateTab(button.dataset.tabLink));
+		});
+
+		document.querySelectorAll("[data-open-modal]").forEach((button) => {
+			button.addEventListener("click", () => modal.classList.add("open"));
+		});
+		document.querySelectorAll("[data-close-modal]").forEach((button) => {
+			button.addEventListener("click", () => modal.classList.remove("open"));
+		});
+		modal.addEventListener("click", (event) => {
+			if (event.target === modal) modal.classList.remove("open");
+		});
+		document.addEventListener("keydown", (event) => {
+			if (event.key === "Escape") modal.classList.remove("open");
+		});
+
+		document.querySelectorAll("[data-toast]").forEach((button) => {
+			button.addEventListener("click", () => showToast(button.dataset.toast));
+		});
+
+		document.getElementById("movementFilter").addEventListener("change", (event) => {
+			document.querySelectorAll("#movementTable tbody tr").forEach((row) => {
+				row.hidden = event.target.value !== "all" && row.dataset.kind !== event.target.value;
+			});
+		});
+
+		document.getElementById("reconcileButton").addEventListener("click", () => {
+			activateTab("dyeing");
+			showToast("Reconciliation refreshed from submitted DCs and GRNs");
+		});
+
+		document.getElementById("saveReceipt").addEventListener("click", () => {
+			const quantity = Number(document.getElementById("receiptQty").value || 0);
+			if (quantity <= 0) {
+				showToast("Enter a received quantity greater than zero");
+				return;
+			}
+
+			const oldReceived = Number(document.getElementById("receivedMini").textContent);
+			const newReceived = Math.min(500, oldReceived + quantity);
+			const pending = Math.max(0, 500 - newReceived);
+			const percent = (newReceived / 500 * 100).toFixed(1);
+
+			document.getElementById("receivedMini").textContent = newReceived.toFixed(3);
+			document.getElementById("pendingMini").textContent = pending.toFixed(3);
+			document.getElementById("receivedKpi").innerHTML = `${newReceived.toFixed(3)} <small>KG</small>`;
+			document.getElementById("pendingKpi").innerHTML = `${pending.toFixed(3)} <small>KG</small>`;
+			document.getElementById("progressBar").style.setProperty("--progress", `${percent}%`);
+			document.getElementById("progressText").textContent = `${percent}% received`;
+
+			modal.classList.remove("open");
+			showToast(`Draft Process GRN prepared for ${quantity.toFixed(3)} KG`);
+		});
+	</script>
+</body>
+</html>

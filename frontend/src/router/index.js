@@ -1,6 +1,10 @@
 import { createRouter, createWebHistory } from "vue-router"
 
-const routes = [
+const uiMeta = window.frappe?.boot?.ui_config?.meta || {}
+const registeredExperienceActive =
+	uiMeta.render_mode === "Registered Experience" && Boolean(uiMeta.experience_key)
+
+const configurableRoutes = [
 	{
 		path: "/",
 		component: () => import("@/components/layout/AppLayout.vue"),
@@ -87,6 +91,19 @@ const routes = [
 		],
 	},
 ]
+
+// In Registered Experience mode the selected workflow owns the whole /web
+// surface. Even a stale deep link resolves to the same assigned experience;
+// the generic sidebar/list/detail shell is never mounted for this user.
+const routes = registeredExperienceActive
+	? [
+			{
+				path: "/:pathMatch(.*)*",
+				name: "Registered Experience",
+				component: () => import("@/experiences/RegisteredExperienceHost.vue"),
+			},
+		]
+	: configurableRoutes
 
 const router = createRouter({
 	history: createWebHistory("/web"),
