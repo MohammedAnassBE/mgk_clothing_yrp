@@ -1,13 +1,17 @@
 <template>
-	<div class="ops-shell">
+	<div class="ops-shell" :class="{ 'is-tamil': isTamil }">
 		<header class="ops-topbar">
-			<button class="brand" type="button" aria-label="Go to all books" @click="go('/')">
+			<RouterLink class="brand" to="/" aria-label="Go to all books">
 				<span class="brand-mark">MGK</span>
 				<span class="brand-copy"><strong>MGK Clothing</strong><small>Operations Workspace</small></span>
-			</button>
+			</RouterLink>
 			<span class="topbar-divider" />
 			<div class="topbar-context"><strong>{{ pageTitle }}</strong><span>· Operations workspace</span></div>
 			<div class="topbar-actions">
+				<div class="language-toggle" role="group" aria-label="Master name language">
+					<button type="button" :class="{ active: !isTamil }" :aria-pressed="!isTamil" @click="setLanguage('en')">English</button>
+					<button type="button" :class="{ active: isTamil }" :aria-pressed="isTamil" @click="setLanguage('ta')">தமிழ்</button>
+				</div>
 				<span class="live-chip">LIVE VIEW</span>
 				<span class="avatar" :title="userName">{{ userInitials }}</span>
 				<button class="icon-button" type="button" title="Log out" aria-label="Log out" @click="signOut">
@@ -17,86 +21,258 @@
 		</header>
 
 		<main class="ops-main">
-			<!-- Home: the six familiar digital book groups. -->
-			<section v-if="page.kind === 'home'" class="page">
+			<section v-if="page.kind === 'stock-note'" class="page stock-note-page">
+				<StockBalanceView />
+			</section>
+
+			<!-- Purchase Order entry reuses the platform's permission-aware document
+			     form while the MGK workspace keeps owning the surrounding experience. -->
+			<section v-else-if="page.kind === 'purchase-order-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="purchase-order"
+					:id="page.id"
+					presentation="book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- GRN entry keeps the same approved book-form language as Purchase
+			     Order, while DocDetail owns the source-aware receipt body. -->
+			<section v-else-if="page.kind === 'grn-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="goods-received-note"
+					:id="page.id"
+					presentation="grn-book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- Delivery Challan is a source-driven Work Order dispatch. It gets the
+			     same readable book shell as PO/GRN while DocDetail owns the derived
+			     movement fields, locked deliverables and stock validation. -->
+			<section v-else-if="page.kind === 'dc-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="delivery-challan"
+					:id="page.id"
+					presentation="delivery-challan-book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- Billing is a GRN-driven supplier invoice. The Registered Experience
+			     owns the selection/grouping UI; base yrp remains authoritative for
+			     eligibility, totals and GRN link lifecycle. -->
+			<section v-else-if="page.kind === 'pi-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="purchase-invoice"
+					:id="page.id"
+					presentation="purchase-invoice-book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- Stock movement keeps the same document shell and visual hierarchy as
+			     Purchase Order, while the purpose and stock engine remain base-YRP owned. -->
+			<section v-else-if="page.kind === 'stock-entry-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="stock-entry"
+					:id="page.id"
+					presentation="stock-entry-book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- MGK inspections are deliberately GRN-based. The source GRN loads the
+			     received rows; the operator only classifies their Received Types. -->
+			<section v-else-if="page.kind === 'inspection-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="inspection-entry"
+					:id="page.id"
+					presentation="inspection-book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<section v-else-if="page.kind === 'ipd-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="item-production-detail"
+					:id="page.id"
+					presentation="ipd-yarn-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- Work Order now uses the shared permission-aware document shell and
+			     editable body. The workspace keeps the familiar process books, while
+			     DocDetail owns Save/Submit and Calculate Deliverables. -->
+			<section v-else-if="page.kind === 'detail' && page.groupKey === 'wo'" class="page po-document-page">
+				<DocDetail
+					doc-route="work-order"
+					:id="page.name"
+					presentation="work-order-book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- Work Order Correction is a direct working collection: select one
+			     submitted Work Order, then add manual deliverables/receivables. -->
+			<section v-else-if="page.kind === 'woc-document'" class="page po-document-page">
+				<DocDetail
+					doc-route="work-order-correction"
+					:id="page.id"
+					presentation="work-order-correction-book-entry"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- Every permitted working master uses the same clean Purchase Order
+			     writing language. DocDetail keeps Frappe permissions authoritative. -->
+			<section v-else-if="page.kind === 'master-detail' && selectedMasterAllowed" class="page po-document-page">
+				<DocDetail
+					:doc-route="selectedMaster.route"
+					:id="page.name"
+					presentation="master-book-entry"
+					:presentation-code="selectedMaster.code"
+					:presentation-label="selectedMaster.label"
+					:presentation-description="selectedMaster.description"
+					:linked-route-resolver="resolveExperienceDocumentPath"
+				/>
+			</section>
+
+			<!-- Home: permission-aware daily digital books. -->
+			<section v-else-if="page.kind === 'home'" class="page">
 				<div class="home-heading">
 					<div>
 						<div class="eyebrow">MGK daily work</div>
 						<h1>Your Digital Books</h1>
 					</div>
-					<button v-if="visibleMasters.length" class="button secondary" type="button" @click="go('/manage')">
-						<i class="pi pi-sliders-h" /> Manage Masters & Access
-					</button>
+					<div class="home-heading-actions">
+						<RouterLink v-if="canRead('Stock Ledger Entry')" class="button secondary" to="/stock">
+							<i class="pi pi-chart-bar" /> Stock
+						</RouterLink>
+						<RouterLink v-if="visibleMasters.length" class="button secondary" to="/manage">
+							<i class="pi pi-sliders-h" /> Manage Masters & Access
+						</RouterLink>
+						<RouterLink v-if="visiblePricesAndCosts.length" class="button secondary" to="/prices-costs">
+							<i class="pi pi-indian-rupee" /> Manage Prices & Costs
+						</RouterLink>
+					</div>
 				</div>
 
 				<div v-if="visibleGroups.length" class="group-grid">
-					<button
+					<RouterLink
 						v-for="group in visibleGroups"
 						:key="group.key"
 						class="group-card"
-						type="button"
-						@click="go(`/group/${group.key}`)"
+						:to="groupRoute(group)"
 					>
 						<span class="group-card-head">
 							<span class="group-code" :class="`cover-${group.cover}`">{{ group.code }}</span>
 							<span class="group-copy"><strong>{{ group.label }}</strong><small>{{ group.description }}</small></span>
+							<span class="group-record-count">{{ countLabel(groupCounts[group.key]) }}</span>
 						</span>
-						<span class="book-shelf" aria-hidden="true">
+						<span v-if="!group.directList" class="book-shelf" aria-hidden="true">
 							<span
-								v-for="(book, index) in group.books"
+								v-for="book in group.books"
 								:key="book.key"
 								class="mini-book"
 								:class="`cover-${group.cover}`"
-								:style="{ height: `${58 + (index % 2) * 8}px` }"
-							>{{ book.short }}</span>
+							>{{ bookText(book, "short") }}</span>
 						</span>
-						<span class="group-card-foot">
-							<span>{{ countLabel(groupCounts[group.key]) }}</span>
-							<strong>Open · {{ group.books.length }} {{ group.books.length === 1 ? 'book' : 'books' }} ›</strong>
-						</span>
-					</button>
+						<span v-else class="direct-card-rail" :class="`cover-${group.cover}`" aria-hidden="true"></span>
+					</RouterLink>
 				</div>
 				<div v-else class="empty-state"><i class="pi pi-lock" /><h2>No books available</h2><p>Your roles do not currently provide read access to these documents.</p></div>
 			</section>
 
 			<!-- One document group and its familiar books. -->
 			<section v-else-if="page.kind === 'group' && selectedGroup" class="page">
-				<Breadcrumbs :items="[{ label: 'All Books', path: '/' }, { label: selectedGroup.label }]" @navigate="go" />
+				<Breadcrumbs :items="[{ label: 'All Books', path: '/' }, { label: selectedGroup.label }]" />
 				<div class="page-heading">
 					<span class="book-identity" :class="`cover-${selectedGroup.cover}`">{{ selectedGroup.code }}</span>
 					<div class="heading-copy"><div class="eyebrow">Digital books</div><h1>{{ selectedGroup.label }}</h1><p>Choose the familiar working book to view its records.</p></div>
-					<button class="button secondary heading-action" type="button" @click="go('/')">← All Books</button>
+					<div class="heading-actions">
+						<RouterLink class="button secondary" to="/">← All Books</RouterLink>
+						<RouterLink v-if="selectedGroup.key === 'po' && canCreate('Purchase Order')" class="button primary" :to="purchaseOrderRoute()">
+							<i class="pi pi-plus" /> New Purchase Order
+						</RouterLink>
+						<RouterLink v-if="selectedGroup.key === 'wo' && canCreate('Work Order')" class="button primary" :to="workOrderRoute()">
+							<i class="pi pi-plus" /> New Work Order
+						</RouterLink>
+						<RouterLink v-if="selectedGroup.key === 'dc' && canCreate('Delivery Challan')" class="button primary" :to="deliveryChallanRoute()">
+							<i class="pi pi-plus" /> New Delivery Challan
+						</RouterLink>
+					</div>
 				</div>
 				<div class="book-grid">
-					<button v-for="book in selectedGroup.books" :key="book.key" class="book-card" type="button" @click="openBook(selectedGroup, book)">
+					<RouterLink v-for="book in selectedGroup.books" :key="book.key" class="book-card" :to="bookRoute(selectedGroup, book)">
 						<span class="book-cover" :class="`cover-${selectedGroup.cover}`">
 							<span class="book-spine" />
 							<small>{{ selectedGroup.code }}</small>
-							<strong>{{ book.short }}</strong>
+							<strong>{{ bookText(book, "short") }}</strong>
 						</span>
-						<span class="book-meta"><strong>{{ book.label }}</strong><small>{{ book.note }}</small></span>
+						<span class="book-meta"><strong>{{ bookText(book, "label") }}</strong><small>{{ book.note }}</small></span>
 						<span class="book-open"><span>{{ countLabel(bookCounts[book.key]) }}</span><strong>Open book ›</strong></span>
-					</button>
+					</RouterLink>
 				</div>
 			</section>
 
 			<!-- Shared transaction or master list. -->
-			<section v-else-if="(page.kind === 'list' && selectedGroup && selectedBook) || (page.kind === 'master-list' && selectedMaster)" class="page">
-				<Breadcrumbs :items="listBreadcrumbs" @navigate="go" />
+			<section v-else-if="(page.kind === 'list' && selectedGroup && selectedBook) || (page.kind === 'master-list' && selectedMasterAllowed)" class="page">
+				<Breadcrumbs :items="listBreadcrumbs" />
 				<div class="page-heading">
-					<span class="book-identity" :class="listIdentityClass">{{ listIdentityCode }}</span>
+					<span v-if="page.kind !== 'master-list'" class="book-identity" :class="listIdentityClass">{{ listIdentityCode }}</span>
 					<div class="heading-copy">
 						<div class="eyebrow">{{ page.kind === 'master-list' ? 'Master records' : selectedGroup.label }}</div>
 						<h1>{{ listTitle }}</h1>
 						<p>{{ listDescription }}</p>
 					</div>
 					<div class="heading-actions">
-						<button class="button secondary" type="button" @click="go(listBackPath)">← {{ page.kind === 'master-list' ? 'Manage' : selectedGroup.label }}</button>
+						<RouterLink class="button secondary" :to="listBackPath">← {{ listBackLabel }}</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'po' && canCreate('Purchase Order')" class="button primary" :to="purchaseOrderRoute(selectedBook)">
+							<i class="pi pi-plus" /> New Purchase Order
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'grn' && canCreate('Goods Received Note')" class="button primary" :to="grnRoute(selectedBook)">
+							<i class="pi pi-plus" /> New {{ selectedBook.key === 'po-grn' ? 'PO GRN' : 'Work Order GRN' }}
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'ipd' && canCreate('Item Production Detail')" class="button primary" to="/item-production-detail/new">
+							<i class="pi pi-plus" /> New Production Detail
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'wo' && canCreate('Work Order')" class="button primary" :to="workOrderRoute(selectedBook)">
+							<i class="pi pi-plus" /> New Work Order
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'woc' && canCreate('Work Order Correction')" class="button primary" to="/work-order-correction/new">
+							<i class="pi pi-plus" /> New Work Order Correction
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'dc' && canCreate('Delivery Challan')" class="button primary" :to="deliveryChallanRoute(selectedBook)">
+							<i class="pi pi-plus" /> New Delivery Challan
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'pi' && canCreate('Purchase Invoice')" class="button primary" :to="purchaseInvoiceRoute(selectedBook)">
+							<i class="pi pi-plus" /> New {{ selectedBook.key === 'po-billing' ? 'PO Bill' : 'Job Work Bill' }}
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'se' && canCreate('Stock Entry')" class="button primary" to="/stock-entry/new">
+							<i class="pi pi-plus" /> New Stock Entry
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'list' && selectedGroup.key === 'inspection' && canCreate('Inspection Entry')" class="button primary" :to="inspectionEntryRoute()">
+							<i class="pi pi-plus" /> New GRN Inspection
+						</RouterLink>
+						<RouterLink v-if="page.kind === 'master-list' && canCreate(selectedMaster.doctype)" class="button primary" :to="masterCreateRoute()">
+							<i class="pi pi-plus" /> New {{ masterEntityLabel(selectedMaster) }}
+						</RouterLink>
 					</div>
 				</div>
 
 				<div class="toolbar">
 					<label class="search-box"><i class="pi pi-search" /><input v-model.trim="searchText" type="search" placeholder="Search the loaded records…" /></label>
+					<button
+						v-if="customizableListColumns.length"
+						class="button secondary small list-columns-button"
+						type="button"
+						:disabled="listColumnState.loading"
+						@click="showListColumnsModal = true"
+					>
+						<i class="pi pi-sliders-h" /> Columns
+					</button>
 					<div v-if="statusOptions.length > 1" class="status-filters">
 						<button v-for="status in statusOptions" :key="status" type="button" :class="{ active: activeStatus === status }" @click="activeStatus = status">{{ status }}</button>
 					</div>
@@ -109,10 +285,10 @@
 				<template v-else>
 					<div class="list-card desktop-list">
 						<table>
-							<thead><tr><th v-for="column in currentListConfig.columns" :key="column.label">{{ column.label }}</th><th /></tr></thead>
+							<thead><tr><th v-for="column in activeListColumns" :key="column.field">{{ column.label }}</th><th /></tr></thead>
 							<tbody>
-								<tr v-for="row in filteredRows" :key="row.name" tabindex="0" @click="openRow(row)" @keydown.enter="openRow(row)">
-									<td v-for="(column, index) in currentListConfig.columns" :key="column.label">
+								<tr v-for="row in filteredRows" :key="row.name" tabindex="0" @click="openRow(row, $event)" @auxclick.middle="openRow(row, $event)" @keydown.enter="openRow(row, $event)">
+									<td v-for="(column, index) in activeListColumns" :key="column.field">
 										<span v-if="column.type === 'status' || column.type === 'enabled' || column.type === 'user_enabled'" class="status" :class="statusClass(statusForColumn(row, column))">{{ statusForColumn(row, column) }}</span>
 										<span v-else :class="{ 'record-id': index === 0 }">{{ displayColumn(row, column) }}</span>
 									</td>
@@ -122,80 +298,112 @@
 						</table>
 					</div>
 					<div class="mobile-list">
-						<button v-for="row in filteredRows" :key="row.name" class="mobile-row" type="button" @click="openRow(row)">
-							<span class="mobile-row-head"><strong>{{ displayColumn(row, currentListConfig.columns[0]) }}</strong><span class="status" :class="statusClass(rowStatus(row))">{{ rowStatus(row) }}</span></span>
-							<span class="mobile-row-grid"><span v-for="column in currentListConfig.columns.slice(1, 5)" :key="column.label"><small>{{ column.label }}</small><strong>{{ displayColumn(row, column) }}</strong></span></span>
-						</button>
+						<RouterLink v-for="row in filteredRows" :key="row.name" class="mobile-row" :to="rowRoute(row)">
+							<span class="mobile-row-head"><strong>{{ displayColumn(row, activeListColumns[0]) }}</strong><span class="status" :class="statusClass(rowStatus(row))">{{ rowStatus(row) }}</span></span>
+							<span class="mobile-row-grid"><span v-for="column in activeListColumns.slice(1, 5)" :key="column.field"><small>{{ column.label }}</small><strong>{{ displayColumn(row, column) }}</strong></span></span>
+						</RouterLink>
 					</div>
 					<div v-if="listState.hasMore" class="load-more"><button class="button secondary" type="button" :disabled="listState.loading" @click="loadList(true)"><i v-if="listState.loading" class="pi pi-spin pi-spinner" /> Load more records</button></div>
 				</template>
-				<div class="view-note"><strong>Viewing phase:</strong> this screen reads live Frappe data. Create, edit, submit, approve and cancel actions will be added DocType by DocType in the next phase.</div>
+				<div v-if="page.kind === 'list' && selectedGroup.key === 'po'" class="view-note"><strong>Purchase Order workspace:</strong> create a new order here, then open any row to edit, submit or review it according to your permissions.</div>
+				<div v-else-if="page.kind === 'list' && selectedGroup.key === 'grn'" class="view-note"><strong>Goods receipt workflow:</strong> select the source document, enter only the received quantities, then save and submit.</div>
+				<div v-else-if="page.kind === 'list' && selectedGroup.key === 'ipd'" class="view-note"><strong>Production route:</strong> select the finished Item once, then build its yarn flow in process order.</div>
+				<div v-else-if="page.kind === 'list' && selectedGroup.key === 'se'" class="view-note"><strong>Stock movement:</strong> choose the purpose, source and target, then enter the item quantities before saving and submitting.</div>
+				<div v-else-if="page.kind === 'list' && selectedGroup.key === 'inspection'" class="view-note"><strong>GRN inspection:</strong> select a submitted Goods Received Note, classify each received quantity, then save and submit.</div>
+				<div v-else class="view-note"><strong>Live records:</strong> select any row to review its current information.</div>
 			</section>
 
 			<!-- Permission-aware master/access landing. -->
 			<section v-else-if="page.kind === 'manage'" class="page">
-				<Breadcrumbs :items="[{ label: 'All Books', path: '/' }, { label: 'Manage' }]" @navigate="go" />
+				<Breadcrumbs :items="[{ label: 'All Books', path: '/' }, { label: 'Manage' }]" />
 				<div class="page-heading">
 					<div class="heading-copy"><div class="eyebrow">Masters and access</div><h1>Manage</h1><p>Review the master data required by purchasing, receiving, billing and production.</p></div>
-					<button class="button secondary heading-action" type="button" @click="go('/')">← All Books</button>
+					<RouterLink class="button secondary heading-action" to="/">← All Books</RouterLink>
 				</div>
 				<div class="manage-grid">
-					<button v-for="master in visibleMasters" :key="master.key" class="manage-card" type="button" @click="go(`/manage/${master.key}`)">
-						<span class="manage-icon">{{ master.code }}</span>
+					<RouterLink v-for="master in visibleMasters" :key="master.key" class="manage-card" :to="`/manage/${master.key}`">
 						<strong>{{ master.label }}</strong>
 						<p>{{ master.description }}</p>
-						<span class="usage"><small v-for="item in master.usage" :key="item">{{ item }}</small></span>
-						<span class="manage-foot"><span>{{ countLabel(masterCounts[master.key]) }}</span><strong>View list ›</strong></span>
-					</button>
+						<span class="manage-foot"><span>{{ countLabel(masterCounts[master.key]) }}</span><strong>Manage ›</strong></span>
+					</RouterLink>
 				</div>
-				<div class="view-note"><strong>Permission rule:</strong> cards appear only when the current user can read that DocType. Users & Access is limited to Administrator/System Manager.</div>
+			</section>
+
+			<!-- Commercial rates are intentionally separate from operational masters. -->
+			<section v-else-if="page.kind === 'prices-costs'" class="page">
+				<Breadcrumbs :items="[{ label: 'All Books', path: '/' }, { label: 'Prices & Costs' }]" />
+				<div class="page-heading">
+					<div class="heading-copy"><div class="eyebrow">Commercial setup</div><h1>Prices & Costs</h1><p>Maintain purchasing prices and supplier-specific production process costs.</p></div>
+					<RouterLink class="button secondary heading-action" to="/">← All Books</RouterLink>
+				</div>
+				<div class="manage-grid">
+					<RouterLink v-for="master in visiblePricesAndCosts" :key="master.key" class="manage-card" :to="`/prices-costs/${master.key}`">
+						<strong>{{ master.label }}</strong>
+						<p>{{ master.description }}</p>
+						<span class="manage-foot"><span>{{ countLabel(masterCounts[master.key]) }}</span><strong>Manage ›</strong></span>
+					</RouterLink>
+				</div>
 			</section>
 
 			<!-- Read-only live detail shared by transactions and masters. -->
 			<section v-else-if="(page.kind === 'detail' && selectedGroup) || (page.kind === 'master-detail' && selectedMaster)" class="page">
-				<Breadcrumbs :items="detailBreadcrumbs" @navigate="go" />
+				<Breadcrumbs :items="detailBreadcrumbs" />
 				<div v-if="detailState.loading" class="loading-state"><i class="pi pi-spin pi-spinner" /><span>Loading record…</span></div>
 				<div v-else-if="detailState.error" class="error-state" role="alert"><i class="pi pi-exclamation-triangle" /><div><strong>Unable to load record</strong><span>{{ detailState.error }}</span></div><button class="button secondary small" type="button" @click="loadDetail">Retry</button></div>
 				<template v-else-if="detailState.doc">
 					<section class="detail-hero">
-						<span class="book-identity" :class="detailIdentityClass">{{ detailIdentityCode }}</span>
+						<span v-if="page.kind !== 'master-detail'" class="book-identity" :class="detailIdentityClass">{{ detailIdentityCode }}</span>
 						<div><div class="detail-id">{{ detailState.doc.name }}</div><h1>{{ detailTitle }}</h1><p>{{ detailSubtitle }}</p></div>
 						<span class="status detail-status" :class="statusClass(detailStatus)">{{ detailStatus }}</span>
 					</section>
 
 					<section v-if="detailFacts.length" class="fact-grid">
-						<div v-for="fact in detailFacts" :key="fact.field" class="fact"><span>{{ fact.label }}</span><strong>{{ fact.value }}</strong></div>
+				<div v-for="fact in detailFacts" :key="fact.field" class="fact"><span>{{ fact.label }}</span><strong>{{ fact.value }}</strong></div>
 					</section>
 
 					<div class="detail-layout">
 						<div>
 							<section v-for="section in childSections" :key="section.field" class="section-card">
 								<header><h2>{{ section.label }}</h2><span>{{ section.rows.length }} rows</span></header>
-								<div class="table-scroll"><table><thead><tr><th v-for="column in section.columns" :key="column">{{ humanize(column) }}</th></tr></thead><tbody><tr v-for="(row, index) in section.rows" :key="row.name || index"><td v-for="column in section.columns" :key="column">{{ displayDetailValue(column, row[column]) }}</td></tr></tbody></table></div>
+								<div class="table-scroll"><table><thead><tr><th v-for="column in section.columns" :key="column">{{ humanize(column) }}</th></tr></thead><tbody><tr v-for="(row, index) in section.rows" :key="row.name || index"><td v-for="column in section.columns" :key="column">{{ displayDetailValue(column, row[column], row) }}</td></tr></tbody></table></div>
 							</section>
 							<section v-if="!childSections.length" class="section-card"><header><h2>Record information</h2></header><div class="section-copy">This document has no visible child rows. Its important fields are shown above.</div></section>
 						</div>
 						<aside>
 							<section v-if="detailAddresses.length" class="section-card"><header><h2>Linked Addresses</h2><span>{{ detailAddresses.length }}</span></header><div class="address-stack"><article v-for="address in detailAddresses" :key="address.name"><strong>{{ address.address_title || address.address_type || 'Address' }}</strong><span>{{ formatAddress(address) }}</span><small v-if="address.phone"><i class="pi pi-phone" /> {{ address.phone }}</small></article></div></section>
-							<section class="section-card"><header><h2>Connected records</h2><span>{{ linkedCards.length }}</span></header><div v-if="linkedCards.length" class="linked-stack"><button v-for="card in linkedCards" :key="`${card.doctype}:${card.name}`" type="button" :disabled="!linkedRoute(card)" @click="openLinked(card)"><span>{{ acronym(card.doctype) }}</span><span><strong>{{ card.name }}</strong><small>{{ card.doctype }}</small></span><i class="pi pi-angle-right" /></button></div><div v-else class="section-copy">No connected records were returned for this document.</div></section>
-							<button class="button secondary full" type="button" @click="go(detailBackPath)">← Back to {{ detailBackLabel }}</button>
+							<section class="section-card"><header><h2>Connected records</h2><span>{{ linkedCards.length }}</span></header><div v-if="linkedCards.length" class="linked-stack"><template v-for="card in linkedCards" :key="`${card.doctype}:${card.name}`"><RouterLink v-if="linkedRoute(card)" :to="linkedRoute(card)"><span>{{ acronym(card.doctype) }}</span><span><strong>{{ card.name }}</strong><small>{{ card.doctype }}</small></span><i class="pi pi-angle-right" /></RouterLink><button v-else type="button" disabled><span>{{ acronym(card.doctype) }}</span><span><strong>{{ card.name }}</strong><small>{{ card.doctype }}</small></span><i class="pi pi-angle-right" /></button></template></div><div v-else class="section-copy">No connected records were returned for this document.</div></section>
+							<RouterLink class="button secondary full" :to="detailBackPath">← Back to {{ detailBackLabel }}</RouterLink>
 						</aside>
 					</div>
 					<div class="view-note"><strong>Live read-only view:</strong> this record and its child rows came from Frappe. Data-entry actions are intentionally not part of this phase.</div>
 				</template>
 			</section>
 
-			<section v-else class="page"><div class="empty-state"><i class="pi pi-compass" /><h2>Page not found</h2><p>Return to the digital books and choose another page.</p><button class="button primary" type="button" @click="go('/')">Go to All Books</button></div></section>
+			<section v-else class="page"><div class="empty-state"><i class="pi pi-compass" /><h2>Page not found</h2><p>Return to the digital books and choose another page.</p><RouterLink class="button primary" to="/">Go to All Books</RouterLink></div></section>
 		</main>
+
+		<ColumnCustomizerModal
+			v-if="currentListConfig?.doctype"
+			v-model:visible="showListColumnsModal"
+			:doctype="currentListConfig.doctype"
+			:columns="customizableListColumns"
+			@saved="onListColumnsSaved"
+		/>
 	</div>
 </template>
 
 <script setup>
 import { computed, defineComponent, h, reactive, ref, watch } from "vue"
-import { useRoute, useRouter } from "vue-router"
-import { getList, getListView, getCount, getDoc, getLinkedDocs, getAddressList } from "@/api/client"
+import { RouterLink, useRoute, useRouter } from "vue-router"
+import { callMethod, getList, getListView, getCount, getDoc, getLinkedDocs, getAddressList, getMeta } from "@/api/client"
 import { logout } from "@/api/auth"
 import { usePermissions } from "@/composables/usePermissions"
+import { useDisplayLanguage } from "@/composables/useDisplayLanguage"
+import { useTerminology } from "@/composables/useTerminology"
+import { useLinkTitles, LOCALIZED_NAME_FIELDS } from "@/composables/useLinkTitles"
+import ColumnCustomizerModal from "@/components/ColumnCustomizerModal.vue"
+import DocDetail from "@/views/dynamic/DocDetail.vue"
+import StockBalanceView from "./StockBalanceView.vue"
 import {
 	TRANSACTION_GROUPS,
 	MASTER_GROUPS,
@@ -209,18 +417,20 @@ import {
 const PAGE_SIZE = 25
 const route = useRoute()
 const router = useRouter()
-const { canRead, isAdmin, hasRole } = usePermissions()
+const { canRead, canCreate, isAdmin, hasRole } = usePermissions()
+const { isTamil, setLanguage } = useDisplayLanguage()
+const { term } = useTerminology()
+const linkTitles = useLinkTitles()
 
 const Breadcrumbs = defineComponent({
 	props: { items: { type: Array, default: () => [] } },
-	emits: ["navigate"],
-	setup(props, { emit }) {
+	setup(props) {
 		return () => h("nav", { class: "breadcrumbs", "aria-label": "Breadcrumb" },
 			props.items.flatMap((item, index) => {
 				const nodes = []
 				if (index) nodes.push(h("span", { class: "breadcrumb-separator" }, "›"))
 				nodes.push(item.path
-					? h("button", { type: "button", onClick: () => emit("navigate", item.path) }, item.label)
+					? h(RouterLink, { to: item.path }, () => item.label)
 					: h("span", item.label))
 				return nodes
 			})
@@ -231,11 +441,39 @@ const Breadcrumbs = defineComponent({
 const page = computed(() => {
 	const parts = route.path.split("/").filter(Boolean).map(decodeURIComponent)
 	if (!parts.length || parts[0] === "home") return { kind: "home" }
-	if (parts[0] === "group" && parts[1]) return { kind: "group", groupKey: parts[1] }
+	if (parts[0] === "stock") return { kind: "stock-note" }
+	if (parts[0] === "purchase-order" && parts[1]) return { kind: "purchase-order-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "purchase-order") return { kind: "group", groupKey: "po" }
+	if (parts[0] === "goods-received-note" && parts[1]) return { kind: "grn-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "goods-received-note") return { kind: "group", groupKey: "grn" }
+	if (parts[0] === "delivery-challan" && parts[1]) return { kind: "dc-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "delivery-challan") return { kind: "list", groupKey: "dc", bookKey: "delivery-challans" }
+	if (parts[0] === "purchase-invoice" && parts[1]) return { kind: "pi-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "purchase-invoice") return { kind: "group", groupKey: "pi" }
+	if (parts[0] === "stock-entry" && parts[1]) return { kind: "stock-entry-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "stock-entry") return { kind: "list", groupKey: "se", bookKey: "stock-entries" }
+	if (parts[0] === "inspection-entry" && parts[1]) return { kind: "inspection-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "inspection-entry") return { kind: "list", groupKey: "inspection", bookKey: "grn-inspections" }
+	if (parts[0] === "item-production-detail" && parts[1]) return { kind: "ipd-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "item-production-detail") return { kind: "list", groupKey: "ipd", bookKey: "production-details" }
+	if (parts[0] === "work-order" && parts[1]) return { kind: "detail", groupKey: "wo", name: parts.slice(1).join("/") }
+	if (parts[0] === "work-order") return { kind: "group", groupKey: "wo" }
+	if (parts[0] === "work-order-correction" && parts[1]) return { kind: "woc-document", id: parts.slice(1).join("/") }
+	if (parts[0] === "work-order-correction") return { kind: "list", groupKey: "woc", bookKey: "work-order-corrections" }
+	const routeMaster = MASTER_GROUPS.find((master) => master.route === parts[0])
+	if (routeMaster && parts[1]) return { kind: "master-detail", masterKey: routeMaster.key, name: parts.slice(1).join("/") }
+	if (routeMaster) return { kind: "master-list", masterKey: routeMaster.key }
+	if (parts[0] === "group" && parts[1]) {
+		const group = getTransactionGroup(parts[1])
+		if (group?.directList) return { kind: "list", groupKey: group.key, bookKey: group.books[0]?.key }
+		return { kind: "group", groupKey: parts[1] }
+	}
 	if (parts[0] === "list" && parts[1] && parts[2]) return { kind: "list", groupKey: parts[1], bookKey: parts[2] }
 	if (parts[0] === "detail" && parts[1] && parts[2]) return { kind: "detail", groupKey: parts[1], name: parts.slice(2).join("/") }
 	if (parts[0] === "manage" && parts[1]) return { kind: "master-list", masterKey: parts[1] }
 	if (parts[0] === "manage") return { kind: "manage" }
+	if (parts[0] === "prices-costs" && parts[1]) return { kind: "master-list", masterKey: parts[1] }
+	if (parts[0] === "prices-costs") return { kind: "prices-costs" }
 	if (parts[0] === "master" && parts[1] && parts[2]) return { kind: "master-detail", masterKey: parts[1], name: parts.slice(2).join("/") }
 	return { kind: "not-found" }
 })
@@ -244,38 +482,185 @@ const selectedGroup = computed(() => getTransactionGroup(page.value.groupKey))
 const selectedBook = computed(() => getBook(page.value.groupKey, page.value.bookKey))
 const selectedMaster = computed(() => getMasterGroup(page.value.masterKey))
 const visibleGroups = computed(() => TRANSACTION_GROUPS.filter((group) => canRead(group.doctype)))
-const visibleMasters = computed(() => MASTER_GROUPS.filter((master) =>
+const visibleMasterRecords = computed(() => MASTER_GROUPS.filter((master) =>
 	canRead(master.doctype) && (!master.adminOnly || isAdmin.value || hasRole("System Manager"))
 ))
+const visibleMasters = computed(() => visibleMasterRecords.value.filter((master) => master.section !== "prices-costs"))
+const visiblePricesAndCosts = computed(() => visibleMasterRecords.value.filter((master) => master.section === "prices-costs"))
+const selectedMasterAllowed = computed(() => {
+	const master = selectedMaster.value
+	return !!master && visibleMasterRecords.value.some((allowed) => allowed.key === master.key)
+})
 
 const groupCounts = reactive({})
 const bookCounts = reactive({})
 const masterCounts = reactive({})
 const listState = reactive({ rows: [], loading: false, error: "", page: 0, total: 0, hasMore: false })
+const listColumnState = reactive({ doctype: "", meta: null, saved: null, loading: false })
 const detailState = reactive({ doc: null, linked: {}, loading: false, error: "" })
 const detailAddresses = ref([])
 const searchText = ref("")
 const activeStatus = ref("All")
+const showListColumnsModal = ref(false)
 let loadSequence = 0
+let columnLoadSequence = 0
 
 const bootUser = window.frappe?.boot?.user || {}
 const userName = computed(() => bootUser.full_name || bootUser.name || "User")
 const userInitials = computed(() => userName.value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U")
 
 const currentListConfig = computed(() => page.value.kind === "master-list" ? selectedMaster.value : selectedGroup.value)
-const listTitle = computed(() => page.value.kind === "master-list" ? selectedMaster.value?.label || "Records" : selectedBook.value?.label || "Records")
-const listDescription = computed(() => page.value.kind === "master-list" ? selectedMaster.value?.description || "" : `${selectedBook.value?.note || ""} Select any row to review the complete live document.`)
+const NON_LISTABLE_FIELDS = new Set([
+	"Table", "Table MultiSelect", "Text Editor", "Long Text", "Small Text", "Text",
+	"HTML", "HTML Editor", "Code", "Markdown Editor", "Section Break", "Column Break",
+	"Tab Break", "Fold", "Heading", "Button", "Image", "Geolocation", "Signature", "Password",
+])
+
+function columnType(field) {
+	if (!field) return undefined
+	if (field.fieldname === "docstatus" || ["status", "workflow_state", "approval_status", "open_status"].includes(field.fieldname)) return "status"
+	if (field.fieldname === "disabled") return "enabled"
+	if (field.fieldname === "enabled") return "user_enabled"
+	if (field.fieldtype === "Date") return "date"
+	if (field.fieldtype === "Datetime") return "datetime"
+	if (field.fieldtype === "Currency") return "currency"
+	if (["Int", "Long Int", "Float", "Percent"].includes(field.fieldtype)) return "quantity"
+	if (field.fieldtype === "Check") return "check"
+	return undefined
+}
+
+const configuredListColumnMap = computed(() => new Map(
+	(currentListConfig.value?.columns || []).map((column) => [column.field, column]),
+))
+const primaryListColumn = computed(() => currentListConfig.value?.columns?.[0] || {
+	field: "name",
+	label: "Name",
+	type: "id",
+})
+const eligibleListColumns = computed(() => {
+	const fields = listColumnState.meta?.fields || []
+	return fields
+		.filter((field) => field.fieldname && !field.hidden && !NON_LISTABLE_FIELDS.has(field.fieldtype))
+		.map((field) => {
+			const configured = configuredListColumnMap.value.get(field.fieldname) || {}
+			return {
+				...configured,
+				field: field.fieldname,
+				label: configured.label || field.label || humanize(field.fieldname),
+				fieldtype: field.fieldtype,
+				in_list_view: !!field.in_list_view,
+				type: configured.type || columnType(field),
+				linkTarget: configured.linkTarget || (field.fieldtype === "Link" ? field.options || "" : ""),
+			}
+		})
+})
+const activeListColumns = computed(() => {
+	const primary = primaryListColumn.value
+	const byField = new Map(eligibleListColumns.value.map((column) => [column.field, column]))
+	const saved = listColumnState.saved
+	if (Array.isArray(saved) && saved.length) {
+		return [primary, ...saved
+			.filter((column) => column.enabled && column.fieldname !== primary.field)
+			.map((column) => byField.get(column.fieldname))
+			.filter(Boolean)]
+	}
+	const configured = currentListConfig.value?.columns || []
+	if (configured.length) return configured
+	return [primary, ...eligibleListColumns.value.filter((column) => column.in_list_view && column.field !== primary.field)]
+})
+const customizableListColumns = computed(() => {
+	const primaryField = primaryListColumn.value.field
+	const eligible = eligibleListColumns.value.filter((column) => column.field !== primaryField)
+	const saved = listColumnState.saved
+	if (Array.isArray(saved) && saved.length) {
+		const byField = new Map(eligible.map((column) => [column.field, column]))
+		const ordered = []
+		const seen = new Set()
+		for (const savedColumn of saved) {
+			const column = byField.get(savedColumn.fieldname)
+			if (!column) continue
+			ordered.push({ fieldname: column.field, label: column.label, fieldtype: column.fieldtype, enabled: !!savedColumn.enabled })
+			seen.add(column.field)
+		}
+		for (const column of eligible) {
+			if (!seen.has(column.field)) ordered.push({ fieldname: column.field, label: column.label, fieldtype: column.fieldtype, enabled: false })
+		}
+		return ordered
+	}
+	const defaultFields = new Set((currentListConfig.value?.columns || []).map((column) => column.field))
+	return eligible.map((column) => ({
+		fieldname: column.field,
+		label: column.label,
+		fieldtype: column.fieldtype,
+		enabled: defaultFields.size ? defaultFields.has(column.field) : !!column.in_list_view,
+	}))
+})
+const metaListFieldnames = computed(() => new Set(
+	(listColumnState.meta?.fields || []).map((field) => field.fieldname).filter(Boolean),
+))
+const listFetchFields = computed(() => {
+	const fields = new Set(currentListConfig.value?.fields || ["name"])
+	fields.add("name")
+	for (const column of activeListColumns.value) {
+		// A few approved master defaults (Primary Address, Phone, Warehouse Type)
+		// are derived after the query. Never send those presentation-only keys to
+		// frappe.get_list; saved User Listview choices themselves always come from
+		// real meta fields.
+		if (column.field === "name" || metaListFieldnames.value.has(column.field)) fields.add(column.field)
+		if (metaListFieldnames.value.has(column.fallback)) fields.add(column.fallback)
+		if (metaListFieldnames.value.has(column.linkValue)) fields.add(column.linkValue)
+	}
+	return [...fields]
+})
+const listTitle = computed(() => {
+	if (page.value.kind === "master-list") return selectedMaster.value?.label || "Records"
+	if (selectedGroup.value?.directList) return selectedGroup.value.label
+	return selectedBook.value ? bookText(selectedBook.value, "label") : "Records"
+})
+const listDescription = computed(() => {
+	if (page.value.kind === "master-list") return selectedMaster.value?.description || ""
+	const description = selectedGroup.value?.directList ? selectedGroup.value.description : selectedBook.value?.note
+	return `${description || ""} Select any row to review the complete live document.`
+})
 const listIdentityCode = computed(() => page.value.kind === "master-list" ? selectedMaster.value?.code : selectedGroup.value?.code)
 const listIdentityClass = computed(() => page.value.kind === "master-list" ? "master-identity" : `cover-${selectedGroup.value?.cover}`)
-const listBackPath = computed(() => page.value.kind === "master-list" ? "/manage" : `/group/${selectedGroup.value?.key}`)
+const listBackPath = computed(() => {
+	if (page.value.kind === "master-list") return selectedMaster.value?.section === "prices-costs" ? "/prices-costs" : "/manage"
+	return selectedGroup.value?.directList ? "/" : `/group/${selectedGroup.value?.key}`
+})
+const listBackLabel = computed(() => {
+	if (page.value.kind === "master-list") return selectedMaster.value?.section === "prices-costs" ? "Prices & Costs" : "Manage"
+	return selectedGroup.value?.directList ? "All Books" : selectedGroup.value?.label
+})
 const listBreadcrumbs = computed(() => page.value.kind === "master-list"
-	? [{ label: "All Books", path: "/" }, { label: "Manage", path: "/manage" }, { label: selectedMaster.value?.label || "Records" }]
-	: [{ label: "All Books", path: "/" }, { label: selectedGroup.value?.label || "Group", path: `/group/${selectedGroup.value?.key}` }, { label: selectedBook.value?.label || "Book" }]
+	? [{ label: "All Books", path: "/" }, { label: selectedMaster.value?.section === "prices-costs" ? "Prices & Costs" : "Manage", path: selectedMaster.value?.section === "prices-costs" ? "/prices-costs" : "/manage" }, { label: selectedMaster.value?.label || "Records" }]
+	: selectedGroup.value?.directList
+		? [{ label: "All Books", path: "/" }, { label: selectedGroup.value?.label || "Records" }]
+		: [{ label: "All Books", path: "/" }, { label: selectedGroup.value?.label || "Group", path: `/group/${selectedGroup.value?.key}` }, { label: selectedBook.value ? bookText(selectedBook.value, "label") : "Book" }]
 )
+
+function bookText(book, field) {
+	if (!book) return ""
+	return term(book.termKeys?.[field], book[field] || "")
+}
 
 const pageTitle = computed(() => {
 	if (page.value.kind === "home") return "All Books"
+	if (page.value.kind === "stock-note") return "Stock Balance"
 	if (page.value.kind === "manage") return "Manage"
+	if (page.value.kind === "prices-costs") return "Prices & Costs"
+	if (page.value.kind === "purchase-order-document") return page.value.id === "new" ? "New Purchase Order" : page.value.id
+	if (page.value.kind === "grn-document") return page.value.id === "new" ? "New Goods Received Note" : page.value.id
+	if (page.value.kind === "pi-document") return page.value.id === "new" ? "New Supplier Bill" : page.value.id
+	if (page.value.kind === "stock-entry-document") return page.value.id === "new" ? "New Stock Entry" : page.value.id
+	if (page.value.kind === "inspection-document") return page.value.id === "new" ? "New GRN Inspection" : page.value.id
+	if (page.value.kind === "ipd-document") return page.value.id === "new" ? "New Item Production Detail" : page.value.id
+	if (page.value.kind === "detail" && page.value.groupKey === "wo") return page.value.name === "new" ? "New Work Order" : page.value.name
+	if (page.value.kind === "woc-document") return page.value.id === "new" ? "New Work Order Correction" : page.value.id
+	if (page.value.kind === "master-detail" && selectedMasterAllowed.value) {
+		if (page.value.name === "new") return `New ${masterEntityLabel(selectedMaster.value)}`
+		return linkTitles.titleFor(selectedMaster.value?.doctype, page.value.name) || page.value.name
+	}
 	if (page.value.kind === "group") return selectedGroup.value?.label || "Books"
 	if (page.value.kind === "list" || page.value.kind === "master-list") return listTitle.value
 	if (page.value.kind === "detail" || page.value.kind === "master-detail") return detailState.doc?.name || "Record"
@@ -304,20 +689,33 @@ const detailIdentityCode = computed(() => detailConfig.value?.code || "DOC")
 const detailIdentityClass = computed(() => page.value.kind === "master-detail" ? "master-identity" : `cover-${selectedGroup.value?.cover}`)
 const detailTitle = computed(() => {
 	const doc = detailState.doc || {}
-	if (["wo", "ipd", "dc", "grn"].includes(selectedGroup.value?.key) && doc.item) return doc.item
+	const masterDoctype = page.value.kind === "master-detail" ? selectedMaster.value?.doctype : ""
+	const masterFields = LOCALIZED_NAME_FIELDS[masterDoctype]
+	if (masterFields && doc.name) {
+		return linkTitles.linkParts(masterDoctype, doc.name, doc[masterFields.english], doc[masterFields.tamil]).primary
+	}
+	if (["wo", "ipd", "dc", "grn"].includes(selectedGroup.value?.key) && doc.item) {
+		return linkTitles.titleFor("Item", doc.item) || doc.item
+	}
+	if (doc.supplier) return linkTitles.linkParts("Supplier", doc.supplier, doc.supplier_name).primary
 	return doc.supplier_name || doc.name1 || doc.full_name || doc.agent_name || doc.item || doc.supplier || doc.name
 })
 const detailSubtitle = computed(() => {
 	const doc = detailState.doc || {}
-	if (doc.process_name) return `${doc.process_name}${doc.supplier ? ` · ${doc.supplier}` : ""}`
-	if (doc.supplier && doc.supplier !== detailTitle.value) return doc.supplier
+	const supplier = doc.supplier ? (linkTitles.titleFor("Supplier", doc.supplier) || doc.supplier) : ""
+	if (doc.process_name) return `${doc.process_name}${supplier ? ` · ${supplier}` : ""}`
+	if (supplier && supplier !== detailTitle.value) return supplier
 	return detailConfig.value?.doctype || "Document"
 })
 const detailBackPath = computed(() => page.value.kind === "master-detail"
 	? `/manage/${selectedMaster.value?.key}`
 	: `/list/${selectedGroup.value?.key}/${route.query.book || selectedGroup.value?.books[0]?.key}`
 )
-const detailBackLabel = computed(() => page.value.kind === "master-detail" ? selectedMaster.value?.label : (getBook(selectedGroup.value?.key, route.query.book)?.label || selectedGroup.value?.label))
+const detailBackLabel = computed(() => {
+	if (page.value.kind === "master-detail") return selectedMaster.value?.label
+	const book = getBook(selectedGroup.value?.key, route.query.book)
+	return book ? bookText(book, "label") : selectedGroup.value?.label
+})
 const detailBreadcrumbs = computed(() => page.value.kind === "master-detail"
 	? [{ label: "All Books", path: "/" }, { label: "Manage", path: "/manage" }, { label: selectedMaster.value?.label || "Master", path: `/manage/${selectedMaster.value?.key}` }, { label: page.value.name }]
 	: [{ label: "All Books", path: "/" }, { label: selectedGroup.value?.label || "Group", path: `/group/${selectedGroup.value?.key}` }, { label: detailBackLabel.value, path: detailBackPath.value }, { label: page.value.name }]
@@ -329,7 +727,7 @@ const detailFacts = computed(() => {
 	return preferred
 		.filter((field) => field !== "name" && doc[field] !== undefined && doc[field] !== null && doc[field] !== "" && !Array.isArray(doc[field]) && typeof doc[field] !== "object")
 		.slice(0, 16)
-		.map((field) => ({ field, label: humanize(field), value: displayDetailValue(field, doc[field]) }))
+		.map((field) => ({ field, label: humanize(field), value: displayDetailValue(field, doc[field], doc) }))
 })
 
 const childSections = computed(() => {
@@ -360,24 +758,149 @@ const INTERNAL_FIELDS = new Set([
 watch(() => route.fullPath, async () => {
 	searchText.value = ""
 	activeStatus.value = "All"
+	showListColumnsModal.value = false
 	if (page.value.kind === "home") await loadHomeCounts()
-	else if (page.value.kind === "manage") await loadMasterCounts()
+	else if (page.value.kind === "manage" || page.value.kind === "prices-costs") await loadMasterCounts()
 	else if (page.value.kind === "group") await loadBookCounts()
 	else if (page.value.kind === "list" || page.value.kind === "master-list") await loadList(false)
+	else if (page.value.kind === "detail" && page.value.groupKey === "wo") {
+		// DocDetail owns Work Order load/create state.
+		detailState.doc = null
+		detailState.error = ""
+	}
+	else if (page.value.kind === "master-detail" && selectedMasterAllowed.value) {
+		// DocDetail owns every permitted master load/create/edit state.
+		detailState.doc = null
+		detailState.error = ""
+	}
 	else if (page.value.kind === "detail" || page.value.kind === "master-detail") await loadDetail()
 }, { immediate: true })
 
-function go(path) {
-	router.push(path)
+function groupRoute(group) {
+	if (group.directList && group.books[0]) {
+		return `/list/${group.key}/${group.books[0].key}`
+	}
+	return `/group/${group.key}`
 }
 
-function openBook(group, book) {
-	go(`/list/${group.key}/${book.key}`)
+function bookRoute(group, book) {
+	return `/list/${group.key}/${book.key}`
 }
 
-function openRow(row) {
-	if (page.value.kind === "master-list") go(`/master/${selectedMaster.value.key}/${encodeURIComponent(row.name)}`)
-	else router.push({ path: `/detail/${selectedGroup.value.key}/${encodeURIComponent(row.name)}`, query: { book: selectedBook.value.key } })
+function purchaseOrderRoute(book = null) {
+	const query = {}
+	if (book?.key) query.book = book.key
+	if (book?.key === "karigan-order") query.mgk_is_karigan_order = 1
+	if (book?.key === "salavai-cone-order") query.mgk_is_salavai_cone_order = 1
+	if (book?.key === "other-orders") {
+		query.mgk_is_karigan_order = 0
+		query.mgk_is_salavai_cone_order = 0
+	}
+	return { path: "/purchase-order/new", query }
+}
+
+function grnRoute(book) {
+	const against = book?.key === "po-grn" ? "Purchase Order" : "Work Order"
+	return {
+		path: "/goods-received-note/new",
+		query: { book: book?.key || "", against },
+	}
+}
+
+function deliveryChallanRoute(book = null) {
+	return {
+		path: "/delivery-challan/new",
+		query: book?.key ? { book: book.key } : {},
+	}
+}
+
+function purchaseInvoiceRoute(book) {
+	const against = book?.key === "job-work-billing" ? "Work Order" : "Purchase Order"
+	return {
+		path: "/purchase-invoice/new",
+		query: { book: book?.key || "", against },
+	}
+}
+
+function inspectionEntryRoute() {
+	return {
+		path: "/inspection-entry/new",
+		query: { against: "Goods Received Note" },
+	}
+}
+
+function workOrderRoute(book = null) {
+	const processName = book?.key === "dyeing"
+		? "Dyeing"
+		: book?.key === "doubling"
+			? "Doubling"
+			: ""
+	return {
+		path: "/work-order/new",
+		query: processName ? { process_name: processName, book: book.key } : {},
+	}
+}
+
+function masterCreateRoute() {
+	if (!selectedMasterAllowed.value || !canCreate(selectedMaster.value.doctype)) return "/"
+	return `/${selectedMaster.value.route}/new`
+}
+
+function masterEntityLabel(master) {
+	return ({
+		items: "Item",
+		suppliers: "Supplier",
+		agents: "MGK Agent",
+		processes: "Process",
+		"received-types": "Received Type",
+		warehouses: "Warehouse",
+		"item-prices": "Item Price",
+		"process-costs": "Process Cost",
+		users: "User",
+	})[master?.key] || master?.label || "Record"
+}
+
+function rowRoute(row) {
+	if (page.value.kind === "master-list" && selectedMasterAllowed.value) return `/${selectedMaster.value.route}/${encodeURIComponent(row.name)}`
+	if (selectedGroup.value?.key === "po") return { path: `/purchase-order/${encodeURIComponent(row.name)}`, query: { book: selectedBook.value.key } }
+	if (selectedGroup.value?.key === "grn") return { path: `/goods-received-note/${encodeURIComponent(row.name)}`, query: { book: selectedBook.value.key } }
+	if (selectedGroup.value?.key === "dc") return { path: `/delivery-challan/${encodeURIComponent(row.name)}`, query: { book: selectedBook.value.key } }
+	if (selectedGroup.value?.key === "pi") return { path: `/purchase-invoice/${encodeURIComponent(row.name)}`, query: { book: selectedBook.value.key } }
+	if (selectedGroup.value?.key === "se") return `/stock-entry/${encodeURIComponent(row.name)}`
+	if (selectedGroup.value?.key === "inspection") return `/inspection-entry/${encodeURIComponent(row.name)}`
+	if (selectedGroup.value?.key === "ipd") return `/item-production-detail/${encodeURIComponent(row.name)}`
+	if (selectedGroup.value?.key === "wo") return { path: `/work-order/${encodeURIComponent(row.name)}`, query: { book: selectedBook.value.key } }
+	if (selectedGroup.value?.key === "woc") return `/work-order-correction/${encodeURIComponent(row.name)}`
+	return { path: `/detail/${selectedGroup.value.key}/${encodeURIComponent(row.name)}`, query: { book: selectedBook.value.key } }
+}
+
+function openRow(row, event) {
+	const target = rowRoute(row)
+	if (event?.button === 1 || event?.ctrlKey || event?.metaKey) {
+		event.preventDefault()
+		window.open(router.resolve(target).href, "_blank", "noopener")
+		return
+	}
+	router.push(target)
+}
+
+function resolveExperienceDocumentPath(doctype, name) {
+	if (!doctype || !name) return ""
+	const encodedName = encodeURIComponent(name)
+	const master = MASTER_GROUPS.find((item) => item.doctype === doctype)
+	if (master && canRead(master.doctype)) return `/${master.route}/${encodedName}`
+	const group = TRANSACTION_GROUPS.find((item) => item.doctype === doctype)
+	if (!group || !canRead(group.doctype)) return ""
+	if (group.key === "po") return `/purchase-order/${encodedName}`
+	if (group.key === "grn") return `/goods-received-note/${encodedName}`
+	if (group.key === "dc") return `/delivery-challan/${encodedName}`
+	if (group.key === "pi") return `/purchase-invoice/${encodedName}`
+	if (group.key === "se") return `/stock-entry/${encodedName}`
+	if (group.key === "inspection") return `/inspection-entry/${encodedName}`
+	if (group.key === "ipd") return `/item-production-detail/${encodedName}`
+	if (group.key === "wo") return `/work-order/${encodedName}`
+	if (group.key === "woc") return `/work-order-correction/${encodedName}`
+	return `/detail/${group.key}/${encodedName}`
 }
 
 async function signOut() {
@@ -392,7 +915,7 @@ async function loadHomeCounts() {
 }
 
 async function loadMasterCounts() {
-	await Promise.all(visibleMasters.value.map(async (master) => {
+	await Promise.all(visibleMasterRecords.value.map(async (master) => {
 		try { masterCounts[master.key] = await getCount(master.doctype, {}) }
 		catch { masterCounts[master.key] = null }
 	}))
@@ -415,7 +938,7 @@ async function loadBookCounts() {
 
 async function loadList(append = false) {
 	const config = currentListConfig.value
-	if (!config) return
+	if (!config || (page.value.kind === "master-list" && !selectedMasterAllowed.value)) return
 	const sequence = ++loadSequence
 	if (!append) {
 		listState.rows = []
@@ -425,11 +948,15 @@ async function loadList(append = false) {
 	}
 	listState.loading = true
 	listState.error = ""
+	if (!append) {
+		await loadListColumnPreferences(config.doctype)
+		if (sequence !== loadSequence) return
+	}
 	const filters = page.value.kind === "list" ? (selectedBook.value?.filters || []) : []
 	const needsDistinct = hasChildTableFilters(config.doctype, filters)
 	try {
 		const params = {
-			fields: config.fields,
+			fields: listFetchFields.value,
 			filters: filters.length ? filters : {},
 			order_by: "modified desc",
 			limit_start: listState.page * PAGE_SIZE,
@@ -454,6 +981,55 @@ async function loadList(append = false) {
 	} finally {
 		if (sequence === loadSequence) listState.loading = false
 	}
+}
+
+async function getUserListColumns(doctype) {
+	try {
+		const rows = await callMethod(
+			"yrp.yrp.doctype.user_listview.user_listview.get_user_listview",
+			{ doctype_name: doctype },
+		)
+		return Array.isArray(rows) ? rows : null
+	} catch {
+		return null
+	}
+}
+
+async function loadListColumnPreferences(doctype, force = false) {
+	if (!doctype) return
+	if (!force && listColumnState.doctype === doctype && listColumnState.meta) return
+	const sequence = ++columnLoadSequence
+	if (listColumnState.doctype !== doctype) {
+		listColumnState.doctype = doctype
+		listColumnState.meta = null
+		listColumnState.saved = null
+	}
+	listColumnState.loading = true
+	try {
+		const [metaBundle, saved] = await Promise.all([
+			getMeta(doctype),
+			getUserListColumns(doctype),
+		])
+		if (sequence !== columnLoadSequence || currentListConfig.value?.doctype !== doctype) return
+		listColumnState.doctype = doctype
+		listColumnState.meta = Array.isArray(metaBundle) ? metaBundle[0] || null : metaBundle || null
+		listColumnState.saved = saved
+	} catch {
+		if (sequence !== columnLoadSequence || currentListConfig.value?.doctype !== doctype) return
+		listColumnState.doctype = doctype
+		listColumnState.meta = null
+		listColumnState.saved = null
+	} finally {
+		if (sequence === columnLoadSequence) listColumnState.loading = false
+	}
+}
+
+async function onListColumnsSaved() {
+	showListColumnsModal.value = false
+	const doctype = currentListConfig.value?.doctype
+	if (!doctype) return
+	await loadListColumnPreferences(doctype, true)
+	await loadList(false)
 }
 
 async function enrichSuppliers(rows) {
@@ -506,6 +1082,15 @@ function displayColumn(row, column) {
 	if (column.type === "date" || column.type === "datetime") return formatDate(value, column.type === "datetime")
 	if (column.type === "currency") return formatCurrency(value)
 	if (column.type === "quantity") return formatQuantity(value)
+	if (column.type === "check") return Number(value) ? "Yes" : "No"
+	if (column.localizedDoctype) {
+		const canonical = row?.[column.linkValue || "name"] || row?.name
+		return linkTitles.linkParts(column.localizedDoctype, canonical, value, row?.mgk_tamil_name).primary
+	}
+	if (column.linkTarget && value) {
+		const canonical = row?.[column.linkValue || column.field] || value
+		return linkTitles.linkParts(column.linkTarget, canonical, value).primary
+	}
 	return value === undefined || value === null || value === "" ? "—" : String(value)
 }
 
@@ -556,8 +1141,23 @@ function formatQuantity(value) {
 	return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 }).format(Number(value || 0))
 }
 
-function displayDetailValue(field, value) {
+function localizedDetailValue(field, value, row = {}) {
+	if (!value) return ""
+	const supplierFields = new Set(["supplier", "billing_supplier", "from_supplier", "to_supplier", "from_location", "delivery_location", "mgk_handling_supplier"])
+	const warehouseFields = new Set(["warehouse", "from_warehouse", "to_warehouse", "delivery_warehouse"])
+	const itemFields = new Set(["item", "item_name", "parent_item", "yarn_item", "input_item", "output_item", "bom_item"])
+	if (supplierFields.has(field)) return linkTitles.titleFor("Supplier", value) || value
+	if (warehouseFields.has(field)) return linkTitles.titleFor("Warehouse", value) || value
+	if (itemFields.has(field)) return linkTitles.titleFor("Item", value) || value
+	if (field === "mgk_agent") return linkTitles.titleFor("MGK Agent", value) || value
+	if (field === "supplier_name" && row.supplier) return linkTitles.linkParts("Supplier", row.supplier, value).primary
+	return ""
+}
+
+function displayDetailValue(field, value, row = {}) {
 	if (value === undefined || value === null || value === "") return "—"
+	const localized = localizedDetailValue(field, value, row)
+	if (localized) return localized
 	if (typeof value === "boolean") return value ? "Yes" : "No"
 	if (/date|modified|creation|last_active/.test(field)) return formatDate(value, /time|modified|creation|last_active/.test(field))
 	if (/qty|quantity|percentage|percent/.test(field) && typeof value === "number") return formatQuantity(value)
@@ -598,10 +1198,6 @@ function linkedRoute(card) {
 	return ""
 }
 
-function openLinked(card) {
-	const path = linkedRoute(card)
-	if (path) go(path)
-}
 </script>
 
 <style scoped>
@@ -640,7 +1236,7 @@ button:focus-visible, input:focus-visible, [tabindex="0"]:focus-visible { outlin
 	backdrop-filter: blur(12px);
 }
 
-.brand { display: flex; align-items: center; gap: 12px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.brand { display: flex; align-items: center; gap: 12px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; text-decoration: none; }
 .brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px 16px 16px 10px; background: #14233c; color: #fff; box-shadow: inset 6px 0 rgba(0,0,0,.16); font-size: var(--type-label); font-weight: 900; letter-spacing: .08em; }
 .brand-copy strong, .brand-copy small { display: block; }
 .brand-copy strong { font-size: 1rem; line-height: 1.25; }
@@ -649,6 +1245,10 @@ button:focus-visible, input:focus-visible, [tabindex="0"]:focus-visible { outlin
 .topbar-context { display: flex; gap: 5px; min-width: 0; color: var(--color-muted); font-size: var(--type-body); }
 .topbar-context strong { overflow: hidden; color: #1d2739; text-overflow: ellipsis; white-space: nowrap; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.language-toggle { display: inline-flex; align-items: center; padding: 3px; border: 1px solid #d9d3c9; border-radius: 10px; background: #f4f1ec; }
+.language-toggle button { min-width: 62px; padding: 6px 10px; border: 0; border-radius: 7px; background: transparent; color: #667085; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.language-toggle button.active { background: #fff; color: #132541; box-shadow: 0 1px 3px rgb(20 37 63 / 14%); }
+.language-toggle button:focus-visible { outline: 2px solid #0f9184; outline-offset: 2px; }
 .live-chip { padding: 6px 10px; border-radius: 999px; background: #e6f5ef; color: #14775d; font-size: var(--type-label); font-weight: 800; letter-spacing: .04em; }
 .avatar { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #14233c; color: #fff; font-size: var(--type-label); font-weight: 800; }
 .icon-button { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #e5e0d7; border-radius: 10px; background: #fff; color: #5f6878; }
@@ -656,6 +1256,7 @@ button:focus-visible, input:focus-visible, [tabindex="0"]:focus-visible { outlin
 
 .ops-main { min-height: calc(100vh - 66px); }
 .page { width: min(1440px, 100%); margin: 0 auto; padding: 30px 32px 64px; }
+.po-document-page { width: min(1584px, 100%); }
 .eyebrow { margin-bottom: 8px; color: #bf4a36; font-size: var(--type-label); font-weight: 800; line-height: 1.35; letter-spacing: .1em; text-transform: uppercase; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 8px; font-size: var(--type-page-title); line-height: 1.25; letter-spacing: -.02em; }
@@ -668,25 +1269,30 @@ p { font-size: var(--type-body); line-height: 1.5; }
 .heading-action, .heading-actions { margin-left: auto; }
 .heading-actions { display: flex; gap: 8px; }
 
-.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid transparent; border-radius: 10px; font-size: var(--type-body); font-weight: 700; line-height: 1.4; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid transparent; border-radius: 10px; font-size: var(--type-body); font-weight: 700; line-height: 1.4; text-decoration: none; }
 .button.primary { background: #14233c; color: #fff; }
 .button.secondary { border-color: #ded9cf; background: #fff; color: #172033; }
 .button.secondary:hover { background: #f9f8f5; border-color: #c8c1b5; }
 .button.small { min-height: 36px; padding: 7px 12px; font-size: var(--type-label); }
 .button.full { width: 100%; }
 .button:disabled { opacity: .55; cursor: wait; }
+.home-heading-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
 .group-grid, .book-grid, .manage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.group-card, .book-card, .manage-card { min-width: 0; border: 1px solid #e2ddd4; border-radius: 16px; background: #fff; color: inherit; text-align: left; box-shadow: 0 7px 24px rgba(25,35,53,.04); transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
+.group-card, .book-card, .manage-card { min-width: 0; border: 1px solid #e2ddd4; border-radius: 16px; background: #fff; color: inherit; text-align: left; text-decoration: none; box-shadow: 0 7px 24px rgba(25,35,53,.04); transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
 .group-card:hover, .book-card:hover, .manage-card:hover { transform: translateY(-2px); border-color: #c9c1b5; box-shadow: 0 12px 30px rgba(25,35,53,.08); }
-.group-card { display: flex; flex-direction: column; min-height: 272px; padding: 20px; }
+.group-card { display: flex; flex-direction: column; min-height: 252px; padding: 20px; }
 .group-card-head { display: flex; align-items: flex-start; gap: 12px; }
 .group-code { display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 48px; border-radius: 6px 10px 10px 6px; color: #fff; box-shadow: inset 5px 0 rgba(0,0,0,.14); font-size: var(--type-label); font-weight: 900; }
+.group-copy { min-width: 0; flex: 1; }
 .group-copy strong, .group-copy small { display: block; }
 .group-copy strong { font-size: var(--type-card-title); line-height: 1.35; }
 .group-copy small { margin-top: 6px; color: var(--color-muted); font-size: var(--type-body); line-height: 1.45; }
-.book-shelf { display: flex; align-items: flex-end; gap: 6px; min-height: 86px; margin: auto 0 15px; padding: 0 9px 8px; border-bottom: 7px solid #d7c9b8; }
-.mini-book { display: flex; align-items: center; justify-content: center; width: 48px; padding: 6px 4px; border-radius: 3px 6px 3px 3px; color: #fff; box-shadow: inset 5px 0 rgba(0,0,0,.14); font-size: .6875rem; font-weight: 800; line-height: 1.2; text-align: center; }
+.group-record-count { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; background: #f3f1ed; color: var(--color-muted); font-size: var(--type-label); font-weight: 700; white-space: nowrap; }
+.book-shelf { display: flex; align-items: flex-end; gap: 7px; min-height: 90px; margin: auto 0 0; padding: 0 4px 8px; border-bottom: 7px solid #d7c9b8; }
+.mini-book { display: flex; align-items: center; justify-content: center; flex: 1 1 0; width: auto; min-width: 0; max-width: 128px; min-height: 70px; padding: 7px 8px; border-radius: 3px 7px 3px 3px; color: #fff; box-shadow: inset 5px 0 rgba(0,0,0,.14); font-size: .6875rem; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; text-align: center; text-wrap: balance; white-space: normal; }
+.is-tamil .mini-book { font-size: .71875rem; line-height: 1.5; }
+.direct-card-rail { display: block; width: 100%; height: 7px; margin-top: auto; border-radius: 999px; opacity: .78; }
 .group-card-foot, .book-open, .manage-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--color-muted); font-size: var(--type-body); }
 .group-card-foot strong, .book-open strong, .manage-foot strong { color: #2869a7; font-size: var(--type-body); }
 
@@ -695,16 +1301,19 @@ p { font-size: var(--type-body); line-height: 1.5; }
 .cover-pi { background: #72568e; }
 .cover-ipd { background: #b57b28; }
 .cover-wo { background: #2869a7; }
+.cover-woc { background: #9a6248; }
 .cover-dc { background: #53727c; }
+.cover-se { background: #356d78; }
+.cover-inspection { background: #7a5b2e; }
 
 .breadcrumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 32px; margin-bottom: 16px; color: var(--color-muted); font-size: var(--type-body); }
-:deep(.breadcrumbs button) { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: #2869a7; font-weight: 700; }
+:deep(.breadcrumbs a) { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; color: #2869a7; font-weight: 700; text-decoration: none; }
 .book-identity { display: grid; place-items: center; flex: 0 0 auto; width: 56px; height: 66px; border-radius: 6px 12px 12px 6px; color: #fff; box-shadow: inset 7px 0 rgba(0,0,0,.14); font-size: var(--type-label); font-weight: 900; }
 .book-identity.master-identity { background: #e8f1f9; color: #2869a7; box-shadow: none; }
-.book-card { overflow: hidden; display: grid; grid-template-columns: 118px minmax(0, 1fr); min-height: 205px; }
+.book-card { overflow: hidden; display: grid; grid-template-columns: 156px minmax(0, 1fr); min-height: 205px; }
 .book-cover { position: relative; display: flex; flex-direction: column; justify-content: center; min-height: 205px; padding: 18px; color: #fff; box-shadow: inset 10px 0 rgba(0,0,0,.14); }
 .book-cover small { margin-bottom: 10px; font-size: var(--type-label); font-weight: 800; letter-spacing: .1em; }
-.book-cover strong { font-size: 1rem; line-height: 1.35; }
+.book-cover strong { font-size: 1rem; line-height: 1.4; overflow-wrap: anywhere; text-wrap: balance; }
 .book-spine { position: absolute; inset: 0 auto 0 11px; width: 1px; background: rgba(255,255,255,.22); }
 .book-meta { padding: 22px 18px 10px; }
 .book-meta strong, .book-meta small { display: block; }
@@ -712,12 +1321,9 @@ p { font-size: var(--type-body); line-height: 1.5; }
 .book-meta small { margin-top: 8px; color: var(--color-muted); font-size: var(--type-body); line-height: 1.5; }
 .book-open { grid-column: 2; align-self: end; padding: 0 18px 18px; }
 
-.manage-card { display: flex; flex-direction: column; min-height: 238px; padding: 20px; }
-.manage-icon { display: grid; place-items: center; width: 43px; height: 43px; margin-bottom: 15px; border-radius: 11px; background: #e8f1f9; color: #2869a7; font-size: var(--type-label); font-weight: 900; }
+.manage-card { display: flex; flex-direction: column; min-height: 132px; padding: 17px 18px; }
 .manage-card > strong { font-size: var(--type-card-title); line-height: 1.35; }
-.manage-card > p { min-height: 42px; margin: 8px 0 14px; color: var(--color-muted); font-size: var(--type-body); line-height: 1.5; }
-.usage { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 16px; }
-.usage small { padding: 5px 8px; border-radius: 999px; background: #f3f2ef; color: #5f6878; font-size: var(--type-label); font-weight: 700; line-height: 1.3; }
+.manage-card > p { margin: 6px 0 12px; color: var(--color-muted); font-size: var(--type-body); line-height: 1.45; }
 .manage-foot { margin-top: auto; }
 
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px; border: 1px solid #e2ddd4; border-radius: 13px; background: #fff; }
@@ -777,14 +1383,14 @@ tbody tr:last-child td { border-bottom: 0; }
 .table-scroll { max-width: 100%; overflow-x: auto; }
 .section-copy { padding: 18px; color: var(--color-muted); font-size: var(--type-body); line-height: 1.5; }
 .linked-stack, .address-stack { display: grid; gap: 8px; padding: 14px; }
-.linked-stack button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 1px solid #e2ddd4; border-radius: 10px; background: #faf9f7; color: #172033; text-align: left; }
+.linked-stack a, .linked-stack button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 1px solid #e2ddd4; border-radius: 10px; background: #faf9f7; color: #172033; text-align: left; text-decoration: none; }
 .linked-stack button:disabled { cursor: default; opacity: .75; }
-.linked-stack button > span:first-child { display: grid; place-items: center; width: 36px; height: 40px; border-radius: 7px; background: #e8f1f9; color: #2869a7; font-size: .6875rem; font-weight: 900; }
-.linked-stack button span:nth-child(2) { min-width: 0; }
-.linked-stack button strong, .linked-stack button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.linked-stack button strong { font-size: var(--type-body); }
-.linked-stack button small { margin-top: 2px; color: var(--color-muted); font-size: var(--type-label); }
-.linked-stack button i { margin-left: auto; color: #929aa7; }
+.linked-stack a > span:first-child, .linked-stack button > span:first-child { display: grid; place-items: center; width: 36px; height: 40px; border-radius: 7px; background: #e8f1f9; color: #2869a7; font-size: .6875rem; font-weight: 900; }
+.linked-stack a span:nth-child(2), .linked-stack button span:nth-child(2) { min-width: 0; }
+.linked-stack a strong, .linked-stack a small, .linked-stack button strong, .linked-stack button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linked-stack a strong, .linked-stack button strong { font-size: var(--type-body); }
+.linked-stack a small, .linked-stack button small { margin-top: 2px; color: var(--color-muted); font-size: var(--type-label); }
+.linked-stack a i, .linked-stack button i { margin-left: auto; color: #929aa7; }
 .address-stack article { padding: 11px; border: 1px solid #e2ddd4; border-radius: 10px; background: #faf9f7; }
 .address-stack strong, .address-stack span, .address-stack small { display: block; }
 .address-stack strong { font-size: var(--type-body); }
@@ -801,20 +1407,23 @@ tbody tr:last-child td { border-bottom: 0; }
 	.ops-topbar { height: 58px; padding: 0 16px; }
 	.brand-mark { width: 38px; height: 38px; }
 	.topbar-divider, .topbar-context, .live-chip { display: none; }
+	.language-toggle button { min-width: 52px; padding-inline: 7px; }
 	.page { padding: 22px 16px 46px; }
 	.home-heading, .page-heading { flex-wrap: wrap; }
-	.home-heading > .button, .heading-action, .heading-actions { width: 100%; margin-left: 0; }
+	.home-heading > .button, .home-heading-actions, .heading-action, .heading-actions { width: 100%; margin-left: 0; }
+	.home-heading-actions { flex-wrap: wrap; }
+	.home-heading-actions .button { flex: 1; }
 	.heading-actions .button { flex: 1; }
 	.group-grid, .book-grid, .manage-grid { grid-template-columns: 1fr; }
-	.group-card { min-height: 245px; }
-	.book-card { grid-template-columns: 105px minmax(0, 1fr); }
+	.group-card { min-height: 230px; }
+	.book-card { grid-template-columns: 170px minmax(0, 1fr); }
 	.toolbar { align-items: stretch; flex-direction: column; }
 	.search-box { max-width: none; }
 	.status-filters { margin-left: 0; }
 	.record-count { text-align: left; }
 	.desktop-list { display: none; }
 	.mobile-list { display: grid; gap: 10px; }
-	.mobile-row { display: block; width: 100%; padding: 14px; border: 1px solid #e2ddd4; border-radius: 12px; background: #fff; color: #172033; text-align: left; }
+	.mobile-row { display: block; width: 100%; padding: 14px; border: 1px solid #e2ddd4; border-radius: 12px; background: #fff; color: #172033; text-align: left; text-decoration: none; }
 	.mobile-row-head { display: flex; align-items: center; gap: 8px; }
 	.mobile-row-head > strong { overflow-wrap: anywhere; color: #2869a7; font-size: var(--type-body); }
 	.mobile-row-head .status { margin-left: auto; }
@@ -832,7 +1441,8 @@ tbody tr:last-child td { border-bottom: 0; }
 	.brand-copy small { font-size: var(--type-label); }
 	.avatar { display: none; }
 	.group-grid, .book-grid, .manage-grid, .fact-grid { grid-template-columns: 1fr; }
-	.book-card { grid-template-columns: 96px minmax(0, 1fr); }
+	.book-card { grid-template-columns: 150px minmax(0, 1fr); }
+	.is-tamil .book-cover strong { font-size: .9375rem; }
 	.book-cover { min-height: 190px; padding: 14px; }
 	.book-meta { padding: 18px 14px 8px; }
 	.book-open { padding: 0 14px 14px; }

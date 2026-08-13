@@ -1,0 +1,33 @@
+[
+ {
+  "doctype": "YRP UI Terminology",
+  "name": "MGK Operations Workspace",
+  "ui_layout": "MGK Operations Workspace",
+  "terms": [
+   {
+    "doctype": "YRP UI Term",
+    "term_key": "purchase_order.books.karigan_order.short",
+    "source_text": "Karigan Order",
+    "tamil_text": "காரிகான் ஆர்டர்"
+   },
+   {
+    "doctype": "YRP UI Term",
+    "term_key": "purchase_order.books.karigan_order.label",
+    "source_text": "Karigan Order Book",
+    "tamil_text": "காரிகான் ஆர்டர் புக்"
+   },
+   {
+    "doctype": "YRP UI Term",
+    "term_key": "purchase_order.books.salavai_cone_order.short",
+    "source_text": "Salavai Cone Order",
+    "tamil_text": "சலவைக்கோன் ஆர்டர்"
+   },
+   {
+    "doctype": "YRP UI Term",
+    "term_key": "purchase_order.books.salavai_cone_order.label",
+    "source_text": "Salavai Cone Order Book",
+    "tamil_text": "சலவைக்கோன் ஆர்டர் புக்"
+   }
+  ]
+ }
+]

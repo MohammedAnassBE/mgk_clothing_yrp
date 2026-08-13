@@ -70,17 +70,19 @@ function open_mgk_approval_dialog(frm) {
 	d.show();
 }
 
-// mgk_clothing_yrp — multi-item Work Order: per-row IPD filter + Calculate Deliverables.
-// The single header item/production_detail are hidden (Property Setters); the user
-// enters multiple (Item + Item Production Detail) rows in the `mgk_items` child table.
+// mgk_clothing_yrp — the base Work Order production_detail is the mandatory,
+// authoritative Item/IPD context. Calculate Deliverables asks only for route
+// attributes and quantities.
 frappe.ui.form.on("Work Order", {
 	refresh(frm) {
-		// Filter each row's Item Production Detail to that row's Item.
-		frm.set_query("production_detail", "mgk_items", function (doc, cdt, cdn) {
-			const row = locals[cdt][cdn];
-			return { filters: row.item ? { item: row.item } : {} };
+		frm.set_query("production_detail", () => {
+			return {
+				query: "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.work_order_production_detail_query",
+				filters: { process_name: frm.doc.process_name || "" },
+			};
 		});
-		// Calculate Deliverables — yarn-mode split editor (one block per mgk_items row).
+		frm.set_df_property("mgk_items_section", "hidden", 1);
+		frm.set_df_property("mgk_items", "hidden", 1);
 		if (!frm.is_new() && frm.doc.docstatus === 0) {
 			frm.add_custom_button(
 				__("Calculate Deliverables"),
@@ -88,6 +90,26 @@ frappe.ui.form.on("Work Order", {
 			);
 		}
 		setTimeout(() => mount_mgk_calculated_item_views(frm), 0);
+	},
+	process_name(frm) {
+		if (frm.doc.docstatus !== 0) return;
+		frm.set_value("production_detail", "");
+		frm.set_value("item", "");
+	},
+	async production_detail(frm) {
+		if (frm.doc.docstatus !== 0) return;
+		if (!frm.doc.production_detail || !frm.doc.process_name) {
+			await frm.set_value("item", "");
+			return;
+		}
+		const r = await frappe.call({
+			method: "mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.get_work_order_production_detail_context",
+			args: {
+				production_detail: frm.doc.production_detail,
+				process_name: frm.doc.process_name,
+			},
+		});
+		if (!r.exc) await frm.set_value("item", r.message?.item || "");
 	},
 });
 
@@ -151,8 +173,8 @@ function mount_mgk_calculated_item_views(frm) {
 }
 
 // ── Calculate Deliverables (MGK, yarn mode) ─────────────────────────────────
-// Fetches the per-row payload from the server, then renders ONE block per
-// mgk_items row inside a single Dialog: a read-only yarn-item label, a Select
+// Fetches the process-filtered payload from the server, then renders ONE block
+// per available/selected Item Production Detail inside a single Dialog: a read-only yarn-item label, a Select
 // per attribute (options from the payload), and a Float weight input. The
 // dialog fields are generated dynamically (fieldnames `attr_<idx>_<attribute>`
 // and `weight_<idx>`) so a row whose yarn item has no attributes simply gets a
@@ -178,7 +200,7 @@ function open_calculate_deliverables(frm) {
 			}
 			const rows = payload.rows || [];
 			if (!rows.length) {
-				frappe.msgprint(__("Add at least one Item row to this Work Order first."));
+				frappe.msgprint(__("No calculation route is configured for the selected Item Production Detail."));
 				return;
 			}
 			if (payload.mode === "transformation") {

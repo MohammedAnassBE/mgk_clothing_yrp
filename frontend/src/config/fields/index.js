@@ -5,6 +5,7 @@
  *   {
  *     detail?:             Array<{ fieldname, label, type? }>  // VIEW Details-tab grid
  *     formOrder?:          Array<string>                       // EDIT/CREATE field order
+ *     formGroups?:         Array<{label, fields: string[]}>    // EDIT/CREATE card grouping
  *     hideFormFields?:     Array<string>                       // never render in EDIT/CREATE
  *     linkSearchHandlers?: Record<string, (form) => fn|null>   // per-Link custom search
  *     labels?:             Record<string, string>              // relabel a field (overrides meta)
@@ -20,25 +21,45 @@
  */
 
 import workOrder from "./work-order.js"
+import workOrderCorrection from "./work-order-correction.js"
 import deliveryChallan from "./delivery-challan.js"
 import stockReconciliation from "./stock-reconciliation.js"
 import purchaseOrder from "./purchase-order.js"
 import goodsReceivedNote from "./goods-received-note.js"
 import inspectionEntry from "./inspection-entry.js"
+import stockEntry from "./stock-entry.js"
 import item from "./item.js"
 import itemProductionDetail from "./item-production-detail.js"
 import itemMasterTemplate from "./item-master-template.js"
+import processCost from "./process-cost.js"
+import supplier from "./supplier.js"
+import mgkAgent from "./mgk-agent.js"
+import warehouse from "./warehouse.js"
+import itemPrice from "./item-price.js"
+import user from "./user.js"
+import process from "./process.js"
+import receivedType from "./received-type.js"
 
 const FIELD_CONFIGS = {
 	"Work Order": workOrder,
+	"Work Order Correction": workOrderCorrection,
 	"Delivery Challan": deliveryChallan,
 	"Stock Reconciliation": stockReconciliation,
 	"Purchase Order": purchaseOrder,
 	"Goods Received Note": goodsReceivedNote,
 	"Inspection Entry": inspectionEntry,
+	"Stock Entry": stockEntry,
 	"Item": item,
 	"Item Production Detail": itemProductionDetail,
 	"Item Master Template": itemMasterTemplate,
+	"Process Cost": processCost,
+	"Supplier": supplier,
+	"MGK Agent": mgkAgent,
+	"Warehouse": warehouse,
+	"Item Price": itemPrice,
+	"User": user,
+	"Process": process,
+	"Received Type": receivedType,
 }
 
 /**
@@ -66,6 +87,25 @@ export function getDetailGroups(doctype) {
  */
 export function getFormFieldOrder(doctype) {
 	return FIELD_CONFIGS[doctype]?.formOrder || null
+}
+
+/**
+ * Optional strict allowlist for a focused form. Most DocTypes deliberately
+ * return null so all meta-editable fields remain available; high-noise system
+ * masters such as User opt in to a concise, operator-safe surface.
+ */
+export function getAllowedFormFields(doctype) {
+	const fields = FIELD_CONFIGS[doctype]?.allowFormFields
+	return fields?.length ? new Set(fields) : null
+}
+
+/**
+ * Curated EDIT/CREATE card grouping. Fields remain meta-backed and permission /
+ * depends_on aware; this only replaces confusing unnamed DocType sections with
+ * workflow-language groups in a Registered Experience.
+ */
+export function getFormGroups(doctype) {
+	return FIELD_CONFIGS[doctype]?.formGroups || null
 }
 
 /**
@@ -102,6 +142,14 @@ export function getReadOnlyChildFields(doctype, childDoctype) {
 	return new Set(list)
 }
 
+export function getHiddenChildTables(doctype) {
+	return new Set(FIELD_CONFIGS[doctype]?.hideChildTables || [])
+}
+
+export function getChildColumnRules(doctype) {
+	return FIELD_CONFIGS[doctype]?.childColumnRules || {}
+}
+
 // ── UX override layer (Q13/Q18/Q20/Q2) ──────────────────────────────────────
 // These let the SPA relabel, help-annotate, humanise booleans, and emphasise
 // fields WITHOUT touching the base-yrp DocType JSON (the plan's standing rule:
@@ -129,7 +177,9 @@ export function getFieldLabel(doctype, fieldname) {
  * meta `description` when no override is set.
  */
 export function getFieldHelp(doctype, fieldname) {
-	return FIELD_CONFIGS[doctype]?.help?.[fieldname] || null
+	const help = FIELD_CONFIGS[doctype]?.help
+	if (help && Object.prototype.hasOwnProperty.call(help, fieldname)) return help[fieldname]
+	return null
 }
 
 /**

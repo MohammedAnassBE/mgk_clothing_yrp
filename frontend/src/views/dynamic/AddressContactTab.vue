@@ -14,12 +14,13 @@
 -->
 <template>
 	<div class="ac-tab">
-		<div class="ac-cols">
+		<div v-if="canRead('Address') || canRead('Contact')" class="ac-cols">
 			<!-- ── ADDRESSES ──────────────────────────────────────────────── -->
-			<section class="ac-col">
+			<section v-if="canRead('Address')" class="ac-col">
 				<header class="ac-col__head">
 					<h4 class="ac-col__title"><i class="pi pi-map-marker" /> Addresses</h4>
 					<Button
+						v-if="canCreate('Address')"
 						label="New Address"
 						icon="pi pi-plus"
 						size="small"
@@ -56,6 +57,7 @@
 						</div>
 						<div class="ac-card__actions">
 							<Button
+								v-if="canWrite('Address')"
 								icon="pi pi-pencil"
 								text
 								rounded
@@ -64,6 +66,7 @@
 								@click="openAddressDialog(a)"
 							/>
 							<Button
+								v-if="canDelete('Address')"
 								icon="pi pi-trash"
 								text
 								rounded
@@ -78,10 +81,11 @@
 			</section>
 
 			<!-- ── CONTACTS ───────────────────────────────────────────────── -->
-			<section class="ac-col">
+			<section v-if="canRead('Contact')" class="ac-col">
 				<header class="ac-col__head">
 					<h4 class="ac-col__title"><i class="pi pi-id-card" /> Contacts</h4>
 					<Button
+						v-if="canCreate('Contact')"
 						label="New Contact"
 						icon="pi pi-plus"
 						size="small"
@@ -113,6 +117,7 @@
 						</div>
 						<div class="ac-card__actions">
 							<Button
+								v-if="canWrite('Contact')"
 								icon="pi pi-pencil"
 								text
 								rounded
@@ -121,6 +126,7 @@
 								@click="openContactDialog(c)"
 							/>
 							<Button
+								v-if="canDelete('Contact')"
 								icon="pi pi-trash"
 								text
 								rounded
@@ -134,6 +140,7 @@
 				</div>
 			</section>
 		</div>
+		<div v-else class="mgk-empty"><i class="pi pi-lock" /><span class="mgk-empty__text">No Address or Contact access</span></div>
 
 		<!-- ── ADDRESS DIALOG ─────────────────────────────────────────────── -->
 		<Dialog
@@ -142,13 +149,14 @@
 			:header="addrForm.name ? 'Edit Address' : 'New Address'"
 			:style="{ width: '480px', maxWidth: '95vw' }"
 			@update:visible="addrDialog = $event"
+			@hide="restoreDialogFocus('address')"
 		>
-			<div class="ac-form">
+			<div ref="addrFormEl" class="ac-form">
 				<div v-if="errorLines.length" class="ac-error">
 					<div v-for="(l, i) in errorLines" :key="i">{{ l }}</div>
 				</div>
 
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="address_type">
 					<label class="field-label">Address Type <span class="req">*</span></label>
 					<Select
 						v-model="addrForm.address_type"
@@ -159,27 +167,27 @@
 						fluid
 					/>
 				</div>
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="address_line1">
 					<label class="field-label">Address Line 1 <span class="req">*</span></label>
 					<InputText v-model="addrForm.address_line1" :invalid="missing.address_line1" class="fld" fluid />
 				</div>
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="address_line2">
 					<label class="field-label">Address Line 2</label>
 					<InputText v-model="addrForm.address_line2" class="fld" fluid />
 				</div>
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="city">
 					<label class="field-label">City / Town <span class="req">*</span></label>
 					<InputText v-model="addrForm.city" :invalid="missing.city" class="fld" fluid />
 				</div>
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="state">
 					<label class="field-label">State / Province</label>
 					<InputText v-model="addrForm.state" class="fld" fluid />
 				</div>
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="pincode">
 					<label class="field-label">Postal Code</label>
 					<InputText v-model="addrForm.pincode" class="fld" fluid />
 				</div>
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="country">
 					<label class="field-label">Country <span class="req">*</span></label>
 					<LinkField
 						:model-value="addrForm.country"
@@ -228,16 +236,16 @@
 		<Dialog
 			:visible="contactDialog"
 			modal
-			:header="contactForm.name ? 'Edit Contact' : 'New Contact'"
 			:style="{ width: '480px', maxWidth: '95vw' }"
 			@update:visible="contactDialog = $event"
+			@hide="restoreDialogFocus('contact')"
 		>
-			<div class="ac-form">
+			<div ref="contactFormEl" class="ac-form">
 				<div v-if="errorLines.length" class="ac-error">
 					<div v-for="(l, i) in errorLines" :key="i">{{ l }}</div>
 				</div>
 
-				<div class="ac-field">
+				<div class="ac-field" data-focus-key="first_name">
 					<label class="field-label">First Name <span class="req">*</span></label>
 					<InputText v-model="contactForm.first_name" :invalid="missing.first_name" class="fld" fluid />
 				</div>
@@ -299,6 +307,8 @@ import {
 } from "@/api/client"
 import { useAppToast } from "@/composables/useToast"
 import { useAppConfirm } from "@/composables/useConfirm"
+import { usePermissions } from "@/composables/usePermissions"
+import { focusFirstControl } from "@/utils/focusControl"
 
 const vTooltip = Tooltip
 
@@ -309,6 +319,7 @@ const props = defineProps({
 
 const toast = useAppToast()
 const confirm = useAppConfirm()
+const { canRead, canCreate, canWrite, canDelete } = usePermissions()
 
 // Frappe's Address.address_type Select options (verified in the DocType JSON).
 const ADDRESS_TYPES = [
@@ -326,6 +337,10 @@ const addrDialog = ref(false)
 const contactDialog = ref(false)
 const errorLines = ref([])
 const missing = reactive({})
+const addrFormEl = ref(null)
+const contactFormEl = ref(null)
+let addressDialogOpener = null
+let contactDialogOpener = null
 
 const addrForm = reactive(emptyAddress())
 const contactForm = reactive(emptyContact())
@@ -368,7 +383,7 @@ function contactName(c) {
 
 // ── load ─────────────────────────────────────────────────────────────────
 async function loadAddresses() {
-	if (!props.partyDoctype || !props.partyName) {
+	if (!canRead("Address") || !props.partyDoctype || !props.partyName) {
 		addresses.value = []
 		return
 	}
@@ -383,7 +398,7 @@ async function loadAddresses() {
 	}
 }
 async function loadContacts() {
-	if (!props.partyDoctype || !props.partyName) {
+	if (!canRead("Contact") || !props.partyDoctype || !props.partyName) {
 		contacts.value = []
 		return
 	}
@@ -452,7 +467,8 @@ function links() {
 }
 
 // ── address create / edit ────────────────────────────────────────────────
-function openAddressDialog(a = null) {
+async function openAddressDialog(a = null) {
+	addressDialogOpener = document.activeElement
 	clearErrors()
 	Object.assign(addrForm, emptyAddress())
 	if (a) {
@@ -470,6 +486,7 @@ function openAddressDialog(a = null) {
 		addrForm.is_shipping_address = a.is_shipping_address ? 1 : 0
 	}
 	addrDialog.value = true
+	await focusDialogField("address", "address_type")
 }
 
 function validateAddress() {
@@ -486,7 +503,11 @@ function validateAddress() {
 }
 
 async function saveAddress() {
-	if (!validateAddress()) return
+	if (!validateAddress()) {
+		const fieldname = ["address_type", "address_line1", "city", "country"].find((field) => missing[field])
+		await focusDialogField("address", fieldname)
+		return
+	}
 	saving.value = true
 	try {
 		const payload = {
@@ -540,7 +561,8 @@ function confirmDeleteAddress(a) {
 }
 
 // ── contact create / edit ────────────────────────────────────────────────
-function openContactDialog(c = null) {
+async function openContactDialog(c = null) {
+	contactDialogOpener = document.activeElement
 	clearErrors()
 	Object.assign(contactForm, emptyContact())
 	if (c) {
@@ -553,6 +575,7 @@ function openContactDialog(c = null) {
 		contactForm.is_primary_contact = c.is_primary_contact ? 1 : 0
 	}
 	contactDialog.value = true
+	await focusDialogField("contact", "first_name")
 }
 
 function validateContact() {
@@ -567,7 +590,10 @@ function validateContact() {
 }
 
 async function saveContact() {
-	if (!validateContact()) return
+	if (!validateContact()) {
+		await focusDialogField("contact", "first_name")
+		return
+	}
 	saving.value = true
 	try {
 		const email = String(contactForm.email_id || "").trim()
@@ -610,6 +636,18 @@ async function saveContact() {
 	} finally {
 		saving.value = false
 	}
+}
+
+function focusDialogField(kind, fieldname) {
+	const root = kind === "address" ? addrFormEl : contactFormEl
+	return focusFirstControl(root, { selector: fieldname ? `[data-focus-key="${fieldname}"]` : "" })
+}
+
+function restoreDialogFocus(kind) {
+	const opener = kind === "address" ? addressDialogOpener : contactDialogOpener
+	if (kind === "address") addressDialogOpener = null
+	else contactDialogOpener = null
+	if (opener && opener.isConnected && !opener.disabled) opener.focus()
 }
 
 function confirmDeleteContact(c) {

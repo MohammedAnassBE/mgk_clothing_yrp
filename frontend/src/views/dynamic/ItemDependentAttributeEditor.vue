@@ -26,7 +26,7 @@
              = ToggleSwitch.
 -->
 <template>
-	<div class="item-dep-editor">
+	<div ref="editorEl" class="item-dep-editor">
 		<div v-if="loading" class="state-block sm">
 			<i class="pi pi-spin pi-spinner" /> <span>Loading…</span>
 		</div>
@@ -41,6 +41,7 @@
 				<div class="dep-actions">
 					<Button
 						v-if="!editMode && editable"
+						ref="editButtonEl"
 						label="Edit"
 						icon="pi pi-pencil"
 						size="small"
@@ -75,13 +76,14 @@
 					</template>
 				</Column>
 				<Column header="UOM" :style="{ minWidth: '180px' }">
-					<template #body="{ data }">
+					<template #body="{ data, index }">
+						<span v-if="editMode" :data-dependent-uom="index">
 						<LinkField
-							v-if="editMode"
 							:model-value="data.uom"
 							@update:model-value="data.uom = $event"
 							target-doctype="UOM"
 						/>
+						</span>
 						<span v-else>{{ data.uom || "—" }}</span>
 					</template>
 				</Column>
@@ -120,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from "vue"
+import { ref, reactive, computed, onMounted, watch, nextTick } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -129,6 +131,7 @@ import ToggleSwitch from "primevue/toggleswitch"
 import { callMethod, getDocWithOnload } from "@/api/client"
 import { useAppToast } from "@/composables/useToast"
 import LinkField from "@/components/LinkField.vue"
+import { focusFirstControl } from "@/utils/focusControl"
 
 const props = defineProps({
 	itemName: { type: String, required: true },
@@ -137,6 +140,8 @@ const props = defineProps({
 const emit = defineEmits(["saved"])
 
 const toast = useAppToast()
+const editorEl = ref(null)
+const editButtonEl = ref(null)
 
 // ── server snapshot ──
 const loading = ref(false)
@@ -225,13 +230,14 @@ function serializeRows(arr) {
 	)
 }
 
-function enterEdit() {
+async function enterEdit() {
 	if (!props.editable) return
 	baseline = serializeRows(rows.value)
 	editMode.value = true
+	await focusFirstControl(editorEl, { selector: '[data-dependent-uom="0"]' })
 }
 
-function discardEdit() {
+async function discardEdit() {
 	// Re-hydrate rows from the baseline snapshot.
 	const snap = JSON.parse(baseline || "[]")
 	rows.value = snap.map((r) => ({
@@ -241,6 +247,8 @@ function discardEdit() {
 		attributeSet: new Set(Array.isArray(r.attributes) ? r.attributes : []),
 	}))
 	editMode.value = false
+	await nextTick()
+	editButtonEl.value?.$el?.focus?.()
 }
 
 function toggleAttribute(row, attr, on) {
@@ -280,6 +288,8 @@ async function onSave() {
 		editMode.value = false
 		baseline = serializeRows(rows.value)
 		emit("saved")
+		await nextTick()
+		editButtonEl.value?.$el?.focus?.()
 	} catch (e) {
 		toast.error("Save failed", e.message)
 	} finally {

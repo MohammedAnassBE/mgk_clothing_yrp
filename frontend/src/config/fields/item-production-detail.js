@@ -18,9 +18,17 @@
 import { searchLink } from "@/api/client"
 
 const linkSearchHandlers = {
+	item: () => (q) => searchLink("Item", q, { disabled: 0 }),
 	yarn_item: () => (q) => searchLink("Item", q, { is_yarn_item: 1 }),
 }
 
 export default {
+	formOrder: ["item"],
+	labels: {
+		item: "Finished Item",
+	},
+	help: {
+		item: "Select the finished Item. Its attributes and values are loaded automatically.",
+	},
 	linkSearchHandlers,
 }

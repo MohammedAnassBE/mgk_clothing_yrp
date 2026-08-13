@@ -15,6 +15,7 @@ export function useDoc(doctype) {
   const linkedLoading = ref(false)
   const activityLoading = ref(false)
   const saving = ref(false)
+  const saveMessages = ref([])
   const error = ref(null)
 
   async function load(name) {
@@ -80,14 +81,24 @@ export function useDoc(doctype) {
 
   async function save(data, name = null) {
     saving.value = true
+    saveMessages.value = []
     error.value = null
     try {
       if (name || doc.value?.name) {
-        const result = await updateDoc(doctype, name || doc.value.name, data)
+        const response = await updateDoc(
+          doctype,
+          name || doc.value.name,
+          data,
+          { includeServerMessages: true },
+        )
+        const result = response.data
+        saveMessages.value = response.serverMessages || []
         doc.value = result
         return result
       } else {
-        const result = await createDoc(doctype, data)
+        const response = await createDoc(doctype, data, { includeServerMessages: true })
+        const result = response.data
+        saveMessages.value = response.serverMessages || []
         doc.value = result
         return result
       }
@@ -187,6 +198,7 @@ export function useDoc(doctype) {
     linkedLoading: readonly(linkedLoading),
     activityLoading: readonly(activityLoading),
     saving: readonly(saving),
+    saveMessages: readonly(saveMessages),
     error,
     load,
     loadMeta,

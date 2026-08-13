@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import frappe
 from frappe.model.workflow import apply_workflow
 from frappe.tests.utils import FrappeTestCase
@@ -7,12 +9,29 @@ from mgk_clothing_yrp.mgk_clothing_yrp.api.work_order import (
 	_matrix_variant_attributes,
 	_prepare_yarn_transformation_items,
 	calculate_deliverables,
+	get_yarn_deliverable_rows,
+)
+from mgk_clothing_yrp.mgk_clothing_yrp.api.item_attribute import (
+	update_ipd_mapping_values,
+)
+from mgk_clothing_yrp.mgk_clothing_yrp.api.bom_mapping import (
+	create_mapping,
+	get_mapping_context,
+)
+from mgk_clothing_yrp.mgk_clothing_yrp.api.experiences.operations_workspace.item_production_detail import (
+	approve as approve_ipd,
+	get_entry_context,
+	regenerate_matrix,
+	reject as reject_ipd,
 )
 from mgk_clothing_yrp.yarn_process import (
 	build_route_io,
+	get_item_attribute_options,
 	get_process_route_context,
 	load_attribute_list,
+	regenerate_process_matrices,
 )
+from yrp.yrp.utils.ipd_engine import _lookup_mode_b
 
 
 class TestYarnProcessFlow(FrappeTestCase):
@@ -65,6 +84,10 @@ class TestYarnProcessFlow(FrappeTestCase):
 			f"_Test Dyeing {suffix}",
 			is_item_conversion=0,
 			value_change_attributes=[{"attribute": "Colour"}],
+		)
+		self.washing = self._make_process(
+			f"_Test Washing {suffix}",
+			is_item_conversion=0,
 		)
 
 	def _make_mapping(self, attribute, values):
@@ -278,6 +301,8 @@ class TestYarnProcessFlow(FrappeTestCase):
 		attribute_values,
 		qty=100,
 	):
+		if not frappe.db.exists("IPD Process Matrix", {"ipd": ipd.name}):
+			regenerate_process_matrices(ipd)
 		supplier = frappe.db.get_value("Supplier", {}, "name")
 		address = frappe.db.get_value("Address", {}, "name")
 		wo = frappe.get_doc({
@@ -291,6 +316,7 @@ class TestYarnProcessFlow(FrappeTestCase):
 			"planned_start_date": nowdate(),
 			"planned_end_date": add_days(nowdate(), 1),
 			"process_name": process_name,
+			"production_detail": ipd.name,
 			"mgk_items": [
 				{"item": ipd.item, "production_detail": ipd.name}
 			],
@@ -339,6 +365,18 @@ class TestYarnProcessFlow(FrappeTestCase):
 			frappe.db.count("IPD Process Matrix", {"ipd": ipd.name}),
 			0,
 		)
+		matrices = regenerate_process_matrices(ipd)
+		self.assertEqual(len(matrices), 2)
+		self.assertEqual(
+			set(
+				frappe.get_all(
+					"IPD Process Matrix",
+					filters={"ipd": ipd.name},
+					pluck="process_name",
+				)
+			),
+			{self.doubling, self.dyeing},
+		)
 
 		doubling_route = ipd.mgk_yarn_process_routes[0]
 		doubling_io = build_route_io(
@@ -376,6 +414,188 @@ class TestYarnProcessFlow(FrappeTestCase):
 			dyeing_wo.deliverables[0].item_variant,
 		)
 
+	def test_process_catalog_and_washing_are_driven_by_value_change_attributes(self):
+		catalog = get_entry_context()
+		processes = {row["name"]: row for row in catalog["processes"]}
+		self.assertEqual(
+			processes[self.dyeing]["value_change_attributes"],
+			["Colour"],
+		)
+		self.assertEqual(
+			processes[self.washing]["value_change_attributes"],
+			[],
+		)
+
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.washing,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_40,
+				"quantity_ratio": 1,
+			},
+		])
+		route = ipd.mgk_yarn_process_routes[0]
+		context = get_process_route_context(ipd.name, self.washing)
+		self.assertEqual(len(context), 1)
+		self.assertEqual(context[0]["transformation_type"], "Pass Through")
+		self.assertEqual(
+			[attribute["attribute"] for attribute in context[0]["attributes"]],
+			["Colour"],
+		)
+
+		io = build_route_io(
+			ipd,
+			self.washing,
+			route.name,
+			{"Colour": "Orange"},
+			100,
+		)
+		self.assertEqual(io["input_attrs"], {"Colour": "Orange"})
+		self.assertEqual(io["output_attrs"], {"Colour": "Orange"})
+
+		matrix_name = regenerate_process_matrices(ipd)[0]
+		matrix = frappe.get_doc("IPD Process Matrix", matrix_name)
+		matrix_values = {
+			(row.group_index, row.side, row.attribute): row.attribute_value
+			for row in matrix.combination_attributes
+		}
+		self.assertEqual(matrix_values[(1, "Input", "Colour")], "Orange")
+		self.assertEqual(matrix_values[(1, "Output", "Colour")], "Orange")
+
+	def test_washing_matrix_and_work_order_use_only_previous_dyeing_outputs(self):
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.dyeing,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_40,
+				"from_colour": "Orange",
+				"to_colour": "Blue",
+				"quantity_ratio": 1,
+			},
+			{
+				"sequence": 10,
+				"process_name": self.dyeing,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_40,
+				"from_colour": "Orange",
+				"to_colour": "Green",
+				"quantity_ratio": 1,
+			},
+			{
+				"sequence": 20,
+				"process_name": self.washing,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_40,
+				"quantity_ratio": 1,
+			},
+		])
+		washing_route = next(
+			row
+			for row in ipd.mgk_yarn_process_routes
+			if row.process_name == self.washing
+		)
+
+		# Finished-Item values are context, not a reason to discard intermediate
+		# Yarn colours produced by Dyeing.
+		colour_mapping = next(
+			row.mapping for row in ipd.item_attributes if row.attribute == "Colour"
+		)
+		update_ipd_mapping_values(
+			ipd.name,
+			"Colour",
+			["Orange"],
+			mapping=colour_mapping,
+		)
+		ipd.reload()
+
+		matrices = regenerate_process_matrices(ipd)
+		self.assertEqual(len(matrices), 2)
+		washing_matrix = frappe.get_doc(
+			"IPD Process Matrix",
+			frappe.db.get_value(
+				"IPD Process Matrix",
+				{"ipd": ipd.name, "process_name": self.washing},
+			),
+		)
+		matrix_colours = {
+			(row.side, row.attribute_value)
+			for row in washing_matrix.combination_attributes
+			if row.attribute == "Colour"
+		}
+		self.assertEqual(
+			matrix_colours,
+			{
+				("Input", "Blue"),
+				("Output", "Blue"),
+				("Input", "Green"),
+				("Output", "Green"),
+			},
+		)
+
+		context = get_process_route_context(ipd.name, self.washing)
+		self.assertEqual(len(context), 1)
+		self.assertTrue(context[0]["chain_constrained"])
+		self.assertEqual(
+			context[0]["attributes"],
+			[
+				{
+					"attribute": "Colour",
+					"label": "Colour",
+					"options": ["Blue", "Green"],
+				}
+			],
+		)
+		with self.assertRaisesRegex(
+			frappe.ValidationError,
+			"not produced by the previous Process",
+		):
+			build_route_io(
+				ipd,
+				self.washing,
+				washing_route.name,
+				{"Colour": "Orange"},
+				100,
+			)
+
+		supplier = frappe.db.get_value("Supplier", {}, "name")
+		address = frappe.db.get_value("Address", {}, "name")
+		popup_work_order = frappe.get_doc({
+			"doctype": "Work Order",
+			"naming_series": "WO-",
+			"wo_date": nowdate(),
+			"supplier": supplier,
+			"delivery_location": supplier,
+			"supplier_address": address,
+			"delivery_address": address,
+			"planned_start_date": nowdate(),
+			"planned_end_date": add_days(nowdate(), 1),
+			"process_name": self.washing,
+			"production_detail": ipd.name,
+		})
+		popup_work_order.insert(ignore_permissions=True)
+		popup = get_yarn_deliverable_rows(popup_work_order.name)
+		self.assertEqual(
+			popup["options"][0]["rows"][0]["attributes"][0]["options"],
+			["Blue", "Green"],
+		)
+
+		washing_wo = self._calculate_work_order(
+			ipd,
+			self.washing,
+			washing_route.name,
+			{"Colour": "Blue"},
+		)
+		self.assertEqual(
+			_matrix_variant_attributes(washing_wo.deliverables[0].item_variant),
+			{"Colour": "Blue"},
+		)
+		self.assertEqual(
+			_matrix_variant_attributes(washing_wo.receivables[0].item_variant),
+			{"Colour": "Blue"},
+		)
+
 	def test_ipd_onload_exposes_finished_item_attribute_values(self):
 		ipd = self._make_ipd([
 			{
@@ -400,6 +620,501 @@ class TestYarnProcessFlow(FrappeTestCase):
 			["Orange", "Blue", "Green"],
 		)
 		self.assertEqual(attributes["Size"], ["M", "L"])
+
+	def test_ipd_approval_and_manual_matrix_regeneration(self):
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+
+		manual_state = regenerate_matrix(ipd.name, modified=ipd.modified)
+		self.assertEqual(manual_state["approval_status"], "Not Approved")
+		self.assertEqual(manual_state["matrix_count"], 1)
+
+		ipd.reload()
+		approved_state = approve_ipd(ipd.name, modified=ipd.modified)
+		self.assertEqual(approved_state["approval_status"], "Approved")
+		self.assertEqual(approved_state["approved_by"], frappe.session.user)
+		self.assertEqual(approved_state["matrix_count"], 1)
+
+		ipd.reload()
+		rejected_state = reject_ipd(ipd.name, modified=ipd.modified)
+		self.assertEqual(rejected_state["approval_status"], "Not Approved")
+		self.assertIsNone(rejected_state["approved_by"])
+		self.assertEqual(rejected_state["matrix_count"], 1)
+
+	def test_approved_ipd_locks_definition_and_bom_combinations(self):
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+		ipd.append("item_bom", {
+			"item": self.yarn_40,
+			"qty_of_product": 1,
+			"qty_of_bom_item": 2,
+			"uom": "Kg",
+		})
+		ipd.save(ignore_permissions=True)
+		ipd.reload()
+		mapping_name = create_mapping(
+			ipd.name,
+			bom_row=ipd.item_bom[0].name,
+		)
+
+		# Approval fields cannot be forged through a normal document save.
+		ipd.reload()
+		ipd.approval_status = "Approved"
+		with self.assertRaisesRegex(frappe.ValidationError, "Use the Approve IPD"):
+			ipd.save(ignore_permissions=True)
+
+		ipd.reload()
+		approve_ipd(ipd.name, modified=ipd.modified)
+		ipd.reload()
+
+		ipd.mgk_yarn_process_routes[0].quantity_ratio = 2
+		with self.assertRaisesRegex(frappe.ValidationError, "Approved and locked"):
+			ipd.save(ignore_permissions=True)
+
+		colour_mapping = next(
+			row.mapping for row in ipd.item_attributes if row.attribute == "Colour"
+		)
+		with self.assertRaisesRegex(frappe.ValidationError, "Approved and locked"):
+			update_ipd_mapping_values(
+				ipd.name,
+				"Colour",
+				["Orange"],
+				mapping=colour_mapping,
+			)
+
+		bom_mapping = frappe.get_doc(
+			"Item BOM Attribute Mapping", mapping_name
+		)
+		bom_mapping.item_attributes[0].same_attribute = 1
+		bom_mapping.flags.ignore_validate = True
+		with self.assertRaisesRegex(frappe.ValidationError, "Approved and locked"):
+			bom_mapping.save(ignore_permissions=True)
+
+		matrix = frappe.get_doc(
+			"IPD Process Matrix",
+			frappe.db.get_value("IPD Process Matrix", {"ipd": ipd.name}),
+		)
+		matrix.combinations[0].quantity = 2
+		with self.assertRaisesRegex(frappe.ValidationError, "Approved and locked"):
+			matrix.save(ignore_permissions=True)
+
+		ipd.reload()
+		with self.assertRaisesRegex(frappe.ValidationError, "Approved and locked"):
+			regenerate_matrix(ipd.name, modified=ipd.modified)
+		with self.assertRaisesRegex(frappe.ValidationError, "Approved and locked"):
+			frappe.delete_doc(
+				"Item Production Detail",
+				ipd.name,
+				ignore_permissions=True,
+			)
+
+		# Rejection is the one supported unlock transition.
+		ipd.reload()
+		reject_ipd(ipd.name, modified=ipd.modified)
+		ipd.reload()
+		ipd.mgk_yarn_process_routes[0].quantity_ratio = 2
+		ipd.save(ignore_permissions=True)
+		self.assertEqual(ipd.approval_status, "Not Approved")
+		self.assertEqual(ipd.mgk_yarn_process_routes[0].quantity_ratio, 2)
+
+	def test_draft_calculation_without_cost_or_ipd_approval_returns_warnings(self):
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+		regenerate_process_matrices(ipd)
+		supplier = frappe.db.get_value("Supplier", {}, "name")
+		address = frappe.db.get_value("Address", {}, "name")
+		work_order = frappe.get_doc(
+			{
+				"doctype": "Work Order",
+				"naming_series": "WO-",
+				"wo_date": nowdate(),
+				"supplier": supplier,
+				"delivery_location": supplier,
+				"supplier_address": address,
+				"delivery_address": address,
+				"planned_start_date": nowdate(),
+					"planned_end_date": add_days(nowdate(), 1),
+					"process_name": self.doubling,
+					"production_detail": ipd.name,
+					"mgk_items": [
+					{"item": ipd.item, "production_detail": ipd.name}
+				],
+			}
+		)
+		work_order.insert(ignore_permissions=True)
+
+		result = calculate_deliverables(
+			work_order.name,
+			[
+				{
+					"production_detail": ipd.name,
+					"route_name": ipd.mgk_yarn_process_routes[0].name,
+					"attribute_values": {"Colour": "Orange"},
+					"weight": 25,
+				}
+			],
+			modified=work_order.modified,
+		)
+		work_order.reload()
+
+		self.assertEqual(work_order.docstatus, 0)
+		self.assertEqual(len(work_order.deliverables), 1)
+		self.assertEqual(len(work_order.receivables), 1)
+		self.assertTrue(any("not Approved" in issue for issue in result["warnings"]))
+		self.assertTrue(any("No approved Process Cost" in issue for issue in result["warnings"]))
+
+	def test_work_order_production_detail_drives_popup_and_calculation(self):
+		"""The Work Order field owns IPD context; the popup only enters quantities."""
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+		regenerate_process_matrices(ipd)
+		supplier = frappe.db.get_value("Supplier", {}, "name")
+		address = frappe.db.get_value("Address", {}, "name")
+		work_order = frappe.get_doc({
+			"doctype": "Work Order",
+			"naming_series": "WO-",
+			"wo_date": nowdate(),
+			"supplier": supplier,
+			"delivery_location": supplier,
+			"supplier_address": address,
+			"delivery_address": address,
+			"planned_start_date": nowdate(),
+			"planned_end_date": add_days(nowdate(), 1),
+			"process_name": self.doubling,
+			"production_detail": ipd.name,
+		})
+		work_order.insert(ignore_permissions=True)
+		self.assertEqual(work_order.item, self.towel)
+
+		context = get_yarn_deliverable_rows(work_order.name)
+		matching = [
+			option
+			for option in context["options"]
+			if option["production_detail"] == ipd.name
+		]
+		self.assertEqual(context["mode"], "transformation")
+		self.assertEqual(context["selected_production_details"], [ipd.name])
+		self.assertEqual(len(context["options"]), 1)
+		self.assertEqual(len(matching), 1)
+		self.assertEqual(matching[0]["item"], self.towel)
+		self.assertEqual(matching[0]["rows"][0]["route_name"], ipd.mgk_yarn_process_routes[0].name)
+		self.assertEqual(
+			{
+				row["attribute"]: row["values"]
+				for row in matching[0]["ipd_attributes"]
+			},
+			{
+				"Colour": ["Orange", "Blue", "Green"],
+				"Size": ["M", "L"],
+			},
+		)
+
+		result = calculate_deliverables(
+			work_order.name,
+			[
+				{
+					"production_detail": ipd.name,
+					"route_name": ipd.mgk_yarn_process_routes[0].name,
+					"attribute_values": {"Colour": "Orange"},
+					"weight": 25,
+				},
+				{
+					"production_detail": ipd.name,
+					"route_name": ipd.mgk_yarn_process_routes[0].name,
+					"attribute_values": {"Colour": "Blue"},
+					"weight": 10,
+				},
+			],
+			modified=work_order.modified,
+		)
+		work_order.reload()
+
+		self.assertEqual(
+			[(row.item, row.production_detail) for row in work_order.mgk_items],
+			[(self.towel, ipd.name)],
+		)
+		self.assertEqual(len(work_order.deliverables), 2)
+		self.assertEqual(len(work_order.receivables), 2)
+		self.assertEqual(
+			{
+				_matrix_variant_attributes(row.item_variant)["Colour"]: row.qty
+				for row in work_order.deliverables
+			},
+			{"Orange": 25, "Blue": 10},
+		)
+		self.assertEqual(result["mode"], "transformation")
+
+	def test_calculation_rejects_ipd_other_than_work_order_production_detail(self):
+		selected_ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+		other_ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.dyeing,
+				"input_item": self.yarn_80,
+				"output_item": self.yarn_80,
+				"from_colour": "Orange",
+				"to_colour": "Blue",
+				"quantity_ratio": 1,
+			},
+		])
+		supplier = frappe.db.get_value("Supplier", {}, "name")
+		address = frappe.db.get_value("Address", {}, "name")
+		work_order = frappe.get_doc({
+			"doctype": "Work Order",
+			"naming_series": "WO-",
+			"wo_date": nowdate(),
+			"supplier": supplier,
+			"delivery_location": supplier,
+			"supplier_address": address,
+			"delivery_address": address,
+			"planned_start_date": nowdate(),
+			"planned_end_date": add_days(nowdate(), 1),
+			"process_name": self.doubling,
+			"production_detail": selected_ipd.name,
+		})
+		work_order.insert(ignore_permissions=True)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "must match Work Order"):
+			calculate_deliverables(
+				work_order.name,
+				[{
+					"production_detail": other_ipd.name,
+					"route_name": other_ipd.mgk_yarn_process_routes[0].name,
+					"attribute_values": {},
+					"weight": 25,
+				}],
+				modified=work_order.modified,
+			)
+		work_order.reload()
+		self.assertEqual(work_order.mgk_items, [])
+		self.assertEqual(work_order.production_detail, selected_ipd.name)
+
+	def test_ipd_attribute_values_are_isolated_from_item_master(self):
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+		other_ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+
+		item = frappe.get_doc("Item", self.towel)
+		item_colour_mapping = next(
+			row.mapping for row in item.attributes if row.attribute == "Colour"
+		)
+		ipd_colour_mapping = next(
+			row.mapping for row in ipd.item_attributes if row.attribute == "Colour"
+		)
+		other_ipd_colour_mapping = next(
+			row.mapping
+			for row in other_ipd.item_attributes
+			if row.attribute == "Colour"
+		)
+
+		self.assertNotEqual(ipd_colour_mapping, item_colour_mapping)
+		self.assertNotEqual(other_ipd_colour_mapping, item_colour_mapping)
+		self.assertNotEqual(ipd_colour_mapping, other_ipd_colour_mapping)
+
+		update_ipd_mapping_values(
+			ipd.name,
+			"Colour",
+			["Orange"],
+			mapping=ipd_colour_mapping,
+		)
+
+		self.assertEqual(
+			[
+				row.attribute_value
+				for row in frappe.get_doc(
+					"Item Item Attribute Mapping", ipd_colour_mapping
+				).values
+			],
+			["Orange"],
+		)
+		for unchanged_mapping in (
+			item_colour_mapping,
+			other_ipd_colour_mapping,
+		):
+			self.assertEqual(
+				[
+					row.attribute_value
+					for row in frappe.get_doc(
+						"Item Item Attribute Mapping", unchanged_mapping
+					).values
+				],
+				["Orange", "Blue", "Green"],
+			)
+
+	def test_ipd_bom_mapping_is_created_from_the_saved_child_row(self):
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+		ipd.append("item_bom", {
+			"item": self.yarn_40,
+			"qty_of_product": 1,
+			"qty_of_bom_item": 2,
+			"uom": "Kg",
+		})
+		ipd.save(ignore_permissions=True)
+		ipd.reload()
+		bom_row = ipd.item_bom[0]
+
+		# The saved child row is authoritative: a tampered client-side bom_item
+		# argument must not redirect the mapping to a different Item.
+		mapping_name = create_mapping(
+			ipd.name,
+			bom_item=self.yarn_60,
+			bom_row=bom_row.name,
+		)
+		mapping = frappe.get_doc("Item BOM Attribute Mapping", mapping_name)
+		ipd.reload()
+		bom_row = ipd.item_bom[0]
+
+		self.assertEqual(mapping.item, self.towel)
+		self.assertEqual(mapping.bom_item, self.yarn_40)
+		self.assertEqual(
+			[row.attribute for row in mapping.item_attributes],
+			["Colour", "Size"],
+		)
+		self.assertEqual(
+			[row.attribute for row in mapping.bom_item_attributes],
+			["Colour"],
+		)
+		self.assertEqual(bom_row.based_on_attribute_mapping, 1)
+		self.assertEqual(bom_row.attribute_mapping, mapping_name)
+		self.assertEqual(
+			get_mapping_context(mapping_name),
+			{
+				"ipd": ipd.name,
+				"item": self.towel,
+				"item_attributes": ["Colour", "Size"],
+				"item_attribute_values": {
+					"Colour": ["Orange", "Blue", "Green"],
+					"Size": ["M", "L"],
+				},
+			},
+		)
+
+		# Re-opening Manage combinations must reuse the same mapping.
+		self.assertEqual(
+			create_mapping(ipd.name, bom_row=bom_row.name),
+			mapping_name,
+		)
+
+	def test_base_yrp_bom_mapping_copies_same_attribute_to_bom(self):
+		mapping = SimpleNamespace(
+			item_attributes=[
+				frappe._dict(attribute="Size", same_attribute=0),
+				frappe._dict(attribute="Colour", same_attribute=1),
+			],
+			bom_item_attributes=[
+				frappe._dict(attribute="Colour", same_attribute=1),
+			],
+			values=[
+				frappe._dict(
+					index=0,
+					type="item",
+					attribute="Size",
+					attribute_value="M",
+					quantity=1.25,
+				),
+			],
+		)
+
+		self.assertEqual(
+			_lookup_mode_b(mapping, {"Size": "M", "Colour": "Orange"}),
+			{
+				"qty_of_bom_item": 1.25,
+				"bom_attrs": {"Colour": "Orange"},
+			},
+		)
+
+	def test_ipd_bom_mapping_rejects_a_child_row_from_another_ipd(self):
+		first_ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+		first_ipd.append("item_bom", {
+			"item": self.yarn_40,
+			"qty_of_product": 1,
+			"qty_of_bom_item": 1,
+			"uom": "Kg",
+		})
+		first_ipd.save(ignore_permissions=True)
+		first_ipd.reload()
+		second_ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.doubling,
+				"input_item": self.yarn_40,
+				"output_item": self.yarn_80,
+				"quantity_ratio": 1,
+			},
+		])
+
+		with self.assertRaises(frappe.ValidationError):
+			create_mapping(
+				second_ipd.name,
+				bom_row=first_ipd.item_bom[0].name,
+			)
 
 	def test_one_dyeing_step_can_output_multiple_colours(self):
 		ipd = self._make_ipd([
@@ -433,8 +1148,10 @@ class TestYarnProcessFlow(FrappeTestCase):
 		wo = frappe._dict(
 			name="_Test Multi Colour Dyeing WO",
 			process_name=self.dyeing,
+			production_detail=ipd.name,
 			mgk_items=[frappe._dict(production_detail=ipd.name)],
 		)
+		regenerate_process_matrices(ipd)
 		deliverables, receivables = _prepare_yarn_transformation_items(
 			wo,
 			[
@@ -460,6 +1177,52 @@ class TestYarnProcessFlow(FrappeTestCase):
 				for row in receivables
 			},
 			{"Blue": 60, "Green": 40},
+		)
+
+	def test_empty_item_colour_mapping_uses_all_colour_master_values(self):
+		suffix = frappe.generate_hash(length=8)
+		fallback_colours = [
+			f"_Test Fallback A {suffix}",
+			f"_Test Fallback B {suffix}",
+		]
+		for value in fallback_colours:
+			frappe.get_doc(
+				{
+					"doctype": "Item Attribute Value",
+					"attribute_name": "Colour",
+					"attribute_value": value,
+				}
+			).insert(ignore_permissions=True)
+
+		empty_mapping = self._make_mapping("Colour", [])
+		empty_yarn = self._make_item(
+			f"_Test Empty Colour Yarn {suffix}",
+			"Yarn Item Group",
+			"Kg",
+			[{"attribute": "Colour", "mapping": empty_mapping}],
+			is_yarn_item=1,
+		)
+
+		options = get_item_attribute_options(empty_yarn)
+		self.assertTrue(set(fallback_colours).issubset(options["Colour"]))
+
+		ipd = self._make_ipd([
+			{
+				"sequence": 10,
+				"process_name": self.dyeing,
+				"input_item": empty_yarn,
+				"output_item": empty_yarn,
+				"from_colour": fallback_colours[0],
+				"to_colour": fallback_colours[1],
+				"quantity_ratio": 1,
+			},
+		])
+		self.assertEqual(
+			(
+				ipd.mgk_yarn_process_routes[0].from_colour,
+				ipd.mgk_yarn_process_routes[0].to_colour,
+			),
+			tuple(fallback_colours),
 		)
 
 	def test_po_grn_ipd_doubling_and_dyeing_end_to_end(self):
@@ -564,6 +1327,8 @@ class TestYarnProcessFlow(FrappeTestCase):
 			[row.attribute for row in ipd.item_attributes],
 			["Colour", "Size"],
 		)
+		approve_ipd(ipd.name, modified=ipd.modified)
+		ipd.reload()
 
 		self._make_process_cost(
 			self.doubling,
@@ -582,6 +1347,7 @@ class TestYarnProcessFlow(FrappeTestCase):
 			"planned_end_date": add_days(nowdate(), 1),
 			"process_name": self.doubling,
 			"item": self.towel,
+			"production_detail": ipd.name,
 			"mgk_items": [{
 				"item": self.towel,
 				"production_detail": ipd.name,
@@ -626,6 +1392,7 @@ class TestYarnProcessFlow(FrappeTestCase):
 			"planned_end_date": add_days(nowdate(), 1),
 			"process_name": self.dyeing,
 			"item": self.towel,
+			"production_detail": ipd.name,
 			"mgk_items": [{
 				"item": self.towel,
 				"production_detail": ipd.name,
@@ -696,11 +1463,13 @@ class TestYarnProcessFlow(FrappeTestCase):
 		wo = frappe.get_doc({
 			"doctype": "Work Order",
 			"process_name": self.doubling,
+			"production_detail": ipd.name,
 			"mgk_items": [
 				{"item": self.yarn_80, "production_detail": ipd.name}
 			],
 		})
 		wo.name = "_Test Yarn Work Order"
+		regenerate_process_matrices(ipd)
 		deliverables, receivables = _prepare_yarn_transformation_items(
 			wo,
 			[

@@ -97,7 +97,7 @@
 			<div class="attr-strip">
 				<div class="attr-cell">
 					<span class="al">Item</span>
-					<a class="av mgk-mono" @click="navigateDoc('Item', doc.item)">{{ doc.item || "—" }}</a>
+					<a class="av mgk-mono" @click="navigateDoc('Item', doc.item)">{{ localizedItem(doc.item) }}</a>
 				</div>
 				<div class="attr-cell">
 					<span class="al">Primary Attribute</span>
@@ -180,6 +180,7 @@
 							</div>
 							<div class="ipd-add-row">
 								<AutoComplete
+									ref="attrValueInputEl"
 									v-model="attrNewValue"
 									:suggestions="attrValueSuggestions"
 									@complete="onAttrNewComplete(card, $event)"
@@ -243,7 +244,7 @@
 				<DataTable :value="doc.item_bom || []" class="mgk-table cfg-dt" :rowHover="false" dataKey="name">
 					<Column field="item" header="Item">
 						<template #body="{ data }">
-							<a class="cell-link mgk-mono" @click="navigateDoc('Item', data.item)">{{ data.item || "—" }}</a>
+							<a class="cell-link mgk-mono" @click="navigateDoc('Item', data.item)">{{ localizedItem(data.item) }}</a>
 						</template>
 					</Column>
 					<Column field="qty_of_product" header="Qty of Product">
@@ -314,13 +315,13 @@
 				</DataTable>
 
 				<!-- Inline add/edit form for Item BOM -->
-				<div v-if="bomFormMode !== 'off'" class="add-row-form">
+				<div v-if="bomFormMode !== 'off'" ref="bomFormEl" class="add-row-form">
 					<div class="form-title">
 						<i :class="bomFormMode === 'edit' ? 'pi pi-pencil' : 'pi pi-plus'" />
 						{{ bomFormMode === 'edit' ? `Edit BOM row #${editingBomIdx + 1}` : "Add BOM row" }}
 					</div>
 					<div class="form-grid">
-						<div class="form-field">
+						<div class="form-field" data-focus-key="item">
 							<label>Item *</label>
 							<AutoComplete
 								v-model="bomDraft.item"
@@ -333,7 +334,7 @@
 								fluid
 							/>
 						</div>
-						<div class="form-field">
+						<div class="form-field" data-focus-key="qty-product">
 							<label>Qty of Product *</label>
 							<InputNumber
 								v-model="bomDraft.qty_of_product"
@@ -342,7 +343,7 @@
 								fluid
 							/>
 						</div>
-						<div class="form-field">
+						<div class="form-field" data-focus-key="qty-bom">
 							<label>Qty of BOM Item *</label>
 							<InputNumber
 								v-model="bomDraft.qty_of_bom_item"
@@ -373,7 +374,7 @@
 								fluid
 							/>
 						</div>
-						<div v-if="doc.dependent_attribute" class="form-field">
+						<div v-if="doc.dependent_attribute" class="form-field" data-focus-key="dependent">
 							<label>{{ doc.dependent_attribute }} *</label>
 							<AutoComplete
 								v-model="bomDraft.dependent_attribute_value"
@@ -484,13 +485,13 @@
 				</DataTable>
 
 				<!-- Inline add/edit form for IPD Processes -->
-				<div v-if="processFormMode !== 'off'" class="add-row-form">
+				<div v-if="processFormMode !== 'off'" ref="processFormEl" class="add-row-form">
 					<div class="form-title">
 						<i :class="processFormMode === 'edit' ? 'pi pi-pencil' : 'pi pi-plus'" />
 						{{ processFormMode === 'edit' ? `Edit process row #${editingProcessIdx + 1}` : "Add process row" }}
 					</div>
 					<div class="form-grid">
-						<div class="form-field">
+						<div class="form-field" data-focus-key="process">
 							<label>Process *</label>
 							<AutoComplete
 								v-model="processDraft.process_name"
@@ -588,7 +589,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, nextTick, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
@@ -604,7 +605,9 @@ import { getDoc, getList, deleteDoc, callMethod, searchLink } from "@/api/client
 import { useAppToast } from "@/composables/useToast"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { usePermissions } from "@/composables/usePermissions"
+import { useLinkTitles } from "@/composables/useLinkTitles"
 import { getRegistryByDoctype } from "@/config/doctypes"
+import { focusFirstControl } from "@/utils/focusControl"
 
 // Local directive registration (components import their own deps in this app).
 const vTooltip = Tooltip
@@ -617,6 +620,7 @@ const router = useRouter()
 const toast = useAppToast()
 const confirm = useAppConfirm()
 const { canDelete, isAdmin, hasRole } = usePermissions()
+const linkTitles = useLinkTitles()
 const deleting = ref(false)
 
 const doc = ref(null)
@@ -636,6 +640,9 @@ const attrSaving = ref(false)
 // ItemAttributeListView so the two surfaces share the same UX (lessons-
 // learned 2026-05-29: don't downgrade Link pickers when porting components).
 const attrValueSuggestions = ref([])
+const attrValueInputEl = ref(null)
+const bomFormEl = ref(null)
+const processFormEl = ref(null)
 
 // ── Add/Edit form for Item BOM ──
 // bomFormMode: "off" | "add" | "edit". editingBomIdx is the row index when
@@ -657,13 +664,14 @@ const bomItemSuggestions = ref([])
 const processSuggestions = ref([])
 const depAttrValueSuggestions = ref([])
 
-function openAddBom() {
+async function openAddBom() {
 	if (processFormMode.value !== "off") cancelAddProcess()
 	bomDraft.value = blankBomDraft()
 	editingBomIdx.value = -1
 	bomFormMode.value = "add"
+	await focusFirstControl(bomFormEl, { selector: '[data-focus-key="item"]' })
 }
-function openEditBom(idx) {
+async function openEditBom(idx) {
 	const row = (doc.value?.item_bom || [])[idx]
 	if (!row) return
 	if (processFormMode.value !== "off") cancelAddProcess()
@@ -678,6 +686,7 @@ function openEditBom(idx) {
 	}
 	editingBomIdx.value = idx
 	bomFormMode.value = "edit"
+	await focusFirstControl(bomFormEl, { selector: '[data-focus-key="item"]' })
 }
 function cancelAddBom() {
 	bomFormMode.value = "off"
@@ -759,13 +768,14 @@ const blankProcessDraft = () => ({ process_name: "", in_stage: "", out_stage: ""
 const processDraft = ref(blankProcessDraft())
 const stageSuggestions = ref([])
 
-function openAddProcess() {
+async function openAddProcess() {
 	if (bomFormMode.value !== "off") cancelAddBom()
 	processDraft.value = blankProcessDraft()
 	editingProcessIdx.value = -1
 	processFormMode.value = "add"
+	await focusFirstControl(processFormEl, { selector: '[data-focus-key="process"]' })
 }
-function openEditProcess(idx) {
+async function openEditProcess(idx) {
 	const row = (doc.value?.ipd_processes || [])[idx]
 	if (!row) return
 	if (bomFormMode.value !== "off") cancelAddBom()
@@ -776,6 +786,7 @@ function openEditProcess(idx) {
 	}
 	editingProcessIdx.value = idx
 	processFormMode.value = "edit"
+	await focusFirstControl(processFormEl, { selector: '[data-focus-key="process"]' })
 }
 function cancelAddProcess() {
 	processFormMode.value = "off"
@@ -823,6 +834,7 @@ async function saveProcessRow() {
 	const proc = typeof d.process_name === "string" ? d.process_name : d.process_name?.name || ""
 	if (!proc) {
 		toast.warn("Missing required field", "Process is required.")
+		await focusFirstControl(processFormEl, { selector: '[data-focus-key="process"]' })
 		return
 	}
 	processSaving.value = true
@@ -859,6 +871,8 @@ async function saveBomRow() {
 	const d = bomDraft.value
 	if (!d.item || !d.uom || !(Number(d.qty_of_product) > 0) || !(Number(d.qty_of_bom_item) > 0)) {
 		toast.warn("Missing required field", "Item, UOM, and both quantities are required.")
+		const key = !d.item ? "item" : !(Number(d.qty_of_product) > 0) ? "qty-product" : "qty-bom"
+		await focusFirstControl(bomFormEl, { selector: `[data-focus-key="${key}"]` })
 		return
 	}
 	const depAttr = doc.value?.dependent_attribute
@@ -869,6 +883,7 @@ async function saveBomRow() {
 	// the IPD has a dependent attribute (updateChildTableReqd, item_production_detail.js:522).
 	if (depAttr && !depVal) {
 		toast.warn("Missing required field", `${depAttr} (stage) is required for each BOM row.`)
+		await focusFirstControl(bomFormEl, { selector: '[data-focus-key="dependent"]' })
 		return
 	}
 	bomSaving.value = true
@@ -916,13 +931,15 @@ const headerLine = computed(() => {
 	const d = doc.value
 	if (!d) return ""
 	const bits = []
-	if (d.item) bits.push(d.item)
+	if (d.item) bits.push(localizedItem(d.item))
 	return bits.join(" · ")
 })
 
-// Q2/Q3: the produced item names the hero + breadcrumb. Item is autonamed from
-// name1, so doc.item IS already the human name — no title resolution needed.
-const itemLabel = computed(() => doc.value?.item || "")
+function localizedItem(value) {
+	return linkTitles.titleFor("Item", value) || value || "—"
+}
+
+const itemLabel = computed(() => doc.value?.item ? localizedItem(doc.value.item) : "")
 
 const approvalSeverity = computed(() => {
 	const s = doc.value?.approval_status
@@ -1064,28 +1081,36 @@ async function openMapping(row) {
 }
 
 // ── Inline edit for Item Attributes cards ──
-function enterAttrEdit(idx) {
+async function enterAttrEdit(idx) {
 	editingAttrIdx.value = idx
 	attrDraftValues.value = [...(itemAttrCards.value[idx]?.values || [])]
 	attrNewValue.value = ""
+	await focusAttrValueInput()
 }
 function cancelAttrEdit() {
 	editingAttrIdx.value = -1
 	attrDraftValues.value = []
 	attrNewValue.value = ""
 }
-function addAttrValue() {
+async function addAttrValue() {
 	const raw = attrNewValue.value
 	const v = (typeof raw === "string" ? raw : raw?.name || "").trim()
 	if (!v) return
 	if (attrDraftValues.value.includes(v)) {
 		toast.warn("Duplicate", `"${v}" already in the list.`)
 		attrNewValue.value = ""
+		await focusAttrValueInput()
 		return
 	}
 	attrDraftValues.value.push(v)
 	attrNewValue.value = ""
 	attrValueSuggestions.value = []
+	await focusAttrValueInput()
+}
+async function focusAttrValueInput() {
+	await nextTick()
+	const component = Array.isArray(attrValueInputEl.value) ? attrValueInputEl.value[0] : attrValueInputEl.value
+	component?.$el?.querySelector?.("input")?.focus?.()
 }
 // Filtered list of existing Item Attribute Values for this attribute, minus
 // the ones already in the draft. Free-text entry still allowed — the

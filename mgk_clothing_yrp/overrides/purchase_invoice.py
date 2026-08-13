@@ -19,15 +19,19 @@ from frappe import _
 from frappe.utils import flt
 
 from yrp.yrp.doctype.purchase_invoice.purchase_invoice import (
+	_check_invoice_fetch_permission,
 	_get_item_group,
 	_get_tax_rate,
 	_get_work_order_item_totals,
 	_normal_json,
+	_validate_selected_grn,
 )
 
 
 @frappe.whitelist()
-def fetch_grn_details(grns, against, supplier):
+def fetch_grn_details(grns, against, supplier, purchase_invoice=None):
+	_check_invoice_fetch_permission(purchase_invoice)
+	frappe.has_permission("Goods Received Note", "read", throw=True)
 	grns = frappe.parse_json(grns) if isinstance(grns, str) else grns
 	grns = list(dict.fromkeys(grns or []))
 	if not grns:
@@ -37,13 +41,8 @@ def fetch_grn_details(grns, against, supplier):
 	wo_items = {}
 	total_quantity = 0
 	for grn_name in grns:
+		_validate_selected_grn(grn_name, supplier, against, purchase_invoice)
 		grn = frappe.get_doc("Goods Received Note", grn_name)
-		if grn.docstatus != 1:
-			frappe.throw(_("Goods Received Note {0} must be submitted.").format(grn_name))
-		if supplier and grn.supplier != supplier:
-			frappe.throw(_("Goods Received Note {0} belongs to another supplier.").format(grn_name))
-		if against and grn.against != against:
-			frappe.throw(_("Goods Received Note {0} is against {1}.").format(grn_name, grn.against))
 
 		work_order = (
 			frappe.get_doc("Work Order", grn.against_id) if grn.against == "Work Order" else None
@@ -74,12 +73,14 @@ def fetch_grn_details(grns, against, supplier):
 					"tax": tax,
 					"actual_rate": stock_rate,
 					"actual_qty": 0,
+					"_actual_amount": 0,
 					"set_combination": json.dumps(set_combination) if set_combination else None,
 				},
 			)
 			items[key]["qty"] += qty
 			items[key]["actual_qty"] += qty
 			items[key]["amount"] += qty * rate
+			items[key]["_actual_amount"] += qty * stock_rate
 			total_quantity += qty
 
 			if work_order:
@@ -107,6 +108,12 @@ def fetch_grn_details(grns, against, supplier):
 
 	item_rows = list(items.values())
 	for row in item_rows:
+		row["rate"] = flt(row["amount"]) / flt(row["qty"]) if flt(row["qty"]) else 0
+		row["actual_rate"] = (
+			flt(row.pop("_actual_amount")) / flt(row["actual_qty"])
+			if flt(row["actual_qty"])
+			else 0
+		)
 		row["amount"] = flt(row["qty"]) * flt(row["rate"])
 
 	grand_total = sum(
@@ -119,5 +126,10 @@ def fetch_grn_details(grns, against, supplier):
 		"total": grand_total,
 		"total_quantity": total_quantity,
 		"wo_items": list(wo_items.values()),
-		"allow_to_change_rate": 0,
+		"tax_rates": {
+			row.get("tax"): _get_tax_rate(row.get("tax"))
+			for row in item_rows
+			if row.get("tax")
+		},
+		"allow_to_change_rate": 1,
 	}

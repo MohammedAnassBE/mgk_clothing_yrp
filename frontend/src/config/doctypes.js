@@ -27,6 +27,7 @@
 // through workflow actions, not plain docstatus submit/cancel.
 const SUBMITTABLE = new Set([
 	"Work Order",
+	"Work Order Correction",
 	"Production Order",
 	"Delivery Challan",
 	"Purchase Order",
@@ -105,6 +106,12 @@ const GROUPS = [
 				{ field: "process_name", label: "Process" },
 				{ field: "wo_date", label: "WO Date", type: "Date" },
 			] },
+			{ doctype: "Work Order Correction", icon: "pi pi-pencil", dateTabs: "correction_date", tabMode: "status", listFields: [
+				{ field: "work_order", label: "Work Order" },
+				{ field: "supplier", label: "Job-worker" },
+				{ field: "process_name", label: "Process" },
+				{ field: "correction_date", label: "Correction Date", type: "Date" },
+			] },
 			{ doctype: "Production Order", icon: "pi pi-th-large", dateTabs: "posting_date" },
 			{ doctype: "Delivery Challan", icon: "pi pi-send", dateTabs: "posting_date", listFields: [
 				{ field: "work_order", label: "Work Order" },
@@ -166,7 +173,7 @@ const GROUPS = [
 			{ doctype: "Process Cost", icon: "pi pi-indian-rupee" },
 			{ doctype: "Production Term", icon: "pi pi-bolt" },
 			{ doctype: "Received Type", icon: "pi pi-inbox" },
-			{ doctype: "Warehouse", icon: "pi pi-warehouse" },
+			{ doctype: "Warehouse", icon: "pi pi-warehouse", hasAddressContact: true },
 			{ doctype: "Terms and Condition", icon: "pi pi-book" },
 			// Workstation (erpnext) is NOT installed on mgk_yrp.site. Removed from the
 			// registry 2026-05-27 — it was leaking into the sidebar for Administrator
@@ -203,6 +210,26 @@ for (const g of GROUPS) {
 		})
 	}
 }
+
+// User is deliberately registry-only: the MGK Registered Experience exposes it
+// from the permission-gated “Users & Access” master card, while the generic
+// transaction sidebar must not gain a new Administration group.
+DOCTYPES.push({
+	doctype: "User",
+	route: "user",
+	label: "Users & Access",
+	icon: "pi pi-users",
+	group: "Administration",
+	roles: ["System Manager"],
+	isSubmittable: false,
+	isWorkflow: false,
+	workflowStates: null,
+	tabMode: null,
+	dateTabs: null,
+	listFields: null,
+	hasAddressContact: false,
+	note: null,
+})
 
 // Default columns for any DocType without an explicit listFields config.
 export const GENERIC_FIELDS = [

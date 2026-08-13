@@ -1,62 +1,70 @@
 /**
- * useLinkTitles — resolve Link-field codes (e.g. `S-0003`, `PC-00007`) to the
- * human title a floor manager actually recognises ("Facing Vendor", "Dyeing
- * Charges"). This is the engine behind UX quick-win Q1 ("resolve link codes →
- * human names") in both the detail view and the list.
- *
- * Two resolution sources, cheapest first:
- *   1. A `<field>_name` SIBLING already present on the row/doc — many yrp links
- *      ship one via `fetch_from` (e.g. `supplier_name`). Zero network cost.
- *      That lookup is synchronous and lives in the consuming template; this
- *      composable handles the generic case below.
- *   2. A GENERIC cached resolver — for any Link whose target has a `title_field`
- *      but no sibling, batch-fetch the titles by name (one request per target
- *      doctype per view) and cache them. `display()` returns the raw code until
- *      the title arrives, then re-renders reactively.
- *
- * The cache is MODULE-LEVEL and reactive, so it is shared across every view and
- * every navigation in the session — a Supplier resolved on a Work Order detail
- * is instantly named on the Delivery Challan list. Negative results (no
- * title_field, or fetch failed) are cached too, so we never refetch a dead end.
+ * Resolve canonical Frappe Link values to their user-facing English/Tamil
+ * master names. The Link value is never replaced: only the rendered label
+ * follows the MGK header language toggle.
  */
 import { reactive } from "vue"
 import { getList, getMeta } from "@/api/client"
+import { useDisplayLanguage } from "@/composables/useDisplayLanguage"
 
-// `${doctype}::${name}` → title string, or null (resolved, no human title).
-// undefined = not yet resolved. Reactive: setting a key re-renders readers.
+export const LOCALIZED_NAME_FIELDS = Object.freeze({
+	Item: { english: "name1", tamil: "mgk_tamil_name" },
+	Supplier: { english: "supplier_name", tamil: "mgk_tamil_name" },
+	Warehouse: { english: "name1", tamil: "mgk_tamil_name" },
+	"MGK Agent": { english: "agent_name", tamil: "mgk_tamil_name" },
+})
+
+// `${doctype}::${name}` → { english, tamil } or null (resolved, no title).
+// undefined means not resolved yet. This module-level cache is shared by every
+// list, detail, popup and editor in the Registered Experience.
 const titleCache = reactive({})
-
-// doctype → title_field string, "" = no title field (use code), or undefined =
-// not yet looked up. Avoids re-fetching meta per name.
 const titleFieldCache = reactive({})
-
-// In-flight prime() promises keyed by doctype, so concurrent components asking
-// for the same target don't fan out duplicate requests.
 const inflight = {}
+const pending = {}
+let pendingScheduled = false
+
+const { isTamil } = useDisplayLanguage()
 
 function key(doctype, name) {
 	return `${doctype}::${name}`
 }
 
-async function resolveTitleField(doctype) {
+function localizedFields(doctype) {
+	return LOCALIZED_NAME_FIELDS[doctype] || null
+}
+
+async function resolveTitleFields(doctype) {
 	if (doctype in titleFieldCache) return titleFieldCache[doctype]
+	if (localizedFields(doctype)) {
+		titleFieldCache[doctype] = localizedFields(doctype)
+		return titleFieldCache[doctype]
+	}
 	try {
 		const bundle = await getMeta(doctype)
 		const parent = Array.isArray(bundle) ? bundle[0] : null
-		const tf = parent?.title_field || ""
-		// A title_field that IS `name` adds nothing over the code — treat as none.
-		titleFieldCache[doctype] = tf && tf !== "name" ? tf : ""
+		const field = parent?.title_field || ""
+		titleFieldCache[doctype] = {
+			english: field && field !== "name" ? field : "",
+			tamil: "",
+		}
 	} catch (_) {
-		titleFieldCache[doctype] = ""
+		titleFieldCache[doctype] = { english: "", tamil: "" }
 	}
 	return titleFieldCache[doctype]
 }
 
-/**
- * Fetch + cache titles for a set of (doctype, name) pairs. Groups by doctype,
- * one list request each, skipping names already cached. Safe to call on every
- * doc load / page change — it no-ops for already-resolved values.
- */
+function remember(doctype, rows) {
+	if (!doctype) return
+	for (const row of rows || []) {
+		if (!row?.name) continue
+		const english = row.label_en || row.label || row.name
+		const tamil = row.label_ta || ""
+		titleCache[key(doctype, row.name)] = {
+			english: String(english || row.name),
+			tamil: String(tamil || ""),
+		}
+	}
+}
 async function prime(pairs) {
 	const byDoctype = {}
 	for (const { doctype, name } of pairs || []) {
@@ -64,43 +72,41 @@ async function prime(pairs) {
 		if (key(doctype, name) in titleCache) continue
 		;(byDoctype[doctype] ||= new Set()).add(String(name))
 	}
+
 	await Promise.all(
 		Object.entries(byDoctype).map(async ([doctype, nameSet]) => {
 			const names = [...nameSet]
-			const tf = await resolveTitleField(doctype)
-			if (!tf) {
-				// No human title for this doctype — cache null so display() shows the
-				// code and we never look again.
-				for (const n of names) titleCache[key(doctype, n)] = null
+			const fields = await resolveTitleFields(doctype)
+			if (!fields.english && !fields.tamil) {
+				for (const name of names) titleCache[key(doctype, name)] = null
 				return
 			}
-			const flightKey = `${doctype}::${names.join(",")}`
+
+			const flightKey = `${doctype}::${names.slice().sort().join(",")}`
 			if (!inflight[flightKey]) {
+				const requestedFields = ["name", fields.english, fields.tamil].filter(Boolean)
 				inflight[flightKey] = getList(doctype, {
-					fields: ["name", tf],
+					fields: [...new Set(requestedFields)],
 					filters: [["name", "in", names]],
 					limit_page_length: names.length,
 				})
 					.then(({ data }) => {
 						const found = new Set()
 						for (const row of data || []) {
-							const t = row[tf]
-							titleCache[key(doctype, row.name)] =
-								t && String(t) !== String(row.name) ? String(t) : null
+							const english = (fields.english && row[fields.english]) || row.name
+							const tamil = (fields.tamil && row[fields.tamil]) || ""
+							titleCache[key(doctype, row.name)] = {
+								english: String(english || row.name),
+								tamil: String(tamil || ""),
+							}
 							found.add(String(row.name))
 						}
-						// Names with no row (deleted / no perm) → cache null, don't retry.
-						for (const n of names) {
-							if (!found.has(n)) titleCache[key(doctype, n)] = null
+						for (const name of names) {
+							if (!found.has(name)) titleCache[key(doctype, name)] = null
 						}
 					})
 					.catch(() => {
-						// Transient failure (network / 5xx / timeout): do NOT cache. Leaving
-						// the keys unset lets prime() retry them on the next view — and since
-						// titleFor() reading a missing key still tracks reactivity, the names
-						// fill in once a later prime() succeeds. The doctype shows the raw
-						// code meanwhile. (Only the deterministic no-title-field / no-row
-						// cases above cache null permanently — those genuinely won't change.)
+						// Do not negative-cache transient failures; a later render retries.
 					})
 					.finally(() => {
 						delete inflight[flightKey]
@@ -111,32 +117,73 @@ async function prime(pairs) {
 	)
 }
 
-/**
- * The resolved title for (doctype, name), or null if none/unresolved. Reactive:
- * reading this inside a computed/render re-runs when the title arrives.
- */
-function titleFor(doctype, name) {
-	if (!doctype || !name) return null
-	const v = titleCache[key(doctype, name)]
-	return v == null ? null : v
+// Specialized tables do not all have an explicit lifecycle hook. A cache miss
+// queues one microtask-batched fetch, so calling titleFor() in any template is
+// sufficient and never creates one API request per cell.
+function queuePrime(doctype, name) {
+	if (!doctype || !name || key(doctype, name) in titleCache) return
+	;(pending[doctype] ||= new Set()).add(String(name))
+	if (pendingScheduled) return
+	pendingScheduled = true
+	Promise.resolve().then(() => {
+		pendingScheduled = false
+		const pairs = Object.entries(pending).flatMap(([target, names]) => {
+			delete pending[target]
+			return [...names].map((value) => ({ doctype: target, name: value }))
+		})
+		prime(pairs)
+	})
 }
 
-/**
- * Display parts for a Link value: `{ primary, code }`.
- *  - `siblingName` (the `<field>_name` value, when the caller has one) wins.
- *  - else the generically-resolved title.
- *  - else the raw code as primary with no secondary.
- * When a human name is found, `code` carries the raw value to render muted
- * beside it ("Facing Vendor · S-0003"). When the primary IS the code, `code`
- * is "" so the template shows the code once.
- */
-function linkParts(doctype, name, siblingName) {
+function titlesFor(doctype, name) {
+	if (!doctype || !name) return null
+	const cacheKey = key(doctype, name)
+	if (!(cacheKey in titleCache)) queuePrime(doctype, name)
+	return titleCache[cacheKey] || null
+}
+
+function englishTitleFor(doctype, name) {
+	return titlesFor(doctype, name)?.english || null
+}
+
+function tamilTitleFor(doctype, name) {
+	return titlesFor(doctype, name)?.tamil || null
+}
+
+function titleFor(doctype, name) {
+	const titles = titlesFor(doctype, name)
+	if (!titles) return null
+	return (isTamil.value && titles.tamil) || titles.english || null
+}
+
+function linkParts(doctype, name, siblingEnglish = "", siblingTamil = "") {
 	const code = name == null ? "" : String(name)
-	const human = (siblingName && String(siblingName)) || titleFor(doctype, name)
+	const cached = titlesFor(doctype, name)
+	const english = String(siblingEnglish || cached?.english || "")
+	const tamil = String(siblingTamil || cached?.tamil || "")
+	const human = (isTamil.value && tamil) || english || code
+
+	// In Tamil mode an available Tamil master name is the complete display label,
+	// as requested. The canonical code remains in the model and link URL.
+	if (isTamil.value && tamil) return { primary: tamil, code: "" }
 	if (human && human !== code) return { primary: human, code }
 	return { primary: code, code: "" }
 }
 
+function suggestionLabel(row) {
+	if (!row) return ""
+	return (isTamil.value && row.label_ta) || row.label_en || row.label || row.name || ""
+}
+
 export function useLinkTitles() {
-	return { prime, titleFor, linkParts }
+	return {
+		prime,
+		remember,
+		titleFor,
+		englishTitleFor,
+		tamilTitleFor,
+		linkParts,
+		suggestionLabel,
+		isLocalizedDoctype: (doctype) => !!localizedFields(doctype),
+	}
 }

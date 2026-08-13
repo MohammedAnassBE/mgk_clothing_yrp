@@ -30,6 +30,17 @@
   "field_name": "production_detail",
   "property": "hidden",
   "property_type": "Check",
+  "value": "0"
+ },
+ {
+  "doctype": "Property Setter",
+  "name": "Work Order-production_detail-reqd",
+  "is_system_generated": 1,
+  "doctype_or_field": "DocField",
+  "doc_type": "Work Order",
+  "field_name": "production_detail",
+  "property": "reqd",
+  "property_type": "Check",
   "value": "1"
  },
  {
@@ -40,6 +51,17 @@
   "doc_type": "Item Production Detail",
   "field_name": "ipd_processes",
   "property": "hidden",
+  "property_type": "Check",
+  "value": "1"
+ },
+ {
+  "doctype": "Property Setter",
+  "name": "Warehouse-supplier-reqd",
+  "is_system_generated": 1,
+  "doctype_or_field": "DocField",
+  "doc_type": "Warehouse",
+  "field_name": "supplier",
+  "property": "reqd",
   "property_type": "Check",
   "value": "1"
  },

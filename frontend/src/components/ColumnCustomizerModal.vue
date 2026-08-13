@@ -11,31 +11,62 @@
 		:style="{ width: '460px' }"
 		@update:visible="$emit('update:visible', $event)"
 	>
-		<p class="cc-hint">Tick the columns to show; use the arrows to reorder them.</p>
+		<p class="cc-hint">Tick the columns to show; drag the handle to reorder them.</p>
 		<div class="cc-list">
-			<div v-for="(col, i) in localCols" :key="col.fieldname" class="cc-row">
-				<Checkbox v-model="col.enabled" :binary="true" :inputId="'cc-' + col.fieldname" />
-				<label :for="'cc-' + col.fieldname" class="cc-label">{{ col.label }}</label>
-				<span class="cc-type">{{ col.fieldtype }}</span>
-				<div class="cc-move">
-					<Button
-						icon="pi pi-chevron-up"
-						text
-						rounded
-						size="small"
-						:disabled="i === 0"
-						@click="move(i, -1)"
-					/>
-					<Button
-						icon="pi pi-chevron-down"
-						text
-						rounded
-						size="small"
-						:disabled="i === localCols.length - 1"
-						@click="move(i, 1)"
-					/>
+			<template v-for="(col, i) in localCols" :key="col.fieldname">
+				<div v-if="i === 0 || localCols[i - 1].enabled !== col.enabled" class="cc-group-label">
+					{{ col.enabled ? "Shown columns" : "Available columns" }}
 				</div>
-			</div>
+				<div
+					class="cc-row"
+					:class="{
+						'is-dragging': draggingField === col.fieldname,
+						'is-drag-before': dragOverField === col.fieldname && dragPlacement === 'before',
+						'is-drag-after': dragOverField === col.fieldname && dragPlacement === 'after',
+					}"
+					:data-fieldname="col.fieldname"
+					@dragover.prevent="dragOver($event, col)"
+					@drop.prevent="dropOn($event, col)"
+				>
+					<button
+						class="cc-drag-handle"
+						type="button"
+						draggable="true"
+						:aria-label="`Drag ${col.label} to reorder`"
+						:title="`Drag ${col.label} to reorder`"
+						@dragstart="startDrag($event, col)"
+						@dragend="finishDrag"
+					>
+						<i class="pi pi-bars" aria-hidden="true" />
+					</button>
+					<Checkbox
+						:model-value="col.enabled"
+						:binary="true"
+						:inputId="'cc-' + col.fieldname"
+						@update:model-value="setEnabled(i, $event)"
+					/>
+					<label :for="'cc-' + col.fieldname" class="cc-label">{{ col.label }}</label>
+					<span class="cc-type">{{ col.fieldtype }}</span>
+					<div class="cc-move">
+						<Button
+							icon="pi pi-chevron-up"
+							text
+							rounded
+							size="small"
+							:disabled="!canMove(i, -1)"
+							@click="move(i, -1)"
+						/>
+						<Button
+							icon="pi pi-chevron-down"
+							text
+							rounded
+							size="small"
+							:disabled="!canMove(i, 1)"
+							@click="move(i, 1)"
+						/>
+					</div>
+				</div>
+			</template>
 			<div v-if="!localCols.length" class="cc-empty">No customizable columns.</div>
 		</div>
 		<template #footer>
@@ -71,28 +102,90 @@ const toast = useAppToast()
 
 const localCols = ref([])
 const saving = ref(false)
+const draggingField = ref("")
+const dragOverField = ref("")
+const dragPlacement = ref("before")
 
 // Rebuild the editable copy each time the modal opens.
 watch(
 	() => props.visible,
 	(open) => {
 		if (open) {
-			localCols.value = props.columns.map((c) => ({
+			const columns = props.columns.map((c) => ({
 				fieldname: c.fieldname,
 				label: c.label,
 				fieldtype: c.fieldtype,
 				enabled: !!c.enabled,
 			}))
+			localCols.value = [
+				...columns.filter((column) => column.enabled),
+				...columns.filter((column) => !column.enabled),
+			]
 		}
 	},
 )
 
+function setEnabled(i, enabled) {
+	const [column] = localCols.value.splice(i, 1)
+	if (!column) return
+	column.enabled = !!enabled
+	const enabledCount = localCols.value.filter((item) => item.enabled).length
+	// Newly selected fields join the end of the visible group. Deselected fields
+	// move to the start of the available group, keeping the two groups obvious.
+	localCols.value.splice(enabledCount, 0, column)
+}
+
+function canMove(i, dir) {
+	const target = localCols.value[i + dir]
+	return !!target && target.enabled === localCols.value[i]?.enabled
+}
+
 function move(i, dir) {
 	const j = i + dir
-	if (j < 0 || j >= localCols.value.length) return
+	if (!canMove(i, dir)) return
 	const arr = localCols.value
 	const [item] = arr.splice(i, 1)
 	arr.splice(j, 0, item)
+}
+
+function startDrag(event, column) {
+	draggingField.value = column.fieldname
+	dragOverField.value = ""
+	event.dataTransfer.effectAllowed = "move"
+	event.dataTransfer.setData("text/plain", column.fieldname)
+}
+
+function dragOver(event, target) {
+	const source = localCols.value.find((column) => column.fieldname === draggingField.value)
+	if (!source || source.fieldname === target.fieldname || source.enabled !== target.enabled) {
+		event.dataTransfer.dropEffect = "none"
+		dragOverField.value = ""
+		return
+	}
+	const bounds = event.currentTarget.getBoundingClientRect()
+	dragOverField.value = target.fieldname
+	dragPlacement.value = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after"
+	event.dataTransfer.dropEffect = "move"
+}
+
+function dropOn(event, target) {
+	const sourceIndex = localCols.value.findIndex((column) => column.fieldname === draggingField.value)
+	const targetIndex = localCols.value.findIndex((column) => column.fieldname === target.fieldname)
+	if (sourceIndex < 0 || targetIndex < 0) return finishDrag()
+	const source = localCols.value[sourceIndex]
+	if (source.fieldname === target.fieldname || source.enabled !== target.enabled) return finishDrag()
+
+	const [column] = localCols.value.splice(sourceIndex, 1)
+	const adjustedTarget = localCols.value.findIndex((item) => item.fieldname === target.fieldname)
+	const insertionIndex = adjustedTarget + (dragPlacement.value === "after" ? 1 : 0)
+	localCols.value.splice(insertionIndex, 0, column)
+	finishDrag()
+}
+
+function finishDrag() {
+	draggingField.value = ""
+	dragOverField.value = ""
+	dragPlacement.value = "before"
 }
 
 async function saveColumns() {
@@ -148,7 +241,20 @@ async function resetColumns() {
 	max-height: 420px;
 	overflow-y: auto;
 }
+.cc-group-label {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	padding: 8px 8px 5px;
+	background: var(--p-dialog-background, #fff);
+	color: var(--mgk-muted);
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
 .cc-row {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -157,6 +263,44 @@ async function resetColumns() {
 }
 .cc-row:hover {
 	background: var(--mgk-slate-50);
+}
+.cc-row.is-dragging {
+	opacity: 0.45;
+}
+.cc-row.is-drag-before::before,
+.cc-row.is-drag-after::after {
+	position: absolute;
+	left: 7px;
+	right: 7px;
+	height: 2px;
+	border-radius: 2px;
+	background: var(--mgk-accent);
+	content: "";
+}
+.cc-row.is-drag-before::before {
+	top: -2px;
+}
+.cc-row.is-drag-after::after {
+	bottom: -2px;
+}
+.cc-drag-handle {
+	display: inline-grid;
+	flex: 0 0 24px;
+	width: 24px;
+	height: 28px;
+	place-items: center;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--mgk-muted);
+	cursor: grab;
+}
+.cc-drag-handle:hover,
+.cc-drag-handle:focus-visible {
+	color: var(--mgk-accent);
+}
+.cc-drag-handle:active {
+	cursor: grabbing;
 }
 .cc-label {
 	flex: 1;

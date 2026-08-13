@@ -1,35 +1,308 @@
 """Ordered yarn-to-yarn transformations maintained on Item Production Detail.
 
-MGK uses only two transformation shapes:
+The Process master is authoritative for the transformation shape:
 
-* Item conversion (Doubling): Item A -> Item B, carrying every yarn attribute.
-* Colour change (Dyeing): the same Item, From Colour -> To Colour, carrying all
-  other attributes.
+* ``is_item_conversion``: Item A -> Item B, carrying every yarn attribute.
+* ``Colour`` in Value Change Attributes: the same Item, From Colour -> To
+  Colour, carrying every other attribute.
+* No Value Change Attributes: a pass-through process such as Washing, carrying
+  the Item and every attribute unchanged.
 
 The IPD's main Item is the finished/context Item (for example, a towel with
 Colour and Size). The child rows independently describe the Yarn Item chain.
-Work Orders derive their deliverables and receivables directly from those rows;
-MGK does not create process-specific records, BOMs, or matrix documents.
+Those rows are the operator-facing source of truth. Approval, or an explicit
+System Manager test action, compiles them into base-YRP ``IPD Process Matrix``
+documents; Work Orders then calculate through the shared matrix engine.
 """
 
 from __future__ import annotations
 
 from collections import OrderedDict
+from itertools import product
 
 import frappe
 from frappe import _
 from frappe.utils import flt
 
 COLOUR_ATTRIBUTE = "Colour"
+ITEM_CONVERSION = "Item Conversion"
+COLOUR_CHANGE = "Colour Change"
+PASS_THROUGH = "Pass Through"
+
+
+def _process_change_attributes(process):
+	return list(dict.fromkeys(
+		row.attribute
+		for row in process.get("value_change_attributes") or []
+		if row.attribute
+	))
+
+
+def _process_shape(process):
+	"""Resolve one yarn Process without inferring its meaning from Item equality."""
+	changed_attributes = _process_change_attributes(process)
+	if process.get("is_item_conversion"):
+		if changed_attributes:
+			frappe.throw(
+				_(
+					"Yarn Process {0} is an Item Conversion and also defines Value "
+					"Change Attributes: {1}. The MGK yarn route supports only one "
+					"transformation shape per Process."
+				).format(process.name, ", ".join(changed_attributes))
+			)
+		return ITEM_CONVERSION
+
+	if not changed_attributes:
+		return PASS_THROUGH
+	if changed_attributes == [COLOUR_ATTRIBUTE]:
+		return COLOUR_CHANGE
+
+	frappe.throw(
+		_(
+			"Yarn Process {0} has unsupported Value Change Attributes: {1}. "
+			"The MGK yarn route currently supports Colour as its one changed "
+			"attribute; remove the unsupported attributes or use a Process Matrix."
+		).format(process.name, ", ".join(changed_attributes))
+	)
+
+
+def _append_matrix_combo(matrix, group_index, side, item, quantity, uom, attrs):
+	"""Append one matrix combination and its normalized attribute rows."""
+	matrix.append(
+		"combinations",
+		{
+			"group_index": group_index,
+			"side": side,
+			"combo_index": 1,
+			"item": item,
+			"quantity": quantity,
+			"uom": uom,
+		},
+	)
+	for attribute, value in attrs.items():
+		matrix.append(
+			"combination_attributes",
+			{
+				"group_index": group_index,
+				"side": side,
+				"combo_index": 1,
+				"attribute": attribute,
+				"attribute_value": value,
+			},
+		)
+
+
+def _attribute_combinations(attributes, options):
+	"""Yield ordered attribute dictionaries for a matrix cross-product."""
+	if not attributes:
+		yield {}
+		return
+	for values in product(*(options[attribute] for attribute in attributes)):
+		yield dict(zip(attributes, values, strict=True))
+
+
+def _deduplicate_states(states, attributes):
+	seen = set()
+	unique = []
+	for state in states:
+		key = tuple(state.get(attribute) for attribute in attributes)
+		if key in seen:
+			continue
+		seen.add(key)
+		unique.append(dict(state))
+	return unique
+
+
+def _compile_yarn_process_chain(doc, groups=None):
+	"""Propagate exact attribute states through the ordered yarn Process train."""
+	groups = groups if groups is not None else get_step_groups(doc)
+	item_cache = {}
+	previous_outputs = None
+	compiled = []
+
+	for group in groups:
+		process = _process_doc(group.process_name)
+		shape = _process_shape(process)
+		input_schema = _item_schema(group.input_item, item_cache)
+		output_schema = _item_schema(group.output_item, item_cache)
+		options = _shared_attribute_options(input_schema, output_schema)
+		attributes = list(options)
+		upstream_constrained = previous_outputs is not None
+
+		if upstream_constrained:
+			input_states = []
+			for state in previous_outputs:
+				unsupported = [
+					attribute
+					for attribute in attributes
+					if state.get(attribute) not in options[attribute]
+				]
+				if unsupported:
+					frappe.throw(
+						_(
+							"Yarn Process {0} cannot receive the previous Process output. "
+							"The Output Item does not allow the carried value for: {1}."
+						).format(group.process_name, ", ".join(unsupported))
+					)
+				input_states.append(dict(state))
+		else:
+			input_states = list(_attribute_combinations(attributes, options))
+
+		transitions = []
+		if shape == COLOUR_CHANGE:
+			for route in group.routes:
+				matching = [
+					state
+					for state in input_states
+					if state.get(COLOUR_ATTRIBUTE) == route.from_colour
+				]
+				if upstream_constrained and not matching:
+					frappe.throw(
+						_(
+							"Yarn Process {0} expects input Colour {1}, but the previous "
+							"Process does not produce that Colour."
+						).format(group.process_name, route.from_colour)
+					)
+				for input_attrs in matching:
+					output_attrs = dict(input_attrs)
+					output_attrs[COLOUR_ATTRIBUTE] = route.to_colour
+					transitions.append(
+						frappe._dict(
+							route=route,
+							input_attrs=dict(input_attrs),
+							output_attrs=output_attrs,
+						)
+					)
+		else:
+			route = group.routes[0]
+			for input_attrs in input_states:
+				transitions.append(
+					frappe._dict(
+						route=route,
+						input_attrs=dict(input_attrs),
+						output_attrs=dict(input_attrs),
+					)
+				)
+
+		previous_outputs = _deduplicate_states(
+			[transition.output_attrs for transition in transitions],
+			output_schema.attributes,
+		)
+		compiled.append(
+			frappe._dict(
+				group=group,
+				shape=shape,
+				input_schema=input_schema,
+				output_schema=output_schema,
+				options=options,
+				upstream_constrained=upstream_constrained,
+				transitions=transitions,
+				output_states=previous_outputs,
+			)
+		)
+
+	return compiled
+
+
+def regenerate_process_matrices(doc):
+	"""Compile MGK yarn routes into base-YRP Process Matrix documents.
+
+	The yarn-flow rows are the only editable source for these process matrices.
+	Regeneration replaces matrices for exactly the processes present in that
+	flow, while leaving matrices for unrelated IPD processes untouched. The
+	request transaction rolls every replacement back if any generated matrix
+	fails base-YRP validation.
+	"""
+	from mgk_clothing_yrp.ipd_lock import assert_ipd_editable
+
+	assert_ipd_editable(doc)
+	groups = validate_yarn_process_flow(doc)
+	if not groups:
+		frappe.throw(_("Add at least one Yarn Process before generating the matrix."))
+
+	finished_attributes = {
+		row.attribute for row in doc.get("item_attributes") or [] if row.attribute
+	}
+	process_names = sorted({group.process_name for group in groups})
+	existing = frappe.get_all(
+		"IPD Process Matrix",
+		filters={"ipd": doc.name, "process_name": ["in", process_names]},
+		pluck="name",
+	)
+	for matrix_name in existing:
+		frappe.delete_doc(
+			"IPD Process Matrix",
+			matrix_name,
+			ignore_permissions=True,
+			force=True,
+		)
+
+	created = []
+	for step in _compile_yarn_process_chain(doc, groups):
+		group = step.group
+		input_schema = step.input_schema
+		output_schema = step.output_schema
+		unsupported_outputs = [
+			attribute
+			for attribute in output_schema.attributes
+			if attribute not in finished_attributes
+		]
+		if unsupported_outputs:
+			frappe.throw(
+				_(
+					"Yarn Process {0} cannot be compiled: output Item {1} uses "
+					"attribute(s) {2}, but those attributes are not present on the "
+					"finished Item Production Detail."
+				).format(
+					group.process_name,
+					group.output_item,
+					", ".join(unsupported_outputs),
+				)
+			)
+
+		matrix = frappe.new_doc("IPD Process Matrix")
+		matrix.ipd = doc.name
+		matrix.process_name = group.process_name
+		matrix.input_item = group.input_item
+		matrix.output_item = group.output_item
+		for attribute in input_schema.attributes:
+			matrix.append("input_attributes", {"attribute": attribute})
+		for attribute in output_schema.attributes:
+			matrix.append("output_attributes", {"attribute": attribute})
+
+		for group_index, transition in enumerate(step.transitions, start=1):
+			_append_matrix_combo(
+				matrix,
+				group_index,
+				"Input",
+				group.input_item,
+				1,
+				input_schema.uom,
+				transition.input_attrs,
+			)
+			_append_matrix_combo(
+				matrix,
+				group_index,
+				"Output",
+				group.output_item,
+				group.quantity_ratio,
+				output_schema.uom,
+				transition.output_attrs,
+			)
+
+		matrix.insert(ignore_permissions=True)
+		created.append(matrix.name)
+
+	return created
 
 
 def load_attribute_list(doc, method=None):
-	"""Expose the finished Item's mapped values to YRP's Desk Vue cards.
+	"""Expose this IPD's finished-Item values to the attribute cards.
 
-	The IPD stores only each attribute and its mapping link. The actual values
-	live in Item Item Attribute Mapping, so they must be placed in ``__onload``
-	for the existing ``frappe.production.ui.ItemAttributeList`` component.
-	This hook is MGK-only; base YRP remains untouched.
+	Each IPD row points to its own ``Item Item Attribute Mapping`` document. The
+	Item's mapping is only the starting template and must never be changed by an
+	IPD edit. Values are placed in ``__onload`` for both the Desk component and
+	the MGK Registered Experience. This hook is MGK-only; base YRP is untouched.
 	"""
 	attribute_list = []
 	for attribute in doc.get("item_attributes") or []:
@@ -65,6 +338,60 @@ def load_attribute_list(doc, method=None):
 	doc.set_onload("attr_list", attribute_list)
 
 
+def _mapping_values(mapping_name):
+	if not mapping_name or not frappe.db.exists(
+		"Item Item Attribute Mapping", mapping_name
+	):
+		return []
+	mapping = frappe.get_doc("Item Item Attribute Mapping", mapping_name)
+	return [row.attribute_value for row in mapping.get("values") or []]
+
+
+def _new_ipd_mapping(attribute_name, source_mapping=None):
+	"""Clone an Item mapping as an independent mapping owned by one IPD."""
+	mapping = frappe.get_doc(
+		{
+			"doctype": "Item Item Attribute Mapping",
+			"attribute_name": attribute_name,
+			"values": [
+				{"attribute_value": value}
+				for value in _mapping_values(source_mapping)
+			],
+		}
+	)
+	# The user's authority to maintain these values comes from write access to
+	# the owning IPD. The mapping is an implementation child of that workflow,
+	# even though the reusable base DocType has its own role table.
+	mapping.insert(ignore_permissions=True)
+	return mapping.name
+
+
+def _mapping_is_shared(mapping_name, ipd_name=None):
+	"""Return whether a mapping belongs to an Item/master or another IPD."""
+	if not mapping_name or not frappe.db.exists(
+		"Item Item Attribute Mapping", mapping_name
+	):
+		return True
+
+	# Any row in the master-attribute child table means this mapping still
+	# belongs to a master document. Do not assume only today's two parenttypes.
+	if frappe.db.exists(
+		"Item Item Attribute",
+		{"mapping": mapping_name},
+	):
+		return True
+
+	other_ipds = frappe.get_all(
+		"IPD Item Attribute",
+		filters={
+			"mapping": mapping_name,
+			"parenttype": "Item Production Detail",
+		},
+		pluck="parent",
+	)
+	return any(parent != ipd_name for parent in other_ipds)
+
+
 def _route_rows(doc):
 	return sorted(
 		list(doc.get("mgk_yarn_process_routes") or []),
@@ -75,6 +402,33 @@ def _route_rows(doc):
 def _quantity_ratio(row):
 	value = row.get("quantity_ratio")
 	return 1 if value in (None, "") else flt(value)
+
+
+def get_item_attribute_options(item_name, attributes=None):
+	"""Return the effective selectable values for each Item attribute.
+
+	A non-empty Item mapping is restrictive. An empty mapping means the Item has
+	not narrowed that attribute yet, so the operator may choose from every value
+	defined for the corresponding Item Attribute.
+	"""
+	item = frappe.get_cached_doc("Item", item_name)
+	attribute_names = attributes or [
+		row.attribute for row in item.get("attributes") or []
+	]
+
+	from yrp.yrp.doctype.item.item import get_attribute_values
+
+	mapped_options = get_attribute_values(item_name, attribute_names) or {}
+	effective_options = {}
+	for attribute in attribute_names:
+		mapped_values = list(mapped_options.get(attribute) or [])
+		effective_options[attribute] = mapped_values or frappe.get_all(
+			"Item Attribute Value",
+			filters={"attribute_name": attribute},
+			pluck="attribute_value",
+			order_by="attribute_value asc",
+		)
+	return effective_options
 
 
 def _item_schema(item_name, cache=None, require_yarn=True):
@@ -97,18 +451,12 @@ def _item_schema(item_name, cache=None, require_yarn=True):
 			).format(item_name, item.dependent_attribute)
 		)
 
-	from yrp.yrp.doctype.item.item import get_attribute_values
-
 	attributes = [row.attribute for row in item.get("attributes") or []]
-	value_map = get_attribute_values(item_name) or {}
 	schema = frappe._dict(
 		name=item_name,
 		uom=item.get("default_unit_of_measure"),
 		attributes=attributes,
-		value_options={
-			attribute: list(value_map.get(attribute) or [])
-			for attribute in attributes
-		},
+		value_options=get_item_attribute_options(item_name, attributes),
 		mappings={row.attribute: row.mapping for row in item.get("attributes") or []},
 		primary_attribute=item.get("primary_attribute"),
 	)
@@ -169,8 +517,11 @@ def get_step_groups(doc):
 
 
 def validate_yarn_process_flow(doc, method=None):
-	"""Validate the two supported shapes and the item-to-item sequence."""
+	"""Validate Process-driven shapes and the item-to-item sequence."""
 	if not _route_rows(doc):
+		# An IPD may be drafted before its route is complete. Its finished-Item
+		# values must still be isolated from the Item master from the first save.
+		ensure_ipd_attribute_mappings(doc)
 		return []
 
 	groups = get_step_groups(doc)
@@ -184,6 +535,7 @@ def validate_yarn_process_flow(doc, method=None):
 
 	for group in groups:
 		process = _process_doc(group.process_name)
+		shape = _process_shape(process)
 		input_schema = _item_schema(group.input_item, item_cache)
 		output_schema = _item_schema(group.output_item, item_cache)
 
@@ -232,8 +584,15 @@ def validate_yarn_process_flow(doc, method=None):
 			)
 		process_sequences[group.process_name] = group.sequence
 
-		is_conversion = group.input_item != group.output_item
-		if is_conversion:
+		items_differ = group.input_item != group.output_item
+		if shape == ITEM_CONVERSION:
+			if not items_differ:
+				frappe.throw(
+					_(
+						"Process {0} is an Item Conversion. Select a different "
+						"Output Yarn Item."
+					).format(group.process_name)
+				)
 			if len(group.routes) != 1:
 				frappe.throw(
 					_(
@@ -249,25 +608,33 @@ def validate_yarn_process_flow(doc, method=None):
 						"Item conversion. All attribute values are carried automatically."
 					).format(group.sequence)
 				)
-			if not process.get("is_item_conversion"):
-				frappe.throw(
-					_(
-						"Process {0} converts one Yarn Item into another. Enable "
-						"Item Conversion on the Process master."
-					).format(group.process_name)
-				)
 		else:
-			if process.get("is_item_conversion"):
+			if items_differ:
 				frappe.throw(
 					_(
-						"Process {0} keeps the same Yarn Item and changes Colour. "
-						"Disable Item Conversion on the Process master."
+						"Process {0} is not an Item Conversion. Its Output Yarn "
+						"Item must stay the same as its Input Yarn Item."
 					).format(group.process_name)
 				)
-			changed_attributes = {
-				row.attribute for row in process.get("value_change_attributes") or []
-			}
-			if COLOUR_ATTRIBUTE not in changed_attributes:
+
+			if shape == PASS_THROUGH:
+				if len(group.routes) != 1:
+					frappe.throw(
+						_(
+							"Pass-through Process {0} needs exactly one yarn route."
+						).format(group.process_name)
+					)
+				route = group.routes[0]
+				if route.get("from_colour") or route.get("to_colour"):
+					frappe.throw(
+						_(
+							"Process {0} has no Value Change Attributes. Leave the "
+							"transition values blank so every attribute carries unchanged."
+						).format(group.process_name)
+					)
+				continue
+
+			if COLOUR_ATTRIBUTE not in _process_change_attributes(process):
 				frappe.throw(
 					_(
 						"Process {0} is a Dyeing step. Add Colour under its "
@@ -309,10 +676,9 @@ def validate_yarn_process_flow(doc, method=None):
 						COLOUR_ATTRIBUTE, []
 					):
 						frappe.throw(
-							_(
-								"Colour {0} is not allowed on Yarn Item {1}. Add it "
-								"to the Item's Colour mapping first."
-							).format(value, group.input_item)
+							_("Colour {0} is not available for Yarn Item {1}.").format(
+								value, group.input_item
+							)
 						)
 
 	for current, following in zip(groups, groups[1:], strict=False):
@@ -329,6 +695,10 @@ def validate_yarn_process_flow(doc, method=None):
 				)
 			)
 
+	# Validate the attribute-state train as part of every IPD save, not only
+	# during approval/matrix regeneration.
+	_compile_yarn_process_chain(doc, groups)
+
 	# Starting Yarn is derived from the ordered flow; it is not a second source
 	# of truth for the operator to keep in sync.
 	doc.yarn_item = groups[0].input_item
@@ -337,18 +707,76 @@ def validate_yarn_process_flow(doc, method=None):
 
 
 def _sync_ipd_item_attributes(doc, item_schema):
+	"""Keep the Item's attribute names but give this IPD private value maps."""
+	previous_item = None
+	if not doc.is_new():
+		previous_item = frappe.db.get_value(
+			"Item Production Detail", doc.name, "item"
+		)
+	preserve_existing = not previous_item or previous_item == doc.item
+	existing_mappings = {
+		row.attribute: row.get("mapping")
+		for row in doc.get("item_attributes") or []
+		if row.get("attribute")
+	}
+	changed = False
+	resolved_mappings = {}
+	for attribute in item_schema.attributes:
+		current_mapping = (
+			existing_mappings.get(attribute) if preserve_existing else None
+		)
+		if _mapping_is_shared(current_mapping, doc.name):
+			current_mapping = _new_ipd_mapping(
+				attribute,
+				item_schema.mappings.get(attribute),
+			)
+			changed = True
+		resolved_mappings[attribute] = current_mapping
+
+	if set(existing_mappings) != set(item_schema.attributes):
+		changed = True
+	elif any(
+		existing_mappings.get(attribute) != resolved_mappings.get(attribute)
+		for attribute in item_schema.attributes
+	):
+		changed = True
+
 	doc.set("item_attributes", [])
 	for attribute in item_schema.attributes:
 		doc.append(
 			"item_attributes",
 			{
 				"attribute": attribute,
-				"mapping": item_schema.mappings.get(attribute),
+				"mapping": resolved_mappings.get(attribute),
 			},
 		)
 	doc.primary_item_attribute = item_schema.primary_attribute or None
 	doc.dependent_attribute = None
 	doc.dependent_attribute_mapping = None
+	return changed
+
+
+def ensure_ipd_attribute_mappings(doc):
+	"""Ensure every finished-Item attribute uses an IPD-private mapping."""
+	if not doc.item:
+		return False
+	return _sync_ipd_item_attributes(
+		doc,
+		_item_schema(doc.item, require_yarn=False),
+	)
+
+
+def delete_ipd_attribute_mappings(doc, method=None):
+	"""Remove private mapping documents after their owning IPD is deleted."""
+	for row in doc.get("item_attributes") or []:
+		mapping_name = row.get("mapping")
+		if _mapping_is_shared(mapping_name, doc.name):
+			continue
+		frappe.delete_doc(
+			"Item Item Attribute Mapping",
+			mapping_name,
+			ignore_permissions=True,
+		)
 
 
 def _shared_attribute_options(input_schema, output_schema):
@@ -385,28 +813,54 @@ def get_process_route_context(ipd, process_name):
 	if not group:
 		return []
 
-	item_cache = {}
-	input_schema = _item_schema(group.input_item, item_cache)
-	output_schema = _item_schema(group.output_item, item_cache)
-	options = _shared_attribute_options(input_schema, output_schema)
-	is_conversion = group.input_item != group.output_item
-	attribute_names = list(options) if is_conversion else [
-		attribute for attribute in options if attribute != COLOUR_ATTRIBUTE
-	]
-	attributes = [
-		{
-			"attribute": attribute,
-			"label": attribute,
-			"options": options[attribute],
-		}
-		for attribute in attribute_names
+	step = next(
+		(
+			step
+			for step in _compile_yarn_process_chain(doc)
+			if step.group.process_name == process_name
+		),
+		None,
+	)
+	if not step:
+		return []
+	input_schema = step.input_schema
+	output_schema = step.output_schema
+	shape = step.shape
+	attribute_names = list(step.options) if shape != COLOUR_CHANGE else [
+		attribute for attribute in step.options if attribute != COLOUR_ATTRIBUTE
 	]
 
 	rows = []
 	for route in group.routes:
+		route_transitions = [
+			transition
+			for transition in step.transitions
+			if transition.route.name == route.name
+		]
+		allowed_combinations = _deduplicate_states(
+			[
+				{
+					attribute: transition.input_attrs[attribute]
+					for attribute in attribute_names
+				}
+				for transition in route_transitions
+			],
+			attribute_names,
+		)
+		attributes = [
+			{
+				"attribute": attribute,
+				"label": attribute,
+				"options": list(dict.fromkeys(
+					combination[attribute]
+					for combination in allowed_combinations
+				)),
+			}
+			for attribute in attribute_names
+		]
 		input_label = group.input_item
 		output_label = group.output_item
-		if not is_conversion:
+		if shape == COLOUR_CHANGE:
 			input_label += f" · {route.from_colour}"
 			output_label += f" · {route.to_colour}"
 		rows.append(
@@ -414,7 +868,7 @@ def get_process_route_context(ipd, process_name):
 				"route_name": route.name,
 				"sequence": group.sequence,
 				"process_name": group.process_name,
-				"transformation_type": "Item Conversion" if is_conversion else "Colour Change",
+				"transformation_type": shape,
 				"input_item": group.input_item,
 				"output_item": group.output_item,
 				"input_label": input_label,
@@ -425,6 +879,8 @@ def get_process_route_context(ipd, process_name):
 				"output_uom": output_schema.uom,
 				"quantity_ratio": group.quantity_ratio,
 				"attributes": attributes,
+				"allowed_attribute_combinations": allowed_combinations,
+				"chain_constrained": step.upstream_constrained,
 			}
 		)
 	return rows
@@ -453,13 +909,23 @@ def build_route_io(ipd_doc, process_name, route_name, attribute_values, input_qt
 			)
 		)
 
-	item_cache = {}
-	input_schema = _item_schema(group.input_item, item_cache)
-	output_schema = _item_schema(group.output_item, item_cache)
-	options = _shared_attribute_options(input_schema, output_schema)
-	is_conversion = group.input_item != group.output_item
-	required = list(options) if is_conversion else [
-		attribute for attribute in options if attribute != COLOUR_ATTRIBUTE
+	step = next(
+		(
+			step
+			for step in _compile_yarn_process_chain(ipd_doc)
+			if step.group.process_name == process_name
+		),
+		None,
+	)
+	if not step:
+		frappe.throw(
+			_("Process {0} has no compiled Yarn route.").format(process_name)
+		)
+	input_schema = step.input_schema
+	output_schema = step.output_schema
+	shape = step.shape
+	required = list(step.options) if shape != COLOUR_CHANGE else [
+		attribute for attribute in step.options if attribute != COLOUR_ATTRIBUTE
 	]
 	missing = [attribute for attribute in required if not attribute_values.get(attribute)]
 	if missing:
@@ -471,22 +937,27 @@ def build_route_io(ipd_doc, process_name, route_name, attribute_values, input_qt
 	unknown = [attribute for attribute in attribute_values if attribute not in required]
 	if unknown:
 		frappe.throw(_("Unexpected Yarn attribute(s): {0}.").format(", ".join(unknown)))
-	for attribute in required:
-		if attribute_values[attribute] not in options[attribute]:
-			frappe.throw(
-				_("Value {0} is not allowed for attribute {1} on this route.").format(
-					attribute_values[attribute], attribute
-				)
+	transition = next(
+		(
+			transition
+			for transition in step.transitions
+			if transition.route.name == route.name
+			and all(
+				transition.input_attrs.get(attribute) == attribute_values[attribute]
+				for attribute in required
 			)
-
-	if is_conversion:
-		input_attrs = {attribute: attribute_values[attribute] for attribute in required}
-		output_attrs = dict(input_attrs)
-	else:
-		input_attrs = {attribute: attribute_values[attribute] for attribute in required}
-		output_attrs = dict(input_attrs)
-		input_attrs[COLOUR_ATTRIBUTE] = route.from_colour
-		output_attrs[COLOUR_ATTRIBUTE] = route.to_colour
+		),
+		None,
+	)
+	if not transition:
+		frappe.throw(
+			_(
+				"The selected Yarn attribute combination is not produced by the "
+				"previous Process for route {0}."
+			).format(route.name)
+		)
+	input_attrs = dict(transition.input_attrs)
+	output_attrs = dict(transition.output_attrs)
 
 	qty = flt(input_qty)
 	if qty <= 0:

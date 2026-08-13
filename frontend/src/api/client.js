@@ -35,6 +35,29 @@ function makeApiError(message, status, excType) {
   return err
 }
 
+function parseServerMessages(raw) {
+  if (!raw) return []
+  try {
+    const entries = Array.isArray(raw) ? raw : JSON.parse(raw)
+    if (!Array.isArray(entries)) return []
+    return entries.map((entry) => {
+      let parsed = entry
+      try { parsed = typeof entry === 'string' ? JSON.parse(entry) : entry } catch { /* keep text */ }
+      if (!parsed || typeof parsed !== 'object') return { message: String(parsed || '') }
+      const message = Array.isArray(parsed.message)
+        ? parsed.message.join('\n')
+        : String(parsed.message || '')
+      return {
+        message,
+        title: parsed.title || '',
+        indicator: parsed.indicator || '',
+      }
+    }).filter((entry) => entry.message)
+  } catch {
+    return []
+  }
+}
+
 /** True when a thrown API error is the stale-write conflict (status-agnostic). */
 export function isConflictError(err) {
   return err?.exc_type === 'TimestampMismatchError'
@@ -201,8 +224,16 @@ export async function getListView(doctype, { fields, filters, or_filters, order_
   if (limit_page_length !== undefined) args.limit_page_length = limit_page_length
   const msg = await callMethod('frappe.desk.reportview.get', args)
   // reportview returns a compressed columnar payload: { keys, values: [[...]] }.
-  const keys = msg?.keys || []
-  const values = msg?.values || msg?.data || []
+  // When there are no matching records Frappe returns [] instead. Arrays have
+  // an inherited `values()` iterator, so a truthy `msg?.values || []` would
+  // accidentally select that function and fail at `.map()`. Accept only real
+  // array payload fields.
+  const keys = Array.isArray(msg?.keys) ? msg.keys : []
+  const values = Array.isArray(msg?.values)
+    ? msg.values
+    : Array.isArray(msg?.data)
+      ? msg.data
+      : []
   const data = values.map((row) => {
     const o = {}
     keys.forEach((k, i) => { o[k] = row[i] })
@@ -226,22 +257,28 @@ export async function getDoc(doctype, name) {
 /**
  * Create a new document.
  */
-export async function createDoc(doctype, data) {
+export async function createDoc(doctype, data, { includeServerMessages = false } = {}) {
   const json = await request(`/api/resource/${encodeURIComponent(doctype)}`, {
     method: 'POST',
     body: JSON.stringify(data),
   })
+  if (includeServerMessages) {
+    return { data: json.data, serverMessages: parseServerMessages(json._server_messages) }
+  }
   return json.data
 }
 
 /**
  * Update an existing document.
  */
-export async function updateDoc(doctype, name, data) {
+export async function updateDoc(doctype, name, data, { includeServerMessages = false } = {}) {
   const json = await request(
     `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`,
     { method: 'PUT', body: JSON.stringify(data) },
   )
+  if (includeServerMessages) {
+    return { data: json.data, serverMessages: parseServerMessages(json._server_messages) }
+  }
   return json.data
 }
 

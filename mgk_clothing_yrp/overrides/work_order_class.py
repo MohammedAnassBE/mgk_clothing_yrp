@@ -26,6 +26,86 @@ from yrp.yrp.doctype.work_order.work_order import (
 
 
 class MGKWorkOrder(WorkOrder):
+	def before_validate(self):
+		"""Require one authoritative IPD and derive the hidden base Item from it."""
+		from mgk_clothing_yrp.mgk_clothing_yrp.api.work_order import (
+			_work_order_ipd_context,
+		)
+
+		ipd, _process, _mode = _work_order_ipd_context(
+			self, check_permission=False
+		)
+		self.item = ipd.item
+		super().before_validate()
+
+	def get_submit_readiness_issues(self):
+		"""Extend base readiness with MGK multi-IPD and design gates."""
+		issues = super().get_submit_readiness_issues()
+		ipd_names = {
+			row.get("production_detail")
+			for row in self.get("mgk_items") or []
+			if row.get("production_detail")
+			and row.get("production_detail") != self.get("production_detail")
+		}
+		if ipd_names:
+			statuses = {
+				row.name: row.approval_status or "Not Approved"
+				for row in frappe.get_all(
+					"Item Production Detail",
+					filters={"name": ["in", sorted(ipd_names)]},
+					fields=["name", "approval_status"],
+				)
+			}
+			for ipd_name in sorted(ipd_names):
+				status = statuses.get(ipd_name, "Missing")
+				if status != "Approved":
+					issues.append(
+						_("Item Production Detail {0} is not Approved (status: {1}).").format(
+							ipd_name, status
+						)
+					)
+
+		from mgk_clothing_yrp.mgk_clothing_yrp.api.work_order import get_approver_role
+
+		approver_role = get_approver_role(self.process_name)
+		if approver_role and not self.get("approved_by"):
+			issues.append(
+				_("Design approval by role {0} is required for process {1}.").format(
+					approver_role, self.process_name
+				)
+			)
+		return issues
+
+	def get_process_cost_readiness_issues(self):
+		"""Use one approved Process Cost per receivable yarn Item."""
+		process = (
+			frappe.get_cached_doc("Process", self.process_name)
+			if self.process_name
+			else None
+		)
+		if not process or not process.get("is_yarn_process"):
+			return super().get_process_cost_readiness_issues()
+		if (
+			not self.get("receivables")
+			or self.get("is_rework")
+			or self.get("rework_type") == "No Cost"
+		):
+			return []
+
+		missing_items = set()
+		for row in self.receivables:
+			item = frappe.db.get_value("Item Variant", row.item_variant, "item")
+			if item and not self._find_process_cost_for_item(item):
+				missing_items.add(item)
+		return [
+			_("No approved Process Cost for yarn item {0} / process {1} / supplier {2}.").format(
+				item,
+				self.process_name or _("(not selected)"),
+				self.supplier or _("(any supplier)"),
+			)
+			for item in sorted(missing_items)
+		]
+
 	def set_receivable_process_costs(self, require_approved=False):
 		"""Cost receivables per-row for yarn processes; defer to base otherwise."""
 		# Resolve the WO's Process. Anything that is NOT an is_yarn_process
@@ -71,9 +151,14 @@ class MGKWorkOrder(WorkOrder):
 				# matching Process Cost is left uncosted rather than blocking.
 				if self.get("is_rework"):
 					return
-				if not require_approved:
+				if not require_approved and self.allow_draft_without_process_cost():
 					# Match YRP core: draft Work Orders may be prepared before
-					# their approved Process Costs exist. Submission enforces it.
+					# their approved Process Costs exist. A stricter customer app
+					# can override the same one-method base policy. Do not retain
+					# a stale cost after the Item/process/supplier changes.
+					row.process_cost = None
+					row.cost = 0
+					row.total_cost = 0
 					continue
 				frappe.throw(
 					_(

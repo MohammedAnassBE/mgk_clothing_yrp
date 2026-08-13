@@ -39,7 +39,7 @@
   which needs a positional searchfield/start/page_len signature awkward over HTTP).
 -->
 <template>
-	<div class="matrix-editor">
+	<div ref="editorEl" class="matrix-editor">
 		<!-- Breadcrumb -->
 		<nav class="crumbs">
 			<a @click="goHome">Home</a>
@@ -260,6 +260,7 @@
 					<span class="group-tag">Group {{ group.group_index }}</span>
 					<InputText
 						v-model="group.group_name"
+						:data-group-name="group.group_index"
 						:disabled="readonly"
 						placeholder="Group name (optional)"
 						class="group-name"
@@ -289,7 +290,7 @@
 							@click="addRow(group, 'Input')"
 						/>
 					</div>
-					<DataTable :value="group.inputs" class="mgk-table combo-dt" :rowHover="false">
+					<DataTable :value="group.inputs" class="mgk-table combo-dt" :data-matrix-group="group.group_index" data-matrix-side="input" :rowHover="false">
 						<Column v-for="a in inputAttributes" :key="'i-c-' + a" :header="a">
 							<template #body="{ data }">
 								<Select
@@ -347,7 +348,7 @@
 							@click="addRow(group, 'Output')"
 						/>
 					</div>
-					<DataTable :value="group.outputs" class="mgk-table combo-dt" :rowHover="false">
+					<DataTable :value="group.outputs" class="mgk-table combo-dt" :data-matrix-group="group.group_index" data-matrix-side="output" :rowHover="false">
 						<Column v-for="a in outputAttributes" :key="'o-c-' + a" :header="a">
 							<template #body="{ data }">
 								<Select
@@ -432,6 +433,8 @@ import { useDoc } from "@/composables/useDoc"
 import { useAppToast } from "@/composables/useToast"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { usePermissions } from "@/composables/usePermissions"
+import { commitActiveControl } from "@/utils/commitActiveControl"
+import { focusFirstControl } from "@/utils/focusControl"
 
 const vTooltip = Tooltip
 
@@ -447,6 +450,7 @@ const { isAdmin, hasRole } = usePermissions()
 
 const DOCTYPE = "IPD Process Matrix"
 const docState = useDoc(DOCTYPE)
+const editorEl = ref(null)
 
 const isCreate = computed(() => props.id === "new")
 
@@ -747,20 +751,31 @@ function removeOutputAttr(a) {
 }
 
 // ════════════════ GROUPS / ROWS ════════════════
-function addGroup() {
+async function addGroup() {
 	const next = groups.value.reduce((m, g) => Math.max(m, g.group_index), 0) + 1
 	groups.value.push({ group_index: next, group_name: "", inputs: [], outputs: [] })
+	await focusFirstControl(editorEl, { selector: `[data-group-name="${next}"]` })
 }
 function deleteGroup(gi) {
 	groups.value.splice(gi, 1)
 }
-function addRow(group, side) {
+async function addRow(group, side) {
 	const arr = side === "Input" ? group.inputs : group.outputs
 	const list = side === "Input" ? inputAttributes.value : outputAttributes.value
 	const attrs = {}
 	for (const a of list) attrs[a] = null
 	const uom = (side === "Input" ? inputUom.value : outputUom.value) || ""
 	arr.push({ qty: 0, uom, wastage_pct: 0, attrs })
+	await focusMatrixRow(group.group_index, side)
+}
+
+async function focusMatrixRow(groupIndex, side) {
+	await nextTick()
+	const table = editorEl.value?.querySelector?.(
+		`.combo-dt[data-matrix-group="${groupIndex}"][data-matrix-side="${side.toLowerCase()}"]`,
+	)
+	const row = table?.querySelector?.(".p-datatable-tbody > tr:last-child")
+	return focusFirstControl(row)
 }
 function deleteRow(group, key, index) {
 	group[key].splice(index, 1)
@@ -875,6 +890,7 @@ function buildPayload() {
 }
 
 async function onSave() {
+	await commitActiveControl()
 	if (!header.ipd) {
 		toast.warn("Missing IPD", "IPD is required.")
 		return

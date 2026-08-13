@@ -26,26 +26,109 @@
   linked_with.get (Linked Documents), get_docinfo (Activity).
 -->
 <template>
-	<div class="doc-detail">
+	<div class="doc-detail" :class="{ 'book-entry': isRegisteredBookEntry, 'book-view': isRegisteredBookView, 'grn-book-entry': isGrnBookEntry, 'grn-book-view': isGrnBookView, 'dc-book-entry': isDcBookEntry, 'dc-book-view': isDcBookView, 'pi-book-entry': isPiBookEntry, 'pi-book-view': isPiBookView, 'stock-entry-book-entry': isStockEntryBookEntry, 'stock-entry-book-view': isStockEntryBookView, 'inspection-book-entry': isInspectionBookEntry, 'inspection-book-view': isInspectionBookView, 'ipd-book-entry': isIpdBookEntry, 'ipd-book-view': isIpdBookView, 'work-order-book-entry': isWorkOrderBookEntry, 'work-order-book-view': isWorkOrderBookView, 'woc-book-entry': isWocBookEntry, 'woc-book-view': isWocBookView, 'master-book-entry': isMasterBookEntry, 'master-book-view': isMasterBookView }">
 		<!-- Breadcrumb -->
 		<nav class="crumbs">
-			<a @click="goHome">Home</a>
+			<RouterLink to="/home">Home</RouterLink>
 			<span class="sep">/</span>
-			<a @click="goList">{{ registry?.label || docRoute }}</a>
+			<template v-if="props.presentation === 'master-book-entry'">
+				<RouterLink :to="masterHubRoute">{{ masterHubLabel }}</RouterLink>
+				<span class="sep">/</span>
+			</template>
+			<RouterLink :to="`/${props.docRoute}`">{{ registry?.label || docRoute }}</RouterLink>
 			<span class="sep">/</span>
-			<span class="crumb-cur mgk-mono">{{ isCreate ? "New" : id }}</span>
+			<span class="crumb-cur mgk-mono">{{ isCreate ? "New" : (props.presentation === "master-book-entry" ? (titleLine || id) : id) }}</span>
 		</nav>
 
 		<!-- Header -->
 		<div class="detail-head">
-			<div class="id-block">
+			<div v-if="isMasterBookEntry" class="book-entry-title">
+				<div>
+					<div class="book-entry-kicker">{{ masterEntityLabel }} Master</div>
+					<div class="doc-hero">{{ isCreate ? `Create a new ${masterEntityLabel.toLowerCase()}` : `Update ${titleLine || id}` }}</div>
+					<p>{{ presentationDescription || `Maintain the ${masterEntityLabel.toLowerCase()} used in daily work.` }}</p>
+				</div>
+			</div>
+			<div v-else-if="isPiBookEntry" class="book-entry-title">
+				<span class="book-entry-mark pi-mark"><small>MGK</small><strong>PI</strong></span>
+				<div>
+					<div class="book-entry-kicker">{{ piSourceLabel }} Billing Book</div>
+					<div class="doc-hero">{{ isCreate ? "Record a supplier bill" : `Update ${id}` }}</div>
+					<p>Select the completed receipts, fetch their items and confirm the supplier's billing rate.</p>
+				</div>
+			</div>
+			<div v-else-if="isStockEntryBookEntry" class="book-entry-title">
+				<span class="book-entry-mark stock-entry-mark"><small>MGK</small><strong>SE</strong></span>
+				<div>
+					<div class="book-entry-kicker">Stock Entry Book</div>
+					<div class="doc-hero">{{ isCreate ? "Record a stock movement" : `Update ${id}` }}</div>
+					<p>Choose the purpose and movement route, then enter the stock quantities.</p>
+				</div>
+			</div>
+			<div v-else-if="isInspectionBookEntry" class="book-entry-title">
+				<span class="book-entry-mark inspection-entry-mark"><small>GRN</small><strong>IE</strong></span>
+				<div>
+					<div class="book-entry-kicker">GRN Inspection Book</div>
+					<div class="doc-hero">{{ isCreate ? "Inspect received goods" : `Update ${id}` }}</div>
+					<p>Select the Goods Received Note, then classify each received quantity by Received Type.</p>
+				</div>
+			</div>
+			<div v-else-if="isWorkOrderBookEntry" class="book-entry-title">
+				<span class="book-entry-mark wo-mark"><small>MGK</small><strong>WO</strong></span>
+				<div>
+					<div class="book-entry-kicker">Work Order Book</div>
+					<div class="doc-hero">{{ isCreate ? "Plan a new job-work order" : `Update ${id}` }}</div>
+					<p>Choose the process and production route, assign the job-worker, then set the schedule.</p>
+				</div>
+			</div>
+			<div v-else-if="isWocBookEntry" class="book-entry-title">
+				<span class="book-entry-mark woc-mark"><small>MGK</small><strong>WOC</strong></span>
+				<div>
+					<div class="book-entry-kicker">Work Order Correction</div>
+					<div class="doc-hero">{{ isCreate ? "Add a Work Order correction" : `Update ${id}` }}</div>
+					<p>Select the Work Order, then manually add only the extra deliverables or receivables.</p>
+				</div>
+			</div>
+			<div v-else-if="isIpdBookEntry" class="book-entry-title">
+				<span class="book-entry-mark ipd-mark"><small>MGK</small><strong>IPD</strong></span>
+				<div>
+					<div class="book-entry-kicker">Item Production Detail</div>
+					<div class="doc-hero">{{ isCreate ? "Define a production route" : `Update ${id}` }}</div>
+					<p>Select the finished Item, then add its yarn processes in working order.</p>
+				</div>
+			</div>
+			<div v-else-if="isGrnBookEntry" class="book-entry-title">
+				<span class="book-entry-mark grn-mark"><small>MGK</small><strong>GRN</strong></span>
+				<div>
+					<div class="book-entry-kicker">{{ grnSourceLabel }} GRN Book</div>
+					<div class="doc-hero">{{ isCreate ? `Receive goods from a ${grnSourceLabel}` : `Update ${id}` }}</div>
+					<p>Select the {{ grnSourceLabel.toLowerCase() }}; its receipt details and items will fill automatically.</p>
+				</div>
+			</div>
+			<div v-else-if="isDcBookEntry" class="book-entry-title">
+				<span class="book-entry-mark dc-mark"><small>MGK</small><strong>DC</strong></span>
+				<div>
+					<div class="book-entry-kicker">Delivery Challan Book</div>
+					<div class="doc-hero">{{ isCreate ? "Dispatch against a Work Order" : `Update ${id}` }}</div>
+					<p>Select the Work Order and dispatching location, then enter only the quantities sent now.</p>
+				</div>
+			</div>
+			<div v-else-if="isBookEntry" class="book-entry-title">
+				<span class="book-entry-mark"><small>MGK</small><strong>PO</strong></span>
+				<div>
+					<div class="book-entry-kicker">Purchase Order Book</div>
+					<div class="doc-hero">{{ isCreate ? "Write a new order" : `Update ${id}` }}</div>
+					<p>Choose the supplier, set the delivery, then write the ordered items.</p>
+				</div>
+			</div>
+			<div v-else class="id-block">
 				<!-- Q2: the human title is the hero; the serial drops to a small mono
 				     chip below it (or becomes the hero itself when there's no title). -->
 				<div class="doc-hero">
 					<span v-if="isCreate">New {{ registry?.label || doctype }}</span>
 					<span v-else>{{ titleLine || id }}</span>
 				</div>
-				<div v-if="!isCreate && titleLine" class="doc-id mgk-mono">{{ id }}</div>
+				<div v-if="!isCreate && titleLine && masterDocumentCode" class="doc-id mgk-mono">{{ masterDocumentCode }}</div>
 				<div v-if="mode === 'edit'" class="doc-subtle edit-hint">Editing</div>
 			</div>
 
@@ -79,16 +162,45 @@
 			</div>
 
 			<Tag
-				v-if="!loading && doc && mode === 'view' && (isSubmittable || isWorkflow || doc.status)"
+				v-if="!loading && doc && mode === 'view' && (isMasterBookView || isSubmittable || isWorkflow || doc.status)"
 				class="head-status"
-				:value="statusLabel"
-				:severity="statusSeverity"
+				:value="isMasterBookView ? masterViewStatus : statusLabel"
+				:severity="isMasterBookView ? masterViewStatusSeverity : statusSeverity"
 				rounded
 			/>
 
 			<div class="head-actions">
 				<!-- ── VIEW mode ── -->
 				<template v-if="mode === 'view' && doc">
+					<Button
+						v-if="isIpdBookView && canManageIpdApproval && doc.approval_status !== 'Approved'"
+						label="Approve IPD"
+						icon="pi pi-check-circle"
+						size="small"
+						class="forward-cta"
+						:loading="acting === 'ipd-approve'"
+						@click="onApproveIpd"
+					/>
+					<Button
+						v-if="isIpdBookView && canManageIpdApproval && doc.approval_status === 'Approved'"
+						label="Reject approval"
+						icon="pi pi-times-circle"
+						size="small"
+						severity="danger"
+						outlined
+						:loading="acting === 'ipd-reject'"
+						@click="onRejectIpd"
+					/>
+					<Button
+						v-if="isIpdBookView && canManageIpdApproval && !isIpdApproved"
+						label="Regenerate Process Matrix"
+						icon="pi pi-refresh"
+						size="small"
+						severity="secondary"
+						outlined
+						:loading="acting === 'ipd-matrix'"
+						@click="onRegenerateIpdMatrix"
+					/>
 					<WorkflowActions
 						v-if="isWorkflow"
 						ref="workflowRef"
@@ -99,7 +211,7 @@
 
 					<!-- Draft (docstatus 0): Edit (secondary) + Submit (primary forward). -->
 					<Button
-						v-if="docstatus === 0 && canWrite(doctype)"
+						v-if="docstatus === 0 && canWrite(doctype) && !(isItemProductionDetail && isIpdApproved)"
 						label="Edit"
 						icon="pi pi-pencil"
 						size="small"
@@ -198,7 +310,7 @@
 						@click="onCancel"
 					/>
 					<Button
-						v-if="(docstatus === 0 || docstatus === 2) && canDelete(doctype)"
+						v-if="(docstatus === 0 || docstatus === 2) && canDelete(doctype) && !(isItemProductionDetail && isIpdApproved)"
 						label="Delete"
 						icon="pi pi-trash"
 						size="small"
@@ -212,7 +324,7 @@
 				<!-- ── EDIT mode ── -->
 				<template v-else-if="mode === 'edit'">
 					<Button
-						label="Discard"
+						:label="isRegisteredBookEntry ? 'Cancel editing' : 'Discard'"
 						icon="pi pi-times"
 						size="small"
 						severity="secondary"
@@ -221,7 +333,7 @@
 						@click="onDiscard"
 					/>
 					<Button
-						v-if="isPurchaseInvoice"
+						v-if="isPurchaseInvoice && !isPiBookEntry"
 						label="Fetch GRN"
 						icon="pi pi-download"
 						size="small"
@@ -232,7 +344,7 @@
 					/>
 					<Button
 						v-if="canWrite(doctype)"
-						label="Save"
+						:label="isRegisteredBookEntry ? 'Save changes' : 'Save'"
 						icon="pi pi-check"
 						size="small"
 						class="forward-cta"
@@ -244,7 +356,7 @@
 				<!-- ── CREATE mode ── -->
 				<template v-else-if="mode === 'create'">
 					<Button
-						label="Discard"
+						:label="isMasterBookEntry ? `Back to ${presentationLabel}` : isIpdBookEntry ? 'Back to production details' : isGrnBookEntry ? 'Back to GRN books' : isDcBookEntry ? 'Back to Delivery Challans' : isPiBookEntry ? 'Back to Billing books' : isStockEntryBookEntry ? 'Back to Stock Entries' : isInspectionBookEntry ? 'Back to Inspections' : isWocBookEntry ? 'Back to Work Order Corrections' : isWorkOrderBookEntry ? 'Back to Work Order books' : isBookEntry ? 'Back to books' : 'Discard'"
 						icon="pi pi-times"
 						size="small"
 						severity="secondary"
@@ -253,7 +365,7 @@
 						@click="onDiscard"
 					/>
 					<Button
-						v-if="isPurchaseInvoice"
+						v-if="isPurchaseInvoice && !isPiBookEntry"
 						label="Fetch GRN"
 						icon="pi pi-download"
 						size="small"
@@ -264,7 +376,7 @@
 					/>
 					<Button
 						v-if="canCreate(doctype)"
-						label="Save"
+						:label="isMasterBookEntry ? `Save ${masterEntityLabel}` : isIpdBookEntry ? 'Save production detail' : isGrnBookEntry ? 'Save GRN' : isDcBookEntry ? 'Save Delivery Challan' : isPiBookEntry ? 'Save supplier bill' : isStockEntryBookEntry ? 'Save Stock Entry' : isInspectionBookEntry ? 'Save Inspection' : isWocBookEntry ? 'Save correction' : isWorkOrderBookEntry ? 'Save Work Order' : isBookEntry ? 'Save order' : 'Save'"
 						icon="pi pi-check"
 						size="small"
 						class="forward-cta"
@@ -331,6 +443,16 @@
 			</div>
 		</Message>
 
+		<Message
+			v-if="isIpdBookView && isIpdApproved"
+			severity="success"
+			:closable="false"
+			class="form-banner"
+		>
+			<b>Approved and locked.</b> Reject the approval before changing production details,
+			Item attribute values, Process Matrices, or BOM combinations.
+		</Message>
+
 		<Dialog
 			v-model:visible="printDialogOpen"
 			header="Print"
@@ -365,6 +487,83 @@
 			</template>
 		</Dialog>
 
+		<Dialog
+			v-model:visible="grnClassificationOpen"
+			header="Confirm Received Types"
+			modal
+			:closable="!grnClassificationSaving"
+			:closeOnEscape="!grnClassificationSaving"
+			class="grn-classification-dialog"
+			:style="{ width: 'min(1180px, calc(100vw - 24px))' }"
+		>
+			<div class="grn-classification-intro">
+				<span><i class="pi pi-box" /></span>
+				<div>
+					<strong>Classify the quantity already entered</strong>
+					<p>The configured default Received Type is used automatically. Add another type only for an exception; each item must remain fully allocated.</p>
+				</div>
+			</div>
+			<GRNReceivedTypeEditor
+				ref="grnClassificationEditor"
+				:editable="true"
+				fixed-total
+				@allocation-state="onGrnAllocationState"
+			/>
+			<template #footer>
+				<Button label="Keep as draft" severity="secondary" outlined :disabled="grnClassificationSaving" @click="grnClassificationOpen = false" />
+				<Button label="Save allocation and submit" icon="pi pi-check" :disabled="!grnClassificationComplete" :loading="grnClassificationSaving" @click="submitClassifiedGrn" />
+			</template>
+		</Dialog>
+
+		<Dialog
+			v-model:visible="ipdAttributesOpen"
+			:header="`Edit ${selectedIpdAttribute} values`"
+			modal
+			:closable="false"
+			class="ipd-attributes-dialog"
+			:style="{ width: 'min(520px, calc(100vw - 24px))' }"
+		>
+			<div v-if="ipdAttributeDocName && selectedIpdAttribute" class="ipd-attributes-dialog-body">
+				<div class="ipd-dialog-context">
+					<strong>{{ ipdAttributeItemName }}</strong>
+					<small>Values used only by {{ ipdAttributeDocName }}</small>
+				</div>
+				<ItemAttributeListView
+					:key="`${ipdAttributeDocName}-${selectedIpdAttribute}`"
+					:item-name="ipdAttributeDocName"
+					doctype="Item Production Detail"
+					:editable="canEditIpdAttributes"
+					:attribute-name="selectedIpdAttribute"
+					auto-edit
+					display-mode="dialog"
+					save-method="mgk_clothing_yrp.mgk_clothing_yrp.api.item_attribute.update_ipd_mapping_values"
+					:save-context="{ item_production_detail: ipdAttributeDocName }"
+					@updated="onIpdAttributesUpdated"
+					@cancel="ipdAttributesOpen = false"
+				/>
+			</div>
+		</Dialog>
+
+		<Dialog
+			v-model:visible="ipdBomMappingOpen"
+			:header="ipdBomMappingTitle"
+			modal
+			:closable="false"
+			:closeOnEscape="false"
+			class="ipd-bom-mapping-dialog"
+			:style="{ width: 'min(1180px, calc(100vw - 24px))' }"
+		>
+			<div v-if="ipdBomMappingName" class="ipd-bom-mapping-body">
+				<BOMMappingEditor
+					:key="ipdBomMappingName"
+					:id="ipdBomMappingName"
+					embedded
+					@saved="onIpdBomMappingSaved"
+					@close="closeIpdBomMapping"
+				/>
+			</div>
+		</Dialog>
+
 		<!-- WO design-approval gate banner (Work Order only, never in create) -->
 		<WorkOrderApproval
 			v-if="isWorkOrder && doc && mode === 'view'"
@@ -393,7 +592,9 @@
 			:work-order="doc.name"
 			:modified="doc.modified"
 			:payload="calcDeliverablesPayload"
+			@calculating="beginLocalWrite"
 			@calculated="onDeliverablesCalculated"
+			@calculation-failed="cancelLocalWrite"
 		/>
 
 		<!-- Bill Tracking — Assign to Department (submitted, non-terminal) -->
@@ -422,8 +623,41 @@
 		</Message>
 
 		<!-- ════════════════ CREATE / EDIT FORM ════════════════ -->
-		<div v-else-if="isFormMode" class="form-layout">
-			<div class="detail-main form-card">
+		<div
+			v-else-if="isFormMode"
+			class="form-layout"
+			:class="{ 'ipd-bom-tab-active': isIpdBookEntry && ipdWorkspaceTab === 'bom' }"
+		>
+			<div ref="formCardEl" class="detail-main form-card">
+				<PurchaseInvoiceEntryEditor
+					v-if="isPiBookEntry"
+					ref="piEntryEditor"
+					:form="form"
+					:document-name="isCreate ? '' : id"
+					:route-resolver="props.linkedRouteResolver"
+					@summary="onPiEntrySummary"
+				/>
+				<nav v-if="isIpdBookEntry" class="ipd-workspace-tabs" role="tablist" aria-label="Item Production Detail sections">
+					<button type="button" role="tab" :aria-selected="ipdWorkspaceTab === 'production'" :class="{ active: ipdWorkspaceTab === 'production' }" @click="ipdWorkspaceTab = 'production'">
+						<i class="pi pi-sitemap" /><span>Production details</span>
+					</button>
+					<button type="button" role="tab" :aria-selected="ipdWorkspaceTab === 'bom'" :class="{ active: ipdWorkspaceTab === 'bom' }" @click="ipdWorkspaceTab = 'bom'">
+						<i class="pi pi-box" /><span>Bill of materials</span><b>{{ ipdBomSummary.itemCount }}</b>
+					</button>
+				</nav>
+				<nav
+					v-if="isMasterBookEntry && (isItem || isUser)"
+					class="ipd-workspace-tabs master-workspace-tabs"
+					role="tablist"
+					:aria-label="`${masterEntityLabel} sections`"
+				>
+					<button type="button" role="tab" :aria-selected="masterWorkspaceTab === 'details'" :class="{ active: masterWorkspaceTab === 'details' }" @click="masterWorkspaceTab = 'details'">
+						<i class="pi pi-file-edit" /><span>{{ isItem ? 'Item details' : 'User details' }}</span>
+					</button>
+					<button type="button" role="tab" :aria-selected="masterWorkspaceTab === 'configuration'" :class="{ active: masterWorkspaceTab === 'configuration' }" @click="masterWorkspaceTab = 'configuration'">
+						<i :class="isItem ? 'pi pi-tags' : 'pi pi-shield'" /><span>{{ isItem ? 'Attributes & parameters' : 'Roles & access' }}</span>
+					</button>
+				</nav>
 				<!-- Prompt-named create: a REQUIRED Name input at the very top of the
 				     form. Prompt-named doctypes (Item Master Template, FG Item Master
 				     Template, …) take the document name from the user; without this the
@@ -432,6 +666,7 @@
 				     series/field/hash-named doctypes. -->
 				<section
 					v-if="mode === 'create' && isPromptNaming"
+					v-show="!(isMasterBookEntry && (isItem || isUser)) || masterWorkspaceTab === 'details'"
 					class="mgk-card form-section"
 				>
 					<header class="mgk-card__head">
@@ -456,13 +691,16 @@
 
 				<!-- Field grid (inputs), grouped into titled cards by Section Break
 				     so the edit form mirrors the read-view Details cards. -->
-				<section
-					v-for="s in visibleFormSections"
+					<section
+					v-for="(s, sectionIndex) in visibleFormSections"
 					:key="s.key"
+					v-show="(!isIpdBookEntry || ipdWorkspaceTab === 'production') && (!(isMasterBookEntry && (isItem || isUser)) || masterWorkspaceTab === 'details')"
 					class="mgk-card form-section"
+					:class="{ 'book-entry-notes': isRegisteredBookEntry && isBookNotesSection(s.label) }"
 				>
 					<header class="mgk-card__head">
-						<span class="mgk-card__title">{{ s.label }}</span>
+						<span v-if="isRegisteredBookEntry" class="book-step">{{ bookFormSectionStep(s.label, sectionIndex) }}</span>
+						<span class="mgk-card__title">{{ isRegisteredBookEntry ? bookFormSectionLabel(s.label) : s.label }}</span>
 					</header>
 					<div class="mgk-card__body form-grid">
 					<div
@@ -578,7 +816,7 @@
 							<ToggleSwitch
 								:inputId="'fld-' + f.fieldname"
 								:modelValue="!!form[f.fieldname]"
-								@update:modelValue="form[f.fieldname] = $event ? 1 : 0"
+								@update:modelValue="updateCheckField(f.fieldname, $event)"
 								:disabled="isReadOnly(f)"
 							/>
 							<span class="check-label">{{ checkWord(f) }}</span>
@@ -609,10 +847,11 @@
 							@update:model-value="form[f.fieldname] = $event"
 							:target-doctype="f.isDynamic ? form[f.dynamicField] : f.linkTarget"
 							:search-handler="linkSearchHandlerFor(f)"
+							:route-resolver="linkedRouteResolver"
 							:disabled="isReadOnly(f)"
-							:invalid="isMissing(f)"
-							@item-select="onFieldChanged(f.fieldname)"
-							@change="onFieldChanged(f.fieldname)"
+								:invalid="isMissing(f)"
+								@item-select="onFieldChanged(f.fieldname)"
+								@change="onLinkFieldChanged(f.fieldname, $event)"
 						/>
 
 						<!-- Fallback (unknown but editable scalar) -->
@@ -628,7 +867,63 @@
 						<small v-if="f.help" class="field-help">{{ f.help }}</small>
 					</div>
 					</div>
-				</section>
+					</section>
+
+					<section v-if="isMasterBookEntry && isUser" v-show="masterWorkspaceTab === 'configuration'" class="mgk-card form-section user-access-section">
+						<header class="mgk-card__head">
+							<span class="book-step">{{ visibleFormSections.length + 1 }}</span>
+							<span class="mgk-card__title">Roles and access</span>
+						</header>
+						<div class="mgk-card__body">
+							<UserAccessEditor
+								:roles="form.roles || []"
+								:role-profiles="form.role_profiles || []"
+								:enabled="form.enabled"
+								@update:roles="form.roles = $event"
+								@update:role-profiles="form.role_profiles = $event"
+								@update:enabled="form.enabled = $event"
+							/>
+						</div>
+					</section>
+
+					<section v-if="isIpdBookEntry" v-show="ipdWorkspaceTab === 'production'" class="mgk-card form-section ipd-flow-section">
+						<header class="mgk-card__head">
+							<span class="book-step">2</span>
+							<span class="mgk-card__title">Yarn process flow</span>
+						</header>
+						<div class="mgk-card__body">
+						<IPDYarnFlowEditor
+							ref="ipdFlowEditor"
+							:model-value="form.mgk_yarn_process_routes || []"
+							:finished-item="form.item || ''"
+							:finished-attributes="form.item_attributes || []"
+							:production-detail="ipdAttributeDocName"
+							:finished-attribute-values="ipdAttributeValues"
+							:can-edit-attributes="canEditIpdAttributes"
+							@update:model-value="updateIpdRoutes"
+							@summary="onIpdFlowSummary"
+							@change="onGridChange"
+							@edit-attribute="openIpdAttributes"
+						/>
+						</div>
+					</section>
+
+					<section v-if="isIpdBookEntry" v-show="ipdWorkspaceTab === 'bom'" class="mgk-card form-section ipd-bom-section">
+						<header class="mgk-card__head">
+							<span class="mgk-card__title">Bill of materials</span>
+							<span class="ipd-section-note">Add consumed Items here. Configure variant combinations after saving.</span>
+						</header>
+						<div class="mgk-card__body">
+							<IPDBOMEditor
+								:model-value="form.item_bom || []"
+								:production-detail="ipdAttributeDocName"
+								:dependent-attribute="form.dependent_attribute || ''"
+								@update:model-value="form.item_bom = $event"
+								@change="onGridChange"
+								@summary="onIpdBomSummary"
+							/>
+						</div>
+					</section>
 
 				<div v-if="!formFields.length" class="empty-inline">
 					No editable fields for this DocType.
@@ -704,6 +999,7 @@
 					<DataTable
 						:value="form[mgkItemsTable.fieldname]"
 						class="mgk-table child-dt edit-dt"
+						:data-child-field="mgkItemsTable.fieldname"
 						:rowHover="false"
 						editMode="cell"
 						resizableColumns
@@ -739,16 +1035,14 @@
 									fluid
 									autofocus
 								/>
-								<AutoComplete
+								<LinkField
 									v-else-if="col.input === 'link'"
-									v-model="data[field]"
-									:suggestions="childLinkSuggestions"
-									@complete="onMgkItemLinkComplete(col, data, $event)"
-									dropdown
-									completeOnFocus
+									:model-value="data[field]"
+									@update:model-value="data[field] = $event"
+									:target-doctype="col.linkTarget"
+									:filters="childLinkFilters(col, data)"
+									:route-resolver="props.linkedRouteResolver"
 									class="cell-input"
-									fluid
-									autofocus
 								/>
 								<InputText
 									v-else
@@ -804,9 +1098,21 @@
 					class="child-editor"
 				>
 					<div class="child-editor-head">
-						<h4>{{ pv.label }}</h4>
+						<div class="child-editor-title">
+							<span v-if="isRegisteredBookEntry" class="book-step">{{ isWocBookEntry ? (pv.childField === 'deliverables' ? 3 : 4) : isStockEntryBookEntry ? 3 : 2 }}</span>
+							<div>
+								<h4>{{ isWocBookEntry ? pv.label : isGrnBookEntry ? 'Received quantities' : isDcBookEntry ? 'Deliverables to dispatch' : isStockEntryBookEntry ? 'Stock movement items' : isInspectionBookEntry ? 'Received Type classification' : isBookEntry ? 'Ordered items' : pv.label }}</h4>
+								<small v-if="isWocBookEntry">{{ pv.childField === 'deliverables' ? 'Add materials that must be dispatched in Delivery Challan.' : 'Add materials that must be received in Work Order GRN.' }}</small>
+								<small v-if="isGrnBookEntry && useGrnSplit">Source items are locked. Split the received quantity across one or more Received Types.</small>
+								<small v-else-if="isGrnBookEntry">Source items are locked. Enter only the quantity received now.</small>
+								<small v-else-if="isDcBookEntry">Work Order deliverables are locked. Enter only the quantity dispatched now.</small>
+								<small v-else-if="isStockEntryBookEntry">Add the stock items and quantities moved by this entry.</small>
+								<small v-else-if="isInspectionBookEntry">The selected GRN supplies these quantities. Move only exception quantities into another Received Type.</small>
+								<small v-else-if="isBookEntry">Add an item, choose its details and enter the quantity.</small>
+							</div>
+						</div>
 						<span class="child-cols-note pivot-note">
-							{{ isInspectionEntry ? "split each received qty across received types" : useGrnSplit ? "received-type split · server resolves variants on save" : "size-pivot · server resolves variants on save" }}
+							{{ isWocBookEntry ? "Add, edit or remove manual rows" : isGrnBookEntry && useGrnSplit ? "Add the Received Types used for this receipt; totals cannot exceed the pending quantity" : isGrnBookEntry ? `${grnSourceLabel} items and pending limits are applied automatically` : isDcBookEntry ? "Work Order items and pending limits are applied automatically" : isStockEntryBookEntry ? (form.purpose === 'Material Receipt' ? 'Enter quantity and incoming valuation rate' : 'Valuation is derived from the current stock') : isPurchaseOrder ? "Supplier Item Price is applied automatically" : isInspectionEntry ? "GRN quantity · classify exceptions by Received Type" : useGrnSplit ? "received-type split · server resolves variants on save" : "size-pivot · server resolves variants on save" }}
 						</span>
 					</div>
 					<!-- R3b: GRN against Work Order needs the received-type SPLIT UX
@@ -822,12 +1128,14 @@
 						:posting-date="form.posting_date || ''"
 						:editable="true"
 						@change="onGridChange"
+						@summary="onInspectionSummary"
 					/>
 					<GRNReceivedTypeEditor
 						v-else-if="useGrnSplit"
 						:ref="(el) => setGridRef(pv.childField, el)"
 						:editable="true"
 						@change="onGridChange"
+						@summary="onGridSummary"
 					/>
 					<StockItemGridEditor
 						v-else
@@ -836,11 +1144,44 @@
 						:value-fields="pv.valueFields"
 						:entry-fields="pv.entryFields"
 						:cell-fields="pv.cellFields || []"
+						:separate-cell-fields="isPurchaseOrder ? ['pending_quantity', 'tax', 'total_amount'] : isGrnBookEntry ? ['pending_quantity', 'max_receivable_quantity', 'rate', 'amount'] : isDcBookEntry ? ['pending_quantity'] : []"
 						:show-allow-zero-rate="!!pv.showAllowZeroRate"
-						:show-secondary-toggle="!!pv.showSecondaryToggle"
-						:locked-items="!!pv.lockedItems"
+						:show-secondary-toggle="!!pv.showSecondaryToggle && !isGrnBookEntry && !isDcBookEntry"
+						:locked-items="!!pv.lockedItems || isGrnBookEntry || isDcBookEntry"
+						:price-supplier="isPurchaseOrder ? form.supplier : ''"
+						:apply-available-price="isPurchaseOrder"
+						:show-previous-price="isPurchaseOrder && canRead(doctype)"
+						:current-document="isPurchaseOrder && !isCreate ? id : ''"
+						:hidden-dimensions="isPurchaseOrder || isGrnBookEntry || isDcBookEntry ? ['received_type'] : []"
+						:item-filters="isPurchaseOrder ? poItemFilters : {}"
 						:editable="true"
 						@change="onGridChange"
+						@summary="(summary) => onGridSummary(summary, pv.childField)"
+					/>
+				</div>
+
+				<!-- Additional rows from submitted Work Order Corrections. The rows
+				     remain locked to their correction; only voucher quantity is entered. -->
+				<div v-if="showCorrectionSection" class="child-editor correction-items-editor">
+					<div class="child-editor-head">
+						<div class="child-editor-title">
+							<span v-if="isRegisteredBookEntry" class="book-step">3</span>
+							<div>
+								<h4>{{ isDeliveryChallan ? "Correction deliverables" : "Correction receivables" }}</h4>
+								<small>Submitted Work Order Corrections are kept separate and traceable.</small>
+							</div>
+						</div>
+						<span class="child-cols-note pivot-note">Enter only the quantity used now</span>
+					</div>
+					<CorrectionItemsSection
+						ref="correctionGrid"
+						:editable="true"
+						:value-fields="correctionConfig.valueFields"
+						:entry-fields="correctionConfig.entryFields"
+						:cell-fields="correctionConfig.cellFields"
+						:show-secondary-toggle="true"
+						@change="onGridChange"
+						@summary="onCorrectionSummary"
 					/>
 				</div>
 
@@ -848,6 +1189,7 @@
 				<div
 					v-for="ct in editableChildTables"
 					:key="ct.fieldname"
+					v-show="!isItem || masterWorkspaceTab === 'configuration'"
 					class="child-editor"
 				>
 					<div class="child-editor-head">
@@ -912,6 +1254,7 @@
 					<DataTable
 						:value="form[ct.fieldname]"
 						class="mgk-table child-dt edit-dt"
+						:data-child-field="ct.fieldname"
 						:rowHover="false"
 						editMode="cell"
 						resizableColumns
@@ -951,16 +1294,14 @@
 									fluid
 									autofocus
 								/>
-								<AutoComplete
+								<LinkField
 									v-else-if="col.input === 'link'"
-									v-model="data[field]"
-									:suggestions="childLinkSuggestions"
-									@complete="onChildLinkComplete(col, $event)"
-									dropdown
-									completeOnFocus
+									:model-value="data[field]"
+									@update:model-value="data[field] = $event"
+									:target-doctype="col.linkTarget"
+									:filters="childLinkFilters(col, data)"
+									:route-resolver="props.linkedRouteResolver"
 									class="cell-input"
-									fluid
-									autofocus
 								/>
 								<InputText
 									v-else
@@ -1014,9 +1355,10 @@
 				     placement (Desk uses field_order). Editable Text field. -->
 				<section
 					v-if="woCommentsField"
-					class="mgk-card form-section wo-comments-section"
+					class="mgk-card form-section wo-comments-section book-entry-notes"
 				>
 					<header class="mgk-card__head">
+						<span v-if="isWorkOrderBookEntry" class="book-step">5</span>
 						<span class="mgk-card__title">{{ woCommentsField.label }}</span>
 					</header>
 					<div class="mgk-card__body">
@@ -1066,9 +1408,1453 @@
 					/>
 				</div>
 			</div>
+
+			<aside v-if="isPiBookEntry" class="book-entry-aside">
+				<section class="order-summary-card pi-summary-card">
+					<header>
+						<span class="summary-book pi-summary-book"><small>BILLING</small><strong>PI</strong></span>
+						<div><small>Current bill</small><h3>Invoice summary</h3></div>
+					</header>
+					<div class="summary-lines">
+						<div><span>Supplier</span><strong>{{ piEntrySupplierDisplay }}</strong></div>
+						<div><span>Against</span><strong>{{ form.against || "Not selected" }}</strong></div>
+						<div><span>GRNs</span><strong>{{ piEntrySummary.grnCount }}</strong></div>
+						<div><span>Item lines</span><strong>{{ piEntrySummary.itemCount }}</strong></div>
+						<div><span>Total quantity</span><strong>{{ formatNumber(piEntrySummary.totalQty) }}</strong></div>
+						<div><span>Tax</span><strong>₹ {{ formatNumber(piEntrySummary.tax) }}</strong></div>
+					</div>
+					<div class="summary-total"><span>Grand total</span><strong>₹ {{ formatNumber(piEntrySummary.grandTotal) }}</strong></div>
+				</section>
+
+				<section class="order-checklist">
+					<h3>Before saving</h3>
+					<div :class="{ complete: piBillReady }"><i :class="piBillReady ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Supplier bill</strong><small>Supplier, bill number and invoice date</small></span></div>
+					<div :class="{ complete: piEntrySummary.grnCount > 0 }"><i :class="piEntrySummary.grnCount > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Received notes</strong><small>Select at least one available GRN</small></span></div>
+					<div :class="{ complete: piEntrySummary.fetched }"><i :class="piEntrySummary.fetched ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Fetched items</strong><small>Build the grouped item rows from the selected GRNs</small></span></div>
+					<div :class="{ complete: piReadyToSave }"><i :class="piReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ piReadyToSave ? "The supplier bill is ready" : "Complete the steps above" }}</small></span></div>
+				</section>
+			</aside>
+
+			<aside v-else-if="isStockEntryBookEntry" class="book-entry-aside">
+				<section class="order-summary-card stock-entry-summary-card">
+					<header>
+						<span class="summary-book stock-entry-summary-book"><small>MOVEMENT</small><strong>SE</strong></span>
+						<div><small>Current movement</small><h3>Stock summary</h3></div>
+					</header>
+					<div class="summary-lines">
+						<div><span>Purpose</span><strong>{{ form.purpose || "Not selected" }}</strong></div>
+						<div v-if="stockEntryNeedsFrom"><span>From</span><strong>{{ localizedName("Warehouse", form.from_warehouse, "Not selected") }}</strong></div>
+						<div v-if="stockEntryNeedsTo"><span>To</span><strong>{{ localizedName("Warehouse", form.to_warehouse, "Not selected") }}</strong></div>
+						<div><span>Item lines</span><strong>{{ stockEntrySummary.itemCount }}</strong></div>
+						<div><span>Posting date</span><strong>{{ formatDate(form.posting_date) || "Not set" }}</strong></div>
+					</div>
+					<div class="summary-total"><span>Movement quantity</span><strong>{{ formatNumber(stockEntrySummary.totalQty) }}</strong></div>
+				</section>
+
+				<section class="order-checklist">
+					<h3>Before saving</h3>
+					<div :class="{ complete: !!form.purpose }"><i :class="form.purpose ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Movement purpose</strong><small>Choose how the stock changes</small></span></div>
+					<div :class="{ complete: stockEntryRouteReady }"><i :class="stockEntryRouteReady ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Movement route</strong><small>Required source and target warehouses</small></span></div>
+					<div :class="{ complete: stockEntrySummary.itemCount > 0 }"><i :class="stockEntrySummary.itemCount > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Stock items</strong><small>Add at least one item and quantity</small></span></div>
+					<div :class="{ complete: stockEntryReadyToSave }"><i :class="stockEntryReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ stockEntryReadyToSave ? "The Stock Entry is ready" : "Complete the steps above" }}</small></span></div>
+				</section>
+			</aside>
+
+			<aside v-else-if="isInspectionBookEntry" class="book-entry-aside">
+				<section class="order-summary-card inspection-summary-card">
+					<header>
+						<span class="summary-book inspection-summary-book"><small>GRN</small><strong>IE</strong></span>
+						<div><small>Current inspection</small><h3>Classification summary</h3></div>
+					</header>
+					<div class="summary-lines">
+						<div><span>Goods Received Note</span><strong>{{ form.against_id || "Not selected" }}</strong></div>
+						<div><span>Source rows</span><strong>{{ inspectionEntrySummary.itemCount }}</strong></div>
+						<div><span>Received quantity</span><strong>{{ formatNumber(inspectionEntrySummary.totalQty) }}</strong></div>
+						<div><span>Reclassified</span><strong>{{ formatNumber(inspectionEntrySummary.classifiedQty) }}</strong></div>
+					</div>
+					<div class="summary-total"><span>Kept as received</span><strong>{{ formatNumber(inspectionEntrySummary.unchangedQty) }}</strong></div>
+				</section>
+
+				<section class="order-checklist">
+					<h3>Before saving</h3>
+					<div :class="{ complete: !!form.against_id }"><i :class="form.against_id ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>GRN selected</strong><small>Choose a submitted Goods Received Note</small></span></div>
+					<div :class="{ complete: inspectionEntrySummary.itemCount > 0 }"><i :class="inspectionEntrySummary.itemCount > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Received rows loaded</strong><small>Classify exceptions by Received Type</small></span></div>
+					<div :class="{ complete: inspectionReadyToSave }"><i :class="inspectionReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ inspectionReadyToSave ? "The Inspection Entry is ready" : "Select a GRN to continue" }}</small></span></div>
+				</section>
+			</aside>
+
+			<aside v-else-if="isBookEntry" class="book-entry-aside">
+				<section class="order-summary-card">
+					<header>
+						<span class="summary-book"><small>ORDER</small><strong>PO</strong></span>
+						<div><small>Current order</small><h3>Order summary</h3></div>
+					</header>
+					<div class="summary-lines">
+						<div><span>Supplier</span><strong>{{ poSupplierDisplay }}</strong></div>
+						<div><span>Delivery to</span><strong>{{ form.delivery_warehouse || "Not selected" }}</strong></div>
+						<div><span>Routing</span><strong>{{ form.mgk_goods_routing || "Direct" }}</strong></div>
+						<div><span>Items</span><strong>{{ poEntrySummary.itemCount }}</strong></div>
+						<div><span>Total quantity</span><strong>{{ formatNumber(poEntrySummary.totalQty) }}</strong></div>
+					</div>
+					<div class="summary-total"><span>Order value</span><strong>₹ {{ formatNumber(poEntrySummary.grandTotal) }}</strong></div>
+				</section>
+
+				<section class="order-checklist">
+					<h3>Before saving</h3>
+					<div :class="{ complete: poHeaderReady }"><i :class="poHeaderReady ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Order details</strong><small>Supplier and delivery warehouse</small></span></div>
+					<div :class="{ complete: poEntrySummary.itemCount > 0 }"><i :class="poEntrySummary.itemCount > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ordered items</strong><small>At least one ordered item</small></span></div>
+					<div :class="{ complete: poReadyToSave }"><i :class="poReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ poReadyToSave ? "The order is ready" : "Complete the two steps above" }}</small></span></div>
+				</section>
+			</aside>
+
+				<aside v-else-if="isWocBookEntry" class="book-entry-aside">
+					<section class="order-summary-card woc-summary-card">
+						<header>
+							<span class="summary-book woc-summary-book"><small>MANUAL</small><strong>WOC</strong></span>
+							<div><small>Current correction</small><h3>Correction summary</h3></div>
+						</header>
+						<div class="summary-lines">
+							<div><span>Work Order</span><strong>{{ form.work_order || "Not selected" }}</strong></div>
+							<div><span>Process</span><strong>{{ form.process_name || "Filled from Work Order" }}</strong></div>
+							<div><span>Job-worker</span><strong>{{ localizedName("Supplier", form.supplier, "Filled from Work Order") }}</strong></div>
+							<div><span>Deliverable rows</span><strong>{{ wocEntrySummary.deliverables.itemCount }}</strong></div>
+							<div><span>Receivable rows</span><strong>{{ wocEntrySummary.receivables.itemCount }}</strong></div>
+						</div>
+						<div class="summary-total"><span>Total corrected quantity</span><strong>{{ formatNumber(wocEntrySummary.deliverables.totalQty + wocEntrySummary.receivables.totalQty) }}</strong></div>
+					</section>
+
+					<section class="order-checklist">
+						<h3>Before saving</h3>
+						<div :class="{ complete: !!form.work_order }"><i :class="form.work_order ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Work Order selected</strong><small>Only submitted, open Work Orders are available</small></span></div>
+						<div :class="{ complete: wocEntrySummary.deliverables.itemCount + wocEntrySummary.receivables.itemCount > 0 }"><i :class="wocEntrySummary.deliverables.itemCount + wocEntrySummary.receivables.itemCount > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Correction rows</strong><small>Add at least one deliverable or receivable</small></span></div>
+						<div :class="{ complete: wocReadyToSave }"><i :class="wocReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ wocReadyToSave ? "The correction is ready" : "Complete the steps above" }}</small></span></div>
+					</section>
+				</aside>
+
+				<aside v-else-if="isWorkOrderBookEntry" class="book-entry-aside">
+					<section class="order-summary-card wo-summary-card">
+						<header>
+							<span class="summary-book wo-summary-book"><small>JOB WORK</small><strong>WO</strong></span>
+							<div><small>Current instruction</small><h3>Work summary</h3></div>
+						</header>
+						<div class="summary-lines">
+							<div><span>Process</span><strong>{{ form.process_name || "Not selected" }}</strong></div>
+							<div><span>Production Detail</span><strong>{{ form.production_detail || "Not selected" }}</strong></div>
+							<div><span>Job-worker</span><strong>{{ woJobWorkerDisplay }}</strong></div>
+							<div><span>Delivery to</span><strong>{{ woDeliveryDisplay }}</strong></div>
+							<div><span>Planned end</span><strong>{{ formatDate(form.planned_end_date) || "Not set" }}</strong></div>
+						</div>
+						<div class="summary-total"><span>Planned quantity</span><strong>{{ formatNumber(form.planned_quantity || 0) }}</strong></div>
+					</section>
+
+					<section class="order-checklist">
+						<h3>Before saving</h3>
+						<div :class="{ complete: woDefinitionReady }"><i :class="woDefinitionReady ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Work definition</strong><small>Process and Production Detail</small></span></div>
+						<div :class="{ complete: woPartyReady }"><i :class="woPartyReady ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Job-worker routing</strong><small>Job-worker, delivery and both addresses</small></span></div>
+						<div :class="{ complete: woScheduleReady }"><i :class="woScheduleReady ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Schedule</strong><small>Planned start and end dates</small></span></div>
+						<div :class="{ complete: woReadyToSave }"><i :class="woReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ woReadyToSave ? "The Work Order is ready" : "Complete the steps above" }}</small></span></div>
+					</section>
+				</aside>
+
+				<aside v-else-if="isMasterBookEntry" class="book-entry-aside">
+					<section class="order-summary-card master-summary-card">
+						<header>
+							<div><small>Current record</small><h3>{{ masterEntityLabel }} summary</h3></div>
+						</header>
+						<div class="summary-lines">
+							<div v-for="line in masterSummaryLines" :key="line.label"><span>{{ line.label }}</span><strong>{{ line.value || 'Not set' }}</strong></div>
+						</div>
+						<div class="summary-total"><span>Status</span><strong>{{ masterEnabledLabel }}</strong></div>
+					</section>
+
+					<section class="order-checklist">
+						<h3>Before saving</h3>
+						<div :class="{ complete: masterReadyToSave }"><i :class="masterReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Required details</strong><small>{{ masterRequiredComplete }} of {{ masterRequiredTotal }} completed</small></span></div>
+						<div v-if="hasAddressContact" class="complete"><i class="pi pi-map-marker" /><span><strong>Addresses and contacts</strong><small>Save first, then manage them from this record</small></span></div>
+						<div :class="{ complete: masterReadyToSave }"><i :class="masterReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ masterReadyToSave ? `${masterEntityLabel} is ready` : 'Complete the required details' }}</small></span></div>
+					</section>
+				</aside>
+
+				<aside v-else-if="isDcBookEntry" class="book-entry-aside">
+					<section class="order-summary-card dc-summary-card">
+						<header>
+							<span class="summary-book dc-summary-book"><small>DISPATCH</small><strong>DC</strong></span>
+							<div><small>Current dispatch</small><h3>Dispatch summary</h3></div>
+						</header>
+						<div class="summary-lines">
+							<div><span>Work Order</span><strong>{{ form.work_order || "Not selected" }}</strong></div>
+							<div><span>From</span><strong>{{ dcFromLocationDisplay }}</strong></div>
+							<div><span>To</span><strong>{{ dcToLocationDisplay }}</strong></div>
+						<div><span>Item lines</span><strong>{{ dcEntrySummary.itemCount + correctionEntrySummary.itemCount }}</strong></div>
+						<div><span>Pending quantity</span><strong>{{ formatNumber(dcEntrySummary.pendingQty + correctionEntrySummary.pendingQty) }}</strong></div>
+					</div>
+					<div class="summary-total"><span>Dispatch now</span><strong>{{ formatNumber(dcEntrySummary.totalQty + correctionEntrySummary.totalQty) }}</strong></div>
+					</section>
+
+					<section class="order-checklist">
+						<h3>Before saving</h3>
+						<div :class="{ complete: !!form.work_order }"><i :class="form.work_order ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Work Order selected</strong><small>The source fills receiver and deliverables</small></span></div>
+						<div :class="{ complete: dcLocationReady }"><i :class="dcLocationReady ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Dispatching location</strong><small>{{ dcLocationReady ? "Linked warehouse resolved" : "Choose a location with one active warehouse" }}</small></span></div>
+						<div :class="{ complete: dcEntrySummary.totalQty + correctionEntrySummary.totalQty > 0 }"><i :class="dcEntrySummary.totalQty + correctionEntrySummary.totalQty > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Dispatch quantity</strong><small>Enter the quantity sent now</small></span></div>
+						<div :class="{ complete: dcReadyToSave }"><i :class="dcReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ dcReadyToSave ? "The Delivery Challan is ready" : "Complete the steps above" }}</small></span></div>
+					</section>
+				</aside>
+
+				<aside v-else-if="isGrnBookEntry" class="book-entry-aside">
+				<section class="order-summary-card grn-summary-card">
+					<header>
+						<span class="summary-book grn-summary-book"><small>RECEIPT</small><strong>GRN</strong></span>
+						<div><small>Current receipt</small><h3>Receipt summary</h3></div>
+					</header>
+					<div class="summary-lines">
+						<div><span>{{ grnSourceLabel }}</span><strong>{{ form.against_id || "Not selected" }}</strong></div>
+						<div><span>Supplier</span><strong>{{ grnSupplierDisplay }}</strong></div>
+						<div><span>Receive into</span><strong>{{ grnWarehouseDisplay }}</strong></div>
+						<div><span>Item lines</span><strong>{{ grnEntrySummary.itemCount + correctionEntrySummary.itemCount }}</strong></div>
+						<div><span>Pending quantity</span><strong>{{ formatNumber(grnEntrySummary.pendingQty + correctionEntrySummary.pendingQty) }}</strong></div>
+					</div>
+					<div class="summary-total"><span>Receive now</span><strong>{{ formatNumber(grnEntrySummary.totalQty + correctionEntrySummary.totalQty) }}</strong></div>
+				</section>
+
+				<section class="order-checklist">
+					<h3>Before saving</h3>
+					<div :class="{ complete: !!form.against_id }"><i :class="form.against_id ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>{{ grnSourceLabel }} selected</strong><small>The source fills all receipt details</small></span></div>
+					<div :class="{ complete: grnEntrySummary.totalQty + correctionEntrySummary.totalQty > 0 }"><i :class="grnEntrySummary.totalQty + correctionEntrySummary.totalQty > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Received quantity</strong><small>Enter the quantity received now</small></span></div>
+					<div :class="{ complete: grnReadyToSave }"><i :class="grnReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ grnReadyToSave ? "The receipt is ready" : "Complete the two steps above" }}</small></span></div>
+					</section>
+				</aside>
+
+				<aside v-else-if="isIpdBookEntry" v-show="ipdWorkspaceTab === 'production'" class="book-entry-aside">
+					<section class="order-summary-card ipd-summary-card">
+						<header>
+							<span class="summary-book ipd-summary-book"><small>ROUTE</small><strong>IPD</strong></span>
+							<div><small>Current setup</small><h3>Production summary</h3></div>
+						</header>
+						<div class="summary-lines">
+							<div><span>Finished Item</span><strong>{{ localizedName('Item', form.item, 'Not selected') }}</strong></div>
+							<div><span>Starting yarn</span><strong>{{ ipdEntrySummary.startingYarn || "Not defined" }}</strong></div>
+							<div><span>Final yarn</span><strong>{{ ipdEntrySummary.finalYarn || "Not defined" }}</strong></div>
+							<div><span>Processes</span><strong>{{ ipdEntrySummary.processCount }}</strong></div>
+							<div><span>Routes</span><strong>{{ ipdEntrySummary.routeCount }}</strong></div>
+							<div><span>BOM Items</span><strong>{{ ipdBomSummary.itemCount }}</strong></div>
+						</div>
+					</section>
+
+					<section class="order-checklist">
+						<h3>Before saving</h3>
+						<div :class="{ complete: !!form.item }"><i :class="form.item ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Finished Item</strong><small>Select the Item being produced</small></span></div>
+						<div :class="{ complete: ipdEntrySummary.processCount > 0 }"><i :class="ipdEntrySummary.processCount > 0 ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Yarn flow</strong><small>Add at least one production process</small></span></div>
+						<div :class="{ complete: ipdReadyToSave }"><i :class="ipdReadyToSave ? 'pi pi-check' : 'pi pi-circle'" /><span><strong>Ready to save</strong><small>{{ ipdReadyToSave ? "The production detail is ready" : "Complete the two steps above" }}</small></span></div>
+					</section>
+				</aside>
+			</div>
+
+			<!-- ════════════════ ITEM PRODUCTION DETAIL YARN-FLOW VIEW ════════════════ -->
+			<div
+				v-else-if="isIpdBookView && doc"
+				class="po-saved-layout ipd-saved-layout"
+				:class="{ 'ipd-bom-tab-active': ipdWorkspaceTab === 'bom' }"
+			>
+				<nav class="ipd-workspace-tabs" role="tablist" aria-label="Item Production Detail sections">
+					<button type="button" role="tab" :aria-selected="ipdWorkspaceTab === 'production'" :class="{ active: ipdWorkspaceTab === 'production' }" @click="ipdWorkspaceTab = 'production'">
+						<i class="pi pi-sitemap" /><span>Production details</span>
+					</button>
+					<button type="button" role="tab" :aria-selected="ipdWorkspaceTab === 'bom'" :class="{ active: ipdWorkspaceTab === 'bom' }" @click="ipdWorkspaceTab = 'bom'">
+						<i class="pi pi-box" /><span>Bill of materials</span><b>{{ (doc.item_bom || []).length }}</b>
+					</button>
+				</nav>
+				<main class="po-saved-main">
+					<section v-show="ipdWorkspaceTab === 'production'" class="po-order-overview ipd-route-overview">
+						<header>
+							<span class="po-saved-book ipd-saved-book"><small>MGK</small><strong>IPD</strong></span>
+							<div class="po-overview-title"><div class="po-view-kicker">Item Production Detail</div><h2>Production route</h2><p>The ordered yarn transformations used to produce this Item.</p></div>
+							<div class="po-overview-total"><small>Processes</small><strong>{{ ipdViewSummary.processCount }}</strong></div>
+						</header>
+						<div class="po-facts">
+							<div class="po-fact po-fact-wide"><span>Finished Item</span><strong>{{ localizedName('Item', doc.item, '—') }}</strong></div>
+							<div class="po-fact"><span>Version</span><strong>{{ doc.version || "—" }}</strong></div>
+							<div class="po-fact"><span>Approval</span><strong>{{ doc.approval_status || "Not Approved" }}</strong></div>
+							<div class="po-fact po-fact-wide"><span>Starting yarn</span><strong>{{ ipdViewSummary.startingYarn || doc.yarn_item || "—" }}</strong></div>
+							<div class="po-fact po-fact-wide"><span>Final yarn</span><strong>{{ ipdViewSummary.finalYarn || "—" }}</strong></div>
+							<div class="po-fact"><span>Primary attribute</span><strong>{{ doc.primary_item_attribute || "—" }}</strong></div>
+						</div>
+					</section>
+
+					<section v-show="ipdWorkspaceTab === 'production'" class="ipd-attributes-panel">
+						<header>
+							<div class="po-section-title">
+								<span class="po-section-icon ipd-attribute-icon"><i class="pi pi-tags" /></span>
+								<div><h3>Production detail attributes</h3><p>Values configured for this production route only.</p></div>
+							</div>
+						</header>
+						<div v-if="ipdAttributeLoading" class="ipd-attribute-loading"><i class="pi pi-spin pi-spinner" /> Loading attributes…</div>
+						<div v-else-if="ipdAttributeCards.length" class="ipd-attribute-grid">
+							<button
+								v-for="card in ipdAttributeCards"
+								:key="card.attribute"
+								class="ipd-attribute-card"
+								:class="{ editable: canEditIpdAttributes }"
+								type="button"
+								:disabled="!canEditIpdAttributes"
+								@click="openIpdAttributes(card.attribute)"
+							>
+								<span>{{ card.attribute }}</span>
+								<div><b v-for="value in card.values" :key="value">{{ value }}</b><small v-if="!card.values.length">No values</small></div>
+								<i v-if="canEditIpdAttributes" class="pi pi-pencil" />
+							</button>
+						</div>
+						<div v-else class="ipd-attribute-empty">No attributes are configured on this production detail.</div>
+					</section>
+
+					<section v-show="ipdWorkspaceTab === 'bom'" class="ipd-attributes-panel ipd-bom-view-panel">
+						<header>
+							<div class="po-section-title">
+								<span class="po-section-icon ipd-bom-icon"><i class="pi pi-box" /></span>
+								<div><h3>Bill of materials</h3><p>Items consumed by this production detail and their quantity ratios.</p></div>
+							</div>
+							<span class="po-item-count">{{ (doc.item_bom || []).length }} item{{ (doc.item_bom || []).length === 1 ? "" : "s" }}</span>
+						</header>
+						<IPDBOMEditor
+							:model-value="doc.item_bom || []"
+							:production-detail="ipdAttributeDocName"
+							:dependent-attribute="doc.dependent_attribute || ''"
+							:can-manage-mappings="canManageIpdBomMappings"
+							readonly
+							@manage-mapping="openIpdBomMapping"
+						/>
+					</section>
+
+					<section v-show="ipdWorkspaceTab === 'production'" class="po-saved-items ipd-saved-flow">
+						<header><div class="po-section-title"><span class="po-section-icon"><i class="pi pi-sitemap" /></span><div><h3>Yarn process flow</h3><p>Read the route from top to bottom; every output becomes the next input.</p></div></div><span class="po-item-count">{{ ipdViewSummary.routeCount }} route{{ ipdViewSummary.routeCount === 1 ? "" : "s" }}</span></header>
+						<IPDYarnFlowEditor :model-value="doc.mgk_yarn_process_routes || []" :finished-item="doc.item || ''" :finished-attributes="doc.item_attributes || []" :production-detail="ipdAttributeDocName" :finished-attribute-values="ipdAttributeValues" readonly />
+					</section>
+				</main>
+
+				<aside v-show="ipdWorkspaceTab === 'production'" class="po-saved-side">
+					<section class="po-totals-card ipd-route-card">
+						<header><small>Current setup</small><h3>Route summary</h3></header>
+						<div class="po-total-lines"><div><span>Processes</span><strong>{{ ipdViewSummary.processCount }}</strong></div><div><span>Routes</span><strong>{{ ipdViewSummary.routeCount }}</strong></div><div><span>Process matrices</span><strong>{{ ipdApprovalState?.matrix_count ?? "—" }}</strong></div><div><span>Starting yarn</span><strong>{{ ipdViewSummary.startingYarn || "—" }}</strong></div><div><span>Final yarn</span><strong>{{ ipdViewSummary.finalYarn || "—" }}</strong></div></div>
+						<div class="po-grand-total"><span>Status</span><strong>{{ doc.approval_status || "Not Approved" }}</strong></div>
+					</section>
+					<section v-if="activityEvents.length" class="po-activity-card"><h3>Recent activity</h3><div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row"><span :class="event.tone"><i :class="event.icon" /></span><div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div></div></section>
+				</aside>
+			</div>
+
+		<!-- ════════════════ WORK ORDER CORRECTION BOOK VIEW ════════════════ -->
+		<div v-else-if="isWocBookView && doc" class="po-saved-layout woc-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview woc-order-overview">
+					<header>
+						<span class="po-saved-book woc-saved-book"><small>MANUAL</small><strong>WOC</strong></span>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">Work Order Correction</div>
+							<h2>Correction overview</h2>
+							<p>Extra deliverables and receivables recorded against this Work Order.</p>
+						</div>
+						<div class="po-overview-total"><small>Correction rows</small><strong>{{ wocViewSummary.deliverables.itemCount + wocViewSummary.receivables.itemCount }}</strong></div>
+					</header>
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide">
+							<span>Work Order</span>
+							<a v-if="documentHref('Work Order', doc.work_order)" class="po-record-link" :href="documentHref('Work Order', doc.work_order)" @click="onDocumentLinkClick($event, 'Work Order', doc.work_order)"><strong>{{ doc.work_order }}</strong></a>
+							<strong v-else>{{ doc.work_order }}</strong>
+						</div>
+						<div class="po-fact"><span>Correction date</span><strong>{{ formatDate(doc.correction_date) }}</strong></div>
+						<div class="po-fact"><span>Process</span><strong>{{ doc.process_name || "—" }}</strong></div>
+						<div class="po-fact po-fact-wide">
+							<span>Item</span>
+							<a v-if="documentHref('Item', doc.item)" class="po-record-link" :href="documentHref('Item', doc.item)" @click="onDocumentLinkClick($event, 'Item', doc.item)"><strong>{{ localizedName('Item', doc.item, doc.item || '—') }}</strong></a>
+							<strong v-else>{{ localizedName('Item', doc.item, doc.item || '—') }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide"><span>Job-worker</span><strong>{{ localizedName('Supplier', doc.supplier, doc.supplier || '—') }}</strong></div>
+						<div class="po-fact po-fact-wide"><span>Delivery location</span><strong>{{ localizedName('Supplier', doc.delivery_location, doc.delivery_location || '—') }}</strong></div>
+					</div>
+				</section>
+
+				<section v-if="wocViewSummary.deliverables.itemCount" class="po-saved-items wo-movement-section">
+					<header><div class="po-section-title"><span class="po-section-icon"><i class="pi pi-arrow-right" /></span><div><h3>Additional deliverables</h3><p>These rows become available in Delivery Challan for the selected Work Order.</p></div></div><span class="po-item-count">{{ wocViewSummary.deliverables.itemCount }} item{{ wocViewSummary.deliverables.itemCount === 1 ? "" : "s" }}</span></header>
+					<StockItemGridEditor :editable="false" :grouped-field="pivotFor('deliverables')?.groupedField" :value-fields="pivotFor('deliverables')?.valueFields || []" :entry-fields="pivotFor('deliverables')?.entryFields || []" :cell-fields="pivotFor('deliverables')?.cellFields || []" :separate-cell-fields="['pending_quantity']" :initial-data="viewGrouped.deliverables || []" />
+				</section>
+
+				<section v-if="wocViewSummary.receivables.itemCount" class="po-saved-items wo-movement-section">
+					<header><div class="po-section-title"><span class="po-section-icon"><i class="pi pi-arrow-left" /></span><div><h3>Additional receivables</h3><p>These rows become available in Work Order GRN for the selected Work Order.</p></div></div><span class="po-item-count">{{ wocViewSummary.receivables.itemCount }} item{{ wocViewSummary.receivables.itemCount === 1 ? "" : "s" }}</span></header>
+					<StockItemGridEditor :editable="false" :grouped-field="pivotFor('receivables')?.groupedField" :value-fields="pivotFor('receivables')?.valueFields || []" :entry-fields="pivotFor('receivables')?.entryFields || []" :cell-fields="pivotFor('receivables')?.cellFields || []" :separate-cell-fields="['cost', 'pending_quantity']" :initial-data="viewGrouped.receivables || []" />
+				</section>
+
+				<section v-if="doc.reason" class="po-saved-notes">
+					<header class="po-section-title"><span class="po-section-icon"><i class="pi pi-file-edit" /></span><div><h3>Correction reason</h3><p>Why the Work Order quantities were extended.</p></div></header>
+					<div class="po-notes-grid"><div><span>Reason</span><p>{{ doc.reason }}</p></div></div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card woc-totals-card">
+					<header><small>Current correction</small><h3>Correction totals</h3></header>
+					<div class="po-total-lines">
+						<div><span>Deliverable rows</span><strong>{{ wocViewSummary.deliverables.itemCount }}</strong></div>
+						<div><span>Deliverable quantity</span><strong>{{ formatNumber(wocViewSummary.deliverables.totalQty) }}</strong></div>
+						<div><span>Deliverable pending</span><strong>{{ formatNumber(wocViewSummary.deliverables.pendingQty) }}</strong></div>
+						<div><span>Receivable rows</span><strong>{{ wocViewSummary.receivables.itemCount }}</strong></div>
+						<div><span>Receivable quantity</span><strong>{{ formatNumber(wocViewSummary.receivables.totalQty) }}</strong></div>
+						<div><span>Receivable pending</span><strong>{{ formatNumber(wocViewSummary.receivables.pendingQty) }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Status</span><strong>{{ doc.status || statusLabel }}</strong></div>
+				</section>
+				<section v-if="activityEvents.length" class="po-activity-card"><h3>Recent activity</h3><div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row"><span :class="event.tone"><i :class="event.icon" /></span><div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div></div></section>
+			</aside>
 		</div>
 
-		<!-- ════════════════ VIEW BODY ════════════════ -->
+		<!-- ════════════════ WORK ORDER BOOK VIEW ════════════════
+		     Saved Work Orders use the same clear order-sheet hierarchy as PO/GRN:
+		     one overview, calculated movement tables, and a compact status rail. -->
+		<div v-else-if="isWorkOrderBookView && doc" class="po-saved-layout wo-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview wo-order-overview">
+					<header>
+						<span class="po-saved-book wo-saved-book"><small>JOB WORK</small><strong>WO</strong></span>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">Work Order Book</div>
+							<h2>Work overview</h2>
+							<p>The process, job-worker, production route and schedule for this instruction.</p>
+						</div>
+						<div class="po-overview-total">
+							<small>Planned quantity</small>
+							<strong>{{ formatNumber(doc.planned_quantity || doc.total_quantity || 0) }}</strong>
+						</div>
+					</header>
+
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide"><span>Process</span><strong>{{ doc.process_name || "Not selected" }}</strong></div>
+						<div class="po-fact">
+							<span>Work Order date</span><strong>{{ formatDate(doc.wo_date) }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Expected delivery</span><strong>{{ formatDate(doc.expected_delivery_date) }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Item</span>
+							<a v-if="documentHref('Item', doc.item)" class="po-record-link" :href="documentHref('Item', doc.item)" @click="onDocumentLinkClick($event, 'Item', doc.item)"><strong>{{ linkTitles.titleFor('Item', doc.item) || doc.item }}</strong></a>
+							<strong v-else>{{ localizedName('Item', doc.item, 'Not selected') }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Item Production Detail</span>
+							<a v-if="documentHref('Item Production Detail', doc.production_detail)" class="po-record-link" :href="documentHref('Item Production Detail', doc.production_detail)" @click="onDocumentLinkClick($event, 'Item Production Detail', doc.production_detail)"><strong>{{ doc.production_detail }}</strong></a>
+							<strong v-else>{{ doc.production_detail || "Not selected" }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Job-worker</span>
+							<a v-if="documentHref('Supplier', doc.supplier)" class="po-record-link" :href="documentHref('Supplier', doc.supplier)" @click="onDocumentLinkClick($event, 'Supplier', doc.supplier)"><strong>{{ woViewJobWorkerDisplay }}</strong><small v-if="localizedCode('Supplier', doc.supplier)">{{ localizedCode('Supplier', doc.supplier) }}</small></a>
+							<strong v-else>{{ woViewJobWorkerDisplay }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Delivery location</span>
+							<a v-if="documentHref('Supplier', doc.delivery_location)" class="po-record-link" :href="documentHref('Supplier', doc.delivery_location)" @click="onDocumentLinkClick($event, 'Supplier', doc.delivery_location)"><strong>{{ woViewDeliveryDisplay }}</strong></a>
+							<strong v-else>{{ woViewDeliveryDisplay }}</strong>
+						</div>
+						<div class="po-fact"><span>Planned start</span><strong>{{ formatDate(doc.planned_start_date) }}</strong></div>
+						<div class="po-fact"><span>Planned end</span><strong>{{ formatDate(doc.planned_end_date) }}</strong></div>
+					</div>
+				</section>
+
+				<section class="po-saved-items wo-movement-section">
+					<header><div class="po-section-title"><span class="po-section-icon"><i class="pi pi-arrow-right" /></span><div><h3>Deliverables</h3><p>Materials sent to the job-worker for this process.</p></div></div><span class="po-item-count">{{ woViewSummary.deliverables.itemCount }} item{{ woViewSummary.deliverables.itemCount === 1 ? "" : "s" }}</span></header>
+					<StockItemGridEditor
+						:editable="false"
+						:grouped-field="pivotFor('deliverables')?.groupedField"
+						:value-fields="pivotFor('deliverables')?.valueFields || []"
+						:entry-fields="pivotFor('deliverables')?.entryFields || []"
+						:cell-fields="pivotFor('deliverables')?.cellFields || []"
+						:separate-cell-fields="['pending_quantity']"
+						:initial-data="viewGrouped.deliverables || []"
+						:hidden-dimensions="['received_type']"
+					/>
+				</section>
+
+				<section class="po-saved-items wo-movement-section">
+					<header><div class="po-section-title"><span class="po-section-icon"><i class="pi pi-arrow-left" /></span><div><h3>Receivables</h3><p>Processed materials expected back from the job-worker.</p></div></div><span class="po-item-count">{{ woViewSummary.receivables.itemCount }} item{{ woViewSummary.receivables.itemCount === 1 ? "" : "s" }}</span></header>
+					<StockItemGridEditor
+						:editable="false"
+						:grouped-field="pivotFor('receivables')?.groupedField"
+						:value-fields="pivotFor('receivables')?.valueFields || []"
+						:entry-fields="pivotFor('receivables')?.entryFields || []"
+						:cell-fields="pivotFor('receivables')?.cellFields || []"
+						:separate-cell-fields="['cost', 'pending_quantity']"
+						:initial-data="viewGrouped.receivables || []"
+						:hidden-dimensions="['received_type']"
+					/>
+				</section>
+
+				<section v-if="doc.comments" class="po-saved-notes">
+					<header class="po-section-title"><span class="po-section-icon"><i class="pi pi-file-edit" /></span><div><h3>Notes and instructions</h3><p>Additional information recorded with this Work Order.</p></div></header>
+					<div class="po-notes-grid"><div><span>Comments</span><p>{{ doc.comments }}</p></div></div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card wo-totals-card">
+					<header><small>Current instruction</small><h3>Work summary</h3></header>
+					<div class="po-total-lines">
+						<div><span>Process</span><strong>{{ doc.process_name || "—" }}</strong></div>
+						<div><span>Deliverable quantity</span><strong>{{ formatNumber(woViewSummary.deliverables.totalQty) }}</strong></div>
+						<div><span>Deliverable pending</span><strong>{{ formatNumber(woViewSummary.deliverables.pendingQty) }}</strong></div>
+						<div><span>Receivable quantity</span><strong>{{ formatNumber(woViewSummary.receivables.totalQty) }}</strong></div>
+						<div><span>Receivable pending</span><strong>{{ formatNumber(woViewSummary.receivables.pendingQty) }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Planned quantity</span><strong>{{ formatNumber(doc.planned_quantity || doc.total_quantity || 0) }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Work progress</h3>
+					<div class="po-progress-status"><span class="po-progress-dot" :class="`status-${Number(doc.docstatus)}`" /><div><strong>{{ statusLabel }}</strong><small>{{ doc.open_status || "Work Order recorded" }}</small></div></div>
+					<RouterLink v-for="c in connections" :key="c.doctype" class="po-related-row" :to="connectionRoute(c)"><span><small>Connected records</small><strong>{{ c.label }}</strong></span><b>{{ c.count ?? "…" }}</b><i class="pi pi-arrow-right" /></RouterLink>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row"><span :class="event.tone"><i :class="event.icon" /></span><div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div></div>
+				</section>
+			</aside>
+		</div>
+
+		<!-- ════════════════ PURCHASE INVOICE BOOK VIEW ════════════════
+		     Billing keeps the same order-sheet hierarchy as Purchase Order:
+		     one supplier-bill overview, explicit source GRNs, billed rows, and
+		     a compact totals/status rail. -->
+		<div v-else-if="isPiBookView && doc" class="po-saved-layout pi-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview pi-bill-overview">
+					<header>
+						<span class="po-saved-book pi-saved-book"><small>MGK</small><strong>PI</strong></span>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">{{ doc.against || "Supplier" }} Billing Book</div>
+							<h2>Supplier bill overview</h2>
+							<p>The supplier invoice, received notes, and billed value recorded in this bill.</p>
+						</div>
+						<div class="po-overview-total">
+							<small>Bill value</small>
+							<strong>₹ {{ formatNumber(piViewSummary.grandTotal) }}</strong>
+						</div>
+					</header>
+
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide">
+							<span>Supplier</span>
+							<a
+								v-if="documentHref('Supplier', doc.supplier)"
+								class="po-record-link"
+								:href="documentHref('Supplier', doc.supplier)"
+								@click="onDocumentLinkClick($event, 'Supplier', doc.supplier)"
+							><strong>{{ piViewSupplierDisplay }}</strong><small v-if="localizedCode('Supplier', doc.supplier)">{{ localizedCode('Supplier', doc.supplier) }}</small></a>
+							<strong v-else>{{ piViewSupplierDisplay }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Supplier invoice no</span>
+							<strong>{{ doc.bill_no || "—" }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Supplier invoice date</span>
+							<strong>{{ formatDate(doc.bill_date) }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Billing supplier</span>
+							<a
+								v-if="documentHref('Supplier', doc.billing_supplier)"
+								class="po-record-link"
+								:href="documentHref('Supplier', doc.billing_supplier)"
+								@click="onDocumentLinkClick($event, 'Supplier', doc.billing_supplier)"
+							><strong>{{ piViewBillingSupplierDisplay }}</strong><small v-if="doc.billing_supplier && piViewBillingSupplierDisplay !== doc.billing_supplier">{{ doc.billing_supplier }}</small></a>
+							<strong v-else>{{ piViewBillingSupplierDisplay }}</strong>
+						</div>
+						<div class="po-fact"><span>Posting date</span><strong>{{ formatDate(doc.posting_date) }}</strong></div>
+						<div class="po-fact"><span>Due date</span><strong>{{ formatDate(doc.due_date) || "Not set" }}</strong></div>
+					</div>
+				</section>
+
+				<section class="po-saved-items pi-grn-section">
+					<header>
+						<div class="po-section-title"><span class="po-section-icon"><i class="pi pi-inbox" /></span><div><h3>Goods Received Notes</h3><p>Only these submitted receipts are included in this supplier bill.</p></div></div>
+						<span class="po-item-count">{{ piViewSummary.grnCount }} GRN{{ piViewSummary.grnCount === 1 ? "" : "s" }}</span>
+					</header>
+					<div class="master-table-wrap pi-view-table-wrap">
+						<DataTable :value="piViewGrns" class="mgk-table master-child-table pi-view-table" dataKey="name" :rowHover="false" :tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }">
+							<Column header="#" :style="{ width: '64px' }"><template #body="{ index }">{{ index + 1 }}</template></Column>
+							<Column header="Goods Received Note">
+								<template #body="{ data }">
+									<a v-if="documentHref('Goods Received Note', data.grn)" class="master-cell-link pi-source-link" :href="documentHref('Goods Received Note', data.grn)" @click="onDocumentLinkClick($event, 'Goods Received Note', data.grn)">{{ data.grn }}</a>
+									<strong v-else>{{ data.grn || "—" }}</strong>
+								</template>
+							</Column>
+						</DataTable>
+					</div>
+				</section>
+
+				<section class="po-saved-items pi-items-section">
+					<header>
+						<div class="po-section-title"><span class="po-section-icon"><i class="pi pi-list" /></span><div><h3>Billed items</h3><p>Items with the same price are combined; different prices remain separate.</p></div></div>
+						<span class="po-item-count">{{ piViewSummary.itemCount }} item{{ piViewSummary.itemCount === 1 ? "" : "s" }}</span>
+					</header>
+					<div class="master-table-wrap pi-view-table-wrap">
+						<DataTable :value="piViewItems" class="mgk-table master-child-table pi-view-table pi-item-table" dataKey="name" :rowHover="false" :tableStyle="{ tableLayout: 'fixed', minWidth: '760px' }">
+							<Column header="#" :style="{ width: '52px' }"><template #body="{ index }">{{ index + 1 }}</template></Column>
+							<Column header="Item" :style="{ width: '230px' }"><template #body="{ data }"><strong class="pi-view-item">{{ localizedName('Item', data.item, '—') }}</strong><small v-if="data.item_group">{{ data.item_group }}</small></template></Column>
+							<Column header="Quantity" :style="{ width: '105px', textAlign: 'right' }"><template #body="{ data }"><strong>{{ formatNumber(data.qty) }}</strong></template></Column>
+							<Column field="uom" header="UOM" :style="{ width: '80px' }" />
+							<Column header="Rate" :style="{ width: '120px', textAlign: 'right' }"><template #body="{ data }">₹ {{ formatNumber(data.rate) }}</template></Column>
+							<Column header="Tax" :style="{ width: '120px' }"><template #body="{ data }">{{ data.tax || "No tax" }}</template></Column>
+							<Column header="Amount" :style="{ width: '135px', textAlign: 'right' }"><template #body="{ data }"><strong>₹ {{ formatNumber(data.amount) }}</strong></template></Column>
+						</DataTable>
+					</div>
+				</section>
+
+				<section v-if="doc.remarks" class="po-saved-notes">
+					<header class="po-section-title"><span class="po-section-icon"><i class="pi pi-file-edit" /></span><div><h3>Billing notes</h3><p>Additional information recorded with this supplier bill.</p></div></header>
+					<div class="po-notes-grid"><div><span>Remarks</span><p>{{ doc.remarks }}</p></div></div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card pi-totals-card">
+					<header><small>Current bill</small><h3>Invoice totals</h3></header>
+					<div class="po-total-lines">
+						<div><span>Received notes</span><strong>{{ piViewSummary.grnCount }}</strong></div>
+						<div><span>Item lines</span><strong>{{ piViewSummary.itemCount }}</strong></div>
+						<div><span>Total quantity</span><strong>{{ formatNumber(piViewSummary.totalQty) }}</strong></div>
+						<div><span>Subtotal</span><strong>₹ {{ formatNumber(piViewSummary.subtotal) }}</strong></div>
+						<div><span>Tax</span><strong>₹ {{ formatNumber(piViewSummary.tax) }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Grand total</span><strong>₹ {{ formatNumber(piViewSummary.grandTotal) }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Billing status</h3>
+					<div class="po-progress-status"><span class="po-progress-dot" :class="`status-${Number(doc.docstatus)}`" /><div><strong>{{ statusLabel }}</strong><small>{{ doc.against || "Supplier bill" }}</small></div></div>
+					<button v-if="doc.bill_tracking" class="po-related-row" type="button" @click="onDocumentLinkClick($event, 'Bill Tracking', doc.bill_tracking)"><span><small>Connected record</small><strong>Bill Tracking</strong></span><b>{{ doc.bill_tracking }}</b><i class="pi pi-arrow-right" /></button>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row"><span :class="event.tone"><i :class="event.icon" /></span><div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div></div>
+				</section>
+			</aside>
+		</div>
+
+		<!-- ════════════════ STOCK ENTRY BOOK VIEW ════════════════ -->
+		<div v-else-if="isStockEntryBookView && doc" class="po-saved-layout stock-entry-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview stock-movement-overview">
+					<header>
+						<span class="po-saved-book stock-entry-saved-book"><small>MGK</small><strong>SE</strong></span>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">Stock Entry Book</div>
+							<h2>Stock movement overview</h2>
+							<p>The purpose, warehouses and quantities recorded for this stock movement.</p>
+						</div>
+						<div class="po-overview-total">
+							<small>Movement quantity</small>
+							<strong>{{ formatNumber(stockEntryViewSummary.totalQty) }}</strong>
+						</div>
+					</header>
+
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide"><span>Purpose</span><strong>{{ doc.purpose || "Not selected" }}</strong></div>
+						<div class="po-fact"><span>Posting date</span><strong>{{ formatDate(doc.posting_date) }}</strong></div>
+						<div class="po-fact"><span>Posting time</span><strong>{{ formatTime(doc.posting_time) }}</strong></div>
+						<div v-if="doc.from_supplier || doc.from_warehouse" class="po-fact po-fact-wide">
+							<span>From</span>
+							<a v-if="documentHref('Warehouse', doc.from_warehouse)" class="po-record-link" :href="documentHref('Warehouse', doc.from_warehouse)" @click="onDocumentLinkClick($event, 'Warehouse', doc.from_warehouse)">
+								<strong>{{ linkTitles.titleFor('Warehouse', doc.from_warehouse) || doc.from_warehouse }}</strong>
+								<small v-if="doc.from_supplier">{{ linkTitles.titleFor('Supplier', doc.from_supplier) || doc.from_supplier }}</small>
+							</a>
+							<strong v-else>{{ doc.from_warehouse ? localizedName("Warehouse", doc.from_warehouse, "—") : localizedName("Supplier", doc.from_supplier, "—") }}</strong>
+						</div>
+						<div v-if="doc.to_supplier || doc.to_warehouse" class="po-fact po-fact-wide">
+							<span>To</span>
+							<a v-if="documentHref('Warehouse', doc.to_warehouse)" class="po-record-link" :href="documentHref('Warehouse', doc.to_warehouse)" @click="onDocumentLinkClick($event, 'Warehouse', doc.to_warehouse)">
+								<strong>{{ linkTitles.titleFor('Warehouse', doc.to_warehouse) || doc.to_warehouse }}</strong>
+								<small v-if="doc.to_supplier">{{ linkTitles.titleFor('Supplier', doc.to_supplier) || doc.to_supplier }}</small>
+							</a>
+							<strong v-else>{{ doc.to_warehouse ? localizedName("Warehouse", doc.to_warehouse, "—") : localizedName("Supplier", doc.to_supplier, "—") }}</strong>
+						</div>
+						<div v-if="doc.outgoing_stock_entry" class="po-fact po-fact-wide">
+							<span>Outgoing Stock Entry</span>
+							<a v-if="documentHref('Stock Entry', doc.outgoing_stock_entry)" class="po-record-link" :href="documentHref('Stock Entry', doc.outgoing_stock_entry)" @click="onDocumentLinkClick($event, 'Stock Entry', doc.outgoing_stock_entry)"><strong>{{ doc.outgoing_stock_entry }}</strong></a>
+							<strong v-else>{{ doc.outgoing_stock_entry }}</strong>
+						</div>
+						<div v-if="doc.vehicle_no" class="po-fact"><span>Vehicle number</span><strong>{{ doc.vehicle_no }}</strong></div>
+						<div v-if="Number(doc.additional_amount)" class="po-fact"><span>Additional transfer cost</span><strong>₹ {{ formatNumber(doc.additional_amount) }}</strong></div>
+					</div>
+				</section>
+
+				<section class="po-saved-items stock-entry-saved-items">
+					<header>
+						<div class="po-section-title"><span class="po-section-icon"><i class="pi pi-box" /></span><div><h3>Movement items</h3><p>The item variants, stock dimensions, quantities and valuation recorded in this entry.</p></div></div>
+						<span class="po-item-count">{{ stockEntryViewSummary.itemCount }} item{{ stockEntryViewSummary.itemCount === 1 ? "" : "s" }}</span>
+					</header>
+					<StockItemGridEditor
+						:editable="false"
+						:grouped-field="pivotFor('items')?.groupedField"
+						:value-fields="pivotFor('items')?.valueFields || []"
+						:entry-fields="pivotFor('items')?.entryFields || []"
+						:cell-fields="pivotFor('items')?.cellFields || []"
+						:separate-cell-fields="['rate']"
+						:initial-data="viewGrouped.items || []"
+					/>
+				</section>
+
+				<section v-if="doc.comments" class="po-saved-notes">
+					<header class="po-section-title"><span class="po-section-icon"><i class="pi pi-file-edit" /></span><div><h3>Movement notes</h3><p>Additional information recorded for this Stock Entry.</p></div></header>
+					<div class="po-notes-grid"><div><span>Notes</span><p>{{ doc.comments }}</p></div></div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card stock-entry-totals-card">
+					<header><small>Current movement</small><h3>Stock totals</h3></header>
+					<div class="po-total-lines">
+						<div><span>Purpose</span><strong>{{ doc.purpose || "—" }}</strong></div>
+						<div><span>Item lines</span><strong>{{ stockEntryViewSummary.itemCount }}</strong></div>
+						<div><span>Total quantity</span><strong>{{ formatNumber(stockEntryViewSummary.totalQty) }}</strong></div>
+						<div v-if="doc.purpose === 'Send to Warehouse'"><span>Transferred</span><strong>{{ formatNumber(doc.per_transferred || 0) }}%</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Stock value</span><strong>₹ {{ formatNumber(doc.total_amount || stockEntryViewSummary.amount) }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Movement status</h3>
+					<div class="po-progress-status"><span class="po-progress-dot" :class="`status-${Number(doc.docstatus)}`" /><div><strong>{{ statusLabel }}</strong><small>{{ doc.skip_transit ? "Transit skipped" : doc.purpose || "Stock Entry recorded" }}</small></div></div>
+					<RouterLink v-for="c in connections" :key="c.doctype" class="po-related-row" :to="connectionRoute(c)"><span><small>Connected records</small><strong>{{ c.label }}</strong></span><b>{{ c.count ?? "…" }}</b><i class="pi pi-arrow-right" /></RouterLink>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row"><span :class="event.tone"><i :class="event.icon" /></span><div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div></div>
+				</section>
+			</aside>
+		</div>
+
+		<!-- ════════════════ GRN INSPECTION BOOK VIEW ════════════════ -->
+		<div v-else-if="isInspectionBookView && doc" class="po-saved-layout inspection-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview inspection-overview">
+					<header>
+						<span class="po-saved-book inspection-saved-book"><small>GRN</small><strong>IE</strong></span>
+						<div class="po-overview-title"><div class="po-view-kicker">GRN Inspection Book</div><h2>Inspection overview</h2><p>The received source and Received Type classification recorded for this inspection.</p></div>
+						<div class="po-overview-total"><small>Received quantity</small><strong>{{ formatNumber(inspectionViewSummary.totalQty) }}</strong></div>
+					</header>
+
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide">
+							<span>Goods Received Note</span>
+							<a v-if="documentHref('Goods Received Note', doc.against_id)" class="po-record-link" :href="documentHref('Goods Received Note', doc.against_id)" @click="onDocumentLinkClick($event, 'Goods Received Note', doc.against_id)"><strong>{{ doc.against_id }}</strong></a>
+							<strong v-else>{{ doc.against_id || "Not selected" }}</strong>
+						</div>
+						<div class="po-fact"><span>Posting date</span><strong>{{ formatDate(doc.posting_date) }}</strong></div>
+						<div class="po-fact"><span>Posting time</span><strong>{{ formatTime(doc.posting_time) }}</strong></div>
+						<div v-if="doc.inspector" class="po-fact po-fact-wide"><span>Inspector</span><strong>{{ linkTitles.titleFor('User', doc.inspector) || doc.inspector }}</strong></div>
+					</div>
+				</section>
+
+				<section class="po-saved-items inspection-classification-section">
+					<header>
+						<div class="po-section-title"><span class="po-section-icon"><i class="pi pi-verified" /></span><div><h3>Received Type classification</h3><p>Quantities kept in their source type and quantities reclassified during inspection.</p></div></div>
+						<span class="po-item-count">{{ inspectionViewSummary.itemCount }} source row{{ inspectionViewSummary.itemCount === 1 ? "" : "s" }}</span>
+					</header>
+					<InspectionEntryEditor
+						:docstatus="docstatus"
+						:posting-date="doc.posting_date || ''"
+						:editable="false"
+						:initial-data="viewGrouped.items || []"
+					/>
+				</section>
+
+				<section v-if="doc.remarks" class="po-saved-notes">
+					<header class="po-section-title"><span class="po-section-icon"><i class="pi pi-file-edit" /></span><div><h3>Inspection notes</h3><p>Additional observations recorded during inspection.</p></div></header>
+					<div class="po-notes-grid"><div><span>Notes</span><p>{{ doc.remarks }}</p></div></div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card inspection-totals-card">
+					<header><small>Current inspection</small><h3>Classification totals</h3></header>
+					<div class="po-total-lines">
+						<div><span>Source rows</span><strong>{{ inspectionViewSummary.itemCount }}</strong></div>
+						<div><span>Received quantity</span><strong>{{ formatNumber(inspectionViewSummary.totalQty) }}</strong></div>
+						<div><span>Reclassified</span><strong>{{ formatNumber(inspectionViewSummary.classifiedQty) }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Kept as received</span><strong>{{ formatNumber(inspectionViewSummary.unchangedQty) }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Inspection status</h3>
+					<div class="po-progress-status"><span class="po-progress-dot" :class="`status-${Number(doc.docstatus)}`" /><div><strong>{{ doc.status || statusLabel }}</strong><small>{{ doc.is_converted ? "Stock converted" : "Awaiting stock conversion" }}</small></div></div>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row"><span :class="event.tone"><i :class="event.icon" /></span><div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div></div>
+				</section>
+			</aside>
+		</div>
+
+			<!-- ════════════════ PURCHASE ORDER BOOK VIEW ════════════════
+		     The document header/actions above stay shared. Only the saved-record
+		     body is specialized for the MGK Purchase Order experience. -->
+		<div v-else-if="isBookView && doc" class="po-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview">
+					<header>
+						<span class="po-saved-book"><small>MGK</small><strong>PO</strong></span>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">Purchase Order Book</div>
+							<h2>Order overview</h2>
+							<p>Supplier, delivery and routing details for this order.</p>
+						</div>
+						<div class="po-overview-total">
+							<small>Order value</small>
+							<strong>₹ {{ formatNumber(doc.grand_total || doc.total || 0) }}</strong>
+						</div>
+					</header>
+
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide">
+							<span>Supplier</span>
+							<a
+								v-if="documentHref('Supplier', doc.supplier)"
+								class="po-record-link"
+								:href="documentHref('Supplier', doc.supplier)"
+								@click="onDocumentLinkClick($event, 'Supplier', doc.supplier)"
+							>
+								<strong>{{ poViewSupplierDisplay }}</strong>
+								<small v-if="localizedCode('Supplier', doc.supplier)">{{ localizedCode('Supplier', doc.supplier) }}</small>
+							</a>
+							<strong v-else>{{ poViewSupplierDisplay }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Order date</span>
+							<strong>{{ formatDate(doc.po_date) }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Expected delivery</span>
+							<strong>{{ formatDate(doc.expected_delivery_date) }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Delivery warehouse</span>
+							<a
+								v-if="documentHref('Warehouse', doc.delivery_warehouse)"
+								class="po-record-link"
+								:href="documentHref('Warehouse', doc.delivery_warehouse)"
+								@click="onDocumentLinkClick($event, 'Warehouse', doc.delivery_warehouse)"
+							>
+								<strong>{{ poViewWarehouseDisplay }}</strong>
+							</a>
+							<strong v-else>{{ poViewWarehouseDisplay }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Goods routing</span>
+							<strong>{{ doc.mgk_goods_routing || "Direct" }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>MGK agent</span>
+							<strong>{{ poViewAgentDisplay }}</strong>
+						</div>
+						<div v-if="doc.mgk_handling_supplier" class="po-fact po-fact-wide">
+							<span>Handling supplier</span>
+							<strong>{{ poViewHandlingSupplierDisplay }}</strong>
+						</div>
+					</div>
+				</section>
+
+				<section class="po-saved-items">
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-list" /></span>
+							<div><h3>Ordered items</h3><p>The items, quantities and supplier prices recorded in this order.</p></div>
+						</div>
+						<span class="po-item-count">{{ poViewSummary.itemCount }} item{{ poViewSummary.itemCount === 1 ? "" : "s" }}</span>
+					</header>
+					<StockItemGridEditor
+						:editable="false"
+						:grouped-field="pivotFor('items')?.groupedField"
+						:value-fields="pivotFor('items')?.valueFields || []"
+						:entry-fields="pivotFor('items')?.entryFields || []"
+						:cell-fields="pivotFor('items')?.cellFields || []"
+						:separate-cell-fields="['pending_quantity', 'tax', 'total_amount']"
+						:initial-data="viewGrouped.items || []"
+						:price-supplier="doc.supplier || ''"
+						:show-previous-price="canRead(doctype)"
+						:current-document="id"
+						:hidden-dimensions="['received_type']"
+					/>
+				</section>
+
+				<section v-if="doc.comments" class="po-saved-notes">
+					<header class="po-section-title">
+						<span class="po-section-icon"><i class="pi pi-file-edit" /></span>
+						<div><h3>Notes and instructions</h3><p>Additional information recorded with this order.</p></div>
+					</header>
+					<div class="po-notes-grid">
+						<div v-if="doc.comments"><span>Comments</span><p>{{ doc.comments }}</p></div>
+					</div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card">
+					<header><small>Current order</small><h3>Order totals</h3></header>
+					<div class="po-total-lines">
+						<div><span>Item lines</span><strong>{{ poViewSummary.itemCount }}</strong></div>
+						<div><span>Ordered quantity</span><strong>{{ formatNumber(doc.total_qty || poViewSummary.totalQty) }}</strong></div>
+						<div><span>Pending quantity</span><strong>{{ formatNumber(poViewSummary.pendingQty) }}</strong></div>
+						<div><span>Received quantity</span><strong>{{ formatNumber(poViewSummary.receivedQty) }}</strong></div>
+						<div v-if="Number(doc.total_discount)"><span>Discount</span><strong>₹ {{ formatNumber(doc.total_discount) }}</strong></div>
+						<div v-if="Number(doc.total_tax)"><span>Tax</span><strong>₹ {{ formatNumber(doc.total_tax) }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Grand total</span><strong>₹ {{ formatNumber(doc.grand_total || doc.total || 0) }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Order progress</h3>
+					<div class="po-progress-status">
+						<span class="po-progress-dot" :class="`status-${Number(doc.docstatus)}`" />
+						<div><strong>{{ doc.status || statusLabel }}</strong><small>{{ doc.open_status || "Order recorded" }}</small></div>
+					</div>
+					<RouterLink
+						v-for="c in connections"
+						:key="c.doctype"
+						class="po-related-row"
+						:to="connectionRoute(c)"
+					>
+						<span><small>Connected records</small><strong>{{ c.label }}</strong></span>
+						<b>{{ c.count ?? "…" }}</b><i class="pi pi-arrow-right" />
+					</RouterLink>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row">
+						<span :class="event.tone"><i :class="event.icon" /></span>
+						<div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div>
+					</div>
+				</section>
+			</aside>
+		</div>
+
+		<!-- ════════════════ DELIVERY CHALLAN BOOK VIEW ════════════════ -->
+		<div v-else-if="isDcBookView && doc" class="po-saved-layout dc-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview dc-dispatch-overview">
+					<header>
+						<span class="po-saved-book dc-saved-book"><small>MGK</small><strong>DC</strong></span>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">Delivery Challan Book</div>
+							<h2>Dispatch overview</h2>
+							<p>The Work Order, movement and quantities recorded for this dispatch.</p>
+						</div>
+						<div class="po-overview-total">
+							<small>Dispatched quantity</small>
+							<strong>{{ formatNumber(doc.total_delivered_qty || dcViewSummary.totalQty) }}</strong>
+						</div>
+					</header>
+
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide">
+							<span>Work Order</span>
+							<a
+								v-if="documentHref('Work Order', doc.work_order)"
+								class="po-record-link"
+								:href="documentHref('Work Order', doc.work_order)"
+								@click="onDocumentLinkClick($event, 'Work Order', doc.work_order)"
+							><strong>{{ doc.work_order }}</strong></a>
+							<strong v-else>{{ doc.work_order || "Not selected" }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Posting date</span>
+							<strong>{{ formatDate(doc.posting_date) }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Posting time</span>
+							<strong>{{ formatTime(doc.posting_time) }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>From Location</span>
+							<a
+								v-if="documentHref('Supplier', doc.from_location)"
+								class="po-record-link"
+								:href="documentHref('Supplier', doc.from_location)"
+								@click="onDocumentLinkClick($event, 'Supplier', doc.from_location)"
+							><strong>{{ dcViewFromLocationDisplay }}</strong></a>
+							<strong v-else>{{ dcViewFromLocationDisplay }}</strong>
+							<small>{{ dcViewFromWarehouseDisplay }}</small>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>To Location</span>
+							<a
+								v-if="documentHref('Supplier', doc.supplier)"
+								class="po-record-link"
+								:href="documentHref('Supplier', doc.supplier)"
+								@click="onDocumentLinkClick($event, 'Supplier', doc.supplier)"
+							><strong>{{ dcViewToLocationDisplay }}</strong></a>
+							<strong v-else>{{ dcViewToLocationDisplay }}</strong>
+							<small>{{ dcViewToWarehouseDisplay }}</small>
+						</div>
+						<div v-if="doc.supplier_document_no" class="po-fact">
+							<span>Dispatch document / DC No</span>
+							<strong>{{ doc.supplier_document_no }}</strong>
+						</div>
+						<div v-if="doc.vehicle_no" class="po-fact">
+							<span>Vehicle number</span>
+							<strong>{{ doc.vehicle_no }}</strong>
+						</div>
+					</div>
+				</section>
+
+				<section class="po-saved-items dc-saved-items">
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-truck" /></span>
+							<div><h3>Dispatched items</h3><p>The Work Order deliverables and quantities sent in this challan.</p></div>
+						</div>
+						<span class="po-item-count">{{ dcViewSummary.itemCount }} item{{ dcViewSummary.itemCount === 1 ? "" : "s" }}</span>
+					</header>
+					<StockItemGridEditor
+						:editable="false"
+						:grouped-field="pivotFor('items')?.groupedField"
+						:value-fields="pivotFor('items')?.valueFields || []"
+						:entry-fields="pivotFor('items')?.entryFields || []"
+						:cell-fields="pivotFor('items')?.cellFields || []"
+						:separate-cell-fields="['pending_quantity']"
+						:initial-data="viewGrouped.items || []"
+						:hidden-dimensions="['received_type']"
+					/>
+				</section>
+
+				<section v-if="viewCorrectionBlocks.length" class="po-saved-items correction-saved-items">
+					<header><div class="po-section-title"><span class="po-section-icon"><i class="pi pi-pencil" /></span><div><h3>Correction deliverables</h3><p>Additional dispatched rows, kept grouped by their Work Order Correction.</p></div></div><span class="po-item-count">{{ correctionViewSummary.itemCount }} item{{ correctionViewSummary.itemCount === 1 ? "" : "s" }}</span></header>
+					<CorrectionItemsSection :editable="false" :value-fields="correctionConfig.valueFields" :entry-fields="correctionConfig.entryFields" :cell-fields="correctionConfig.cellFields" :initial-blocks="viewCorrectionBlocks" />
+				</section>
+
+				<section v-if="doc.comments" class="po-saved-notes">
+					<header class="po-section-title">
+						<span class="po-section-icon"><i class="pi pi-file-edit" /></span>
+						<div><h3>Dispatch notes</h3><p>Additional information recorded with this challan.</p></div>
+					</header>
+					<div class="po-notes-grid"><div><span>Notes</span><p>{{ doc.comments }}</p></div></div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card dc-totals-card">
+					<header><small>Current dispatch</small><h3>Dispatch totals</h3></header>
+					<div class="po-total-lines">
+						<div><span>Item lines</span><strong>{{ dcViewSummary.itemCount + correctionViewSummary.itemCount }}</strong></div>
+						<div v-if="correctionViewSummary.itemCount"><span>Correction rows</span><strong>{{ correctionViewSummary.itemCount }}</strong></div>
+						<div><span>Dispatch quantity</span><strong>{{ formatNumber(doc.total_delivered_qty || dcViewSummary.totalQty) }}</strong></div>
+						<div><span>Pending before dispatch</span><strong>{{ formatNumber(dcViewSummary.pendingQty) }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Dispatch value</span><strong>₹ {{ formatNumber(doc.total_value || dcViewSummary.amount) }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Dispatch status</h3>
+					<div class="po-progress-status">
+						<span class="po-progress-dot" :class="`status-${Number(doc.docstatus)}`" />
+						<div><strong>{{ statusLabel }}</strong><small>{{ doc.transfer_complete ? "Transfer complete" : "Challan recorded" }}</small></div>
+					</div>
+					<RouterLink v-for="c in connections" :key="c.doctype" class="po-related-row" :to="connectionRoute(c)">
+						<span><small>Connected records</small><strong>{{ c.label }}</strong></span><b>{{ c.count ?? "…" }}</b><i class="pi pi-arrow-right" />
+					</RouterLink>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row">
+						<span :class="event.tone"><i :class="event.icon" /></span>
+						<div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div>
+					</div>
+				</section>
+			</aside>
+		</div>
+
+		<!-- ════════════════ GOODS RECEIVED NOTE BOOK VIEW ════════════════ -->
+		<div v-else-if="isGrnBookView && doc" class="po-saved-layout grn-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview grn-receipt-overview">
+					<header>
+						<span class="po-saved-book grn-saved-book"><small>MGK</small><strong>GRN</strong></span>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">{{ doc.against }} GRN Book</div>
+							<h2>Receipt overview</h2>
+							<p>The source, movement and receipt details recorded in this GRN.</p>
+						</div>
+						<div class="po-overview-total">
+							<small>Received quantity</small>
+							<strong>{{ formatNumber(doc.total_received_quantity || grnViewSummary.totalQty) }}</strong>
+						</div>
+					</header>
+
+					<div class="po-facts">
+						<div class="po-fact po-fact-wide">
+							<span>{{ doc.against || "Source" }}</span>
+							<a
+								v-if="documentHref(doc.against, doc.against_id)"
+								class="po-record-link"
+								:href="documentHref(doc.against, doc.against_id)"
+								@click="onDocumentLinkClick($event, doc.against, doc.against_id)"
+							><strong>{{ doc.against_id }}</strong></a>
+							<strong v-else>{{ doc.against_id || "Not selected" }}</strong>
+						</div>
+						<div v-if="doc.delivery_challan" class="po-fact po-fact-wide">
+							<span>Delivery Challan / DC No</span>
+							<a
+								v-if="documentHref('Delivery Challan', doc.delivery_challan)"
+								class="po-record-link"
+								:href="documentHref('Delivery Challan', doc.delivery_challan)"
+								@click="onDocumentLinkClick($event, 'Delivery Challan', doc.delivery_challan)"
+							><strong>{{ doc.delivery_challan }}</strong></a>
+							<strong v-else>{{ doc.delivery_challan }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Posting date</span>
+							<strong>{{ formatDate(doc.posting_date) }}</strong>
+						</div>
+						<div class="po-fact">
+							<span>Posting time</span>
+							<strong>{{ formatTime(doc.posting_time) }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Supplier / sender</span>
+							<strong>{{ grnViewSupplierDisplay }}</strong>
+						</div>
+						<div class="po-fact po-fact-wide">
+							<span>Receive into</span>
+							<strong>{{ grnViewWarehouseDisplay }}</strong>
+						</div>
+						<div v-if="doc.supplier_document_no" class="po-fact">
+							<span>Supplier document</span>
+							<strong>{{ doc.supplier_document_no }}</strong>
+						</div>
+						<div v-if="doc.vehicle_no" class="po-fact">
+							<span>Vehicle number</span>
+							<strong>{{ doc.vehicle_no }}</strong>
+						</div>
+					</div>
+				</section>
+
+				<section class="po-saved-items grn-saved-items">
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-box" /></span>
+							<div><h3>Received items</h3><p>The source items and quantities recorded in this receipt.</p></div>
+						</div>
+						<span class="po-item-count">{{ grnViewSummary.itemCount }} item{{ grnViewSummary.itemCount === 1 ? "" : "s" }}</span>
+					</header>
+					<StockItemGridEditor
+						:editable="false"
+						:grouped-field="pivotFor('items')?.groupedField"
+						:value-fields="pivotFor('items')?.valueFields || []"
+						:entry-fields="pivotFor('items')?.entryFields || []"
+						:cell-fields="pivotFor('items')?.cellFields || []"
+						:separate-cell-fields="['pending_quantity', 'max_receivable_quantity', 'rate', 'amount']"
+						:initial-data="viewGrouped.items || []"
+					/>
+				</section>
+
+				<section v-if="viewCorrectionBlocks.length" class="po-saved-items correction-saved-items">
+					<header><div class="po-section-title"><span class="po-section-icon"><i class="pi pi-pencil" /></span><div><h3>Correction receivables</h3><p>Additional received rows, kept grouped by their Work Order Correction.</p></div></div><span class="po-item-count">{{ correctionViewSummary.itemCount }} item{{ correctionViewSummary.itemCount === 1 ? "" : "s" }}</span></header>
+					<CorrectionItemsSection :editable="false" :value-fields="correctionConfig.valueFields" :entry-fields="correctionConfig.entryFields" :cell-fields="correctionConfig.cellFields" :initial-blocks="viewCorrectionBlocks" />
+				</section>
+
+				<section v-if="doc.comments" class="po-saved-notes">
+					<header class="po-section-title">
+						<span class="po-section-icon"><i class="pi pi-file-edit" /></span>
+						<div><h3>Receipt notes</h3><p>Additional information recorded with this receipt.</p></div>
+					</header>
+					<div class="po-notes-grid"><div><span>Comments</span><p>{{ doc.comments }}</p></div></div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card grn-totals-card">
+					<header><small>Current receipt</small><h3>Receipt totals</h3></header>
+					<div class="po-total-lines">
+						<div><span>Item lines</span><strong>{{ grnViewSummary.itemCount + correctionViewSummary.itemCount }}</strong></div>
+						<div v-if="correctionViewSummary.itemCount"><span>Correction rows</span><strong>{{ correctionViewSummary.itemCount }}</strong></div>
+						<div><span>Received quantity</span><strong>{{ formatNumber(doc.total_received_quantity || grnViewSummary.totalQty) }}</strong></div>
+						<div><span>Freight charges</span><strong>₹ {{ formatNumber(doc.freight_charges || 0) }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Receipt value</span><strong>₹ {{ formatNumber(doc.total || grnViewSummary.amount) }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Receipt status</h3>
+					<div class="po-progress-status">
+						<span class="po-progress-dot" :class="`status-${Number(doc.docstatus)}`" />
+						<div><strong>{{ statusLabel }}</strong><small>{{ doc.transfer_complete ? "Transfer complete" : "Receipt recorded" }}</small></div>
+					</div>
+					<RouterLink v-for="c in connections" :key="c.doctype" class="po-related-row" :to="connectionRoute(c)">
+						<span><small>Connected records</small><strong>{{ c.label }}</strong></span><b>{{ c.count ?? "…" }}</b><i class="pi pi-arrow-right" />
+					</RouterLink>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row">
+						<span :class="event.tone"><i :class="event.icon" /></span>
+						<div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div>
+					</div>
+				</section>
+			</aside>
+		</div>
+
+		<!-- ════════════════ MASTER BOOK VIEW ════════════════
+		     Saved master records keep the same Purchase Order visual language as
+		     their create/edit form. The generic tabbed detail view remains available
+		     to every non-MGK/default presentation. -->
+		<div v-else-if="isMasterBookView && doc" class="po-saved-layout master-saved-layout">
+			<main class="po-saved-main">
+				<section class="po-order-overview master-record-overview">
+					<header>
+						<div class="po-overview-title">
+							<div class="po-view-kicker">{{ masterEntityLabel }} Master</div>
+							<h2>{{ masterEntityLabel }} overview</h2>
+							<p>{{ presentationDescription || `The ${masterEntityLabel.toLowerCase()} used in daily work.` }}</p>
+						</div>
+						<div class="po-overview-total">
+							<small>Status</small>
+							<strong>{{ masterViewStatus }}</strong>
+						</div>
+					</header>
+
+					<div v-if="masterOverviewSection" class="po-facts master-facts">
+						<div
+							v-for="(field, index) in masterOverviewSection.fields"
+							:key="field.fieldname"
+							class="po-fact"
+							:class="{ 'po-fact-wide': masterFactIsWide(field, index) }"
+						>
+							<span>{{ field.label }}</span>
+							<a
+								v-if="field.isLink && documentHref(linkTargetFor(field), doc[field.fieldname])"
+								class="po-record-link"
+								:href="documentHref(linkTargetFor(field), doc[field.fieldname])"
+								@click="onDocumentLinkClick($event, linkTargetFor(field), doc[field.fieldname])"
+							>
+								<strong>{{ masterFieldDisplay(field) }}</strong>
+								<small v-if="linkPartsFor(field, doc[field.fieldname]).code">{{ linkPartsFor(field, doc[field.fieldname]).code }}</small>
+							</a>
+							<strong v-else>{{ masterFieldDisplay(field) }}</strong>
+						</div>
+					</div>
+				</section>
+
+				<nav
+					v-if="isItem || isUser"
+					class="ipd-workspace-tabs master-workspace-tabs"
+					role="tablist"
+					:aria-label="`${masterEntityLabel} sections`"
+				>
+					<button type="button" role="tab" :aria-selected="masterWorkspaceTab === 'details'" :class="{ active: masterWorkspaceTab === 'details' }" @click="masterWorkspaceTab = 'details'">
+						<i class="pi pi-file" /><span>{{ isItem ? 'Item details' : 'User details' }}</span>
+					</button>
+					<button type="button" role="tab" :aria-selected="masterWorkspaceTab === 'configuration'" :class="{ active: masterWorkspaceTab === 'configuration' }" @click="masterWorkspaceTab = 'configuration'">
+						<i :class="isItem ? 'pi pi-tags' : 'pi pi-shield'" /><span>{{ isItem ? 'Attributes & parameters' : 'Roles & access' }}</span>
+					</button>
+				</nav>
+
+				<section
+					v-for="section in masterAdditionalSections"
+					:key="section.key"
+					v-show="!(isItem || isUser) || masterWorkspaceTab === 'details'"
+					class="po-saved-items master-detail-section"
+				>
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i :class="masterSectionIcon(section.label)" /></span>
+							<div><h3>{{ section.label }}</h3><p>{{ masterSectionDescription(section.label) }}</p></div>
+						</div>
+						<span class="po-item-count">{{ section.fields.length }} details</span>
+					</header>
+					<div class="po-facts master-facts master-section-facts">
+						<div
+							v-for="(field, index) in section.fields"
+							:key="field.fieldname"
+							class="po-fact"
+							:class="{ 'po-fact-wide': masterFactIsWide(field, index) }"
+						>
+							<span>{{ field.label }}</span>
+							<a
+								v-if="field.isLink && documentHref(linkTargetFor(field), doc[field.fieldname])"
+								class="po-record-link"
+								:href="documentHref(linkTargetFor(field), doc[field.fieldname])"
+								@click="onDocumentLinkClick($event, linkTargetFor(field), doc[field.fieldname])"
+							><strong>{{ masterFieldDisplay(field) }}</strong></a>
+							<strong v-else>{{ masterFieldDisplay(field) }}</strong>
+						</div>
+					</div>
+				</section>
+
+				<section
+					v-for="table in masterViewLeadingChildTables"
+					:key="table.fieldname"
+					v-show="!isItem || masterWorkspaceTab === 'configuration'"
+					class="po-saved-items master-child-section"
+				>
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-table" /></span>
+							<div><h3>{{ table.label }}</h3><p>Recorded rows for this {{ masterEntityLabel.toLowerCase() }}.</p></div>
+						</div>
+						<span class="po-item-count">{{ rowsFor(table).length }} row{{ rowsFor(table).length === 1 ? '' : 's' }}</span>
+					</header>
+					<div class="master-table-wrap">
+						<DataTable
+							:value="rowsFor(table)"
+							class="mgk-table master-child-table"
+							dataKey="name"
+							:rowHover="false"
+							:tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }"
+						>
+							<Column
+								v-for="column in masterViewColumns(table)"
+								:key="column.fieldname"
+								:field="column.fieldname"
+								:header="column.label"
+								:style="{ width: childColWidth(table.fieldname, column) }"
+							>
+								<template #body="{ data }">
+									<a
+										v-if="column.isLink && documentHref(column.linkTarget, data[column.fieldname])"
+										class="master-cell-link"
+										:href="documentHref(column.linkTarget, data[column.fieldname])"
+										@click="onDocumentLinkClick($event, column.linkTarget, data[column.fieldname])"
+									>{{ displayValue(data[column.fieldname], column.type, column.fieldname) }}</a>
+									<span v-else>{{ displayValue(data[column.fieldname], column.type, column.fieldname) }}</span>
+								</template>
+							</Column>
+						</DataTable>
+					</div>
+				</section>
+
+				<section v-if="hasAttributeValuesEditor" v-show="masterWorkspaceTab === 'configuration'" class="po-saved-items master-special-section">
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-tags" /></span>
+							<div><h3>Attribute values</h3><p>The Colour, Size, or other values available for this Item.</p></div>
+						</div>
+					</header>
+					<div class="master-special-body"><ItemAttributeListView :item-name="doc.name" :doctype="doctype" popup-edit /></div>
+				</section>
+
+				<section v-if="isItem && doc.dependent_attribute" v-show="masterWorkspaceTab === 'configuration'" class="po-saved-items master-special-section">
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-sitemap" /></span>
+							<div><h3>Dependent attribute</h3><p>Allowed dependent values for this Item.</p></div>
+						</div>
+					</header>
+					<div class="master-special-body"><ItemDependentAttributeEditor :item-name="doc.name" :editable="canWrite(doctype)" /></div>
+				</section>
+
+				<section v-if="hasAddressContact" v-show="!isUser || masterWorkspaceTab === 'details'" class="po-saved-items master-special-section master-address-section">
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-map-marker" /></span>
+							<div><h3>Addresses and contacts</h3><p>Locations and people linked to this {{ masterEntityLabel.toLowerCase() }}.</p></div>
+						</div>
+					</header>
+					<div class="master-special-body"><AddressContactTab :party-doctype="doctype" :party-name="doc.name" /></div>
+				</section>
+
+				<section v-if="isUser" v-show="masterWorkspaceTab === 'configuration'" class="po-saved-items master-special-section master-access-view">
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-shield" /></span>
+							<div><h3>Roles and access</h3><p>The role profiles and individual roles assigned to this User.</p></div>
+						</div>
+					</header>
+					<div class="master-access-grid">
+						<div><span>Role profiles</span><p v-if="masterRoleProfiles.length"><b v-for="role in masterRoleProfiles" :key="role">{{ role }}</b></p><small v-else>No role profiles</small></div>
+						<div><span>Effective roles</span><p v-if="masterRoles.length"><b v-for="role in masterRoles" :key="role">{{ role }}</b></p><small v-else>No roles assigned</small></div>
+					</div>
+				</section>
+
+				<!-- Additional Parameters is deliberately the final Item panel. It is
+				     engine/configuration data, so the user should first see Attributes
+				     and the focused Attribute Values workflow. -->
+				<section
+					v-for="table in masterViewTrailingChildTables"
+					:key="table.fieldname"
+					v-show="!isItem || masterWorkspaceTab === 'configuration'"
+					class="po-saved-items master-child-section"
+				>
+					<header>
+						<div class="po-section-title">
+							<span class="po-section-icon"><i class="pi pi-table" /></span>
+							<div><h3>{{ table.label }}</h3><p>Recorded rows for this {{ masterEntityLabel.toLowerCase() }}.</p></div>
+						</div>
+						<span class="po-item-count">{{ rowsFor(table).length }} row{{ rowsFor(table).length === 1 ? '' : 's' }}</span>
+					</header>
+					<div class="master-table-wrap">
+						<DataTable
+							:value="rowsFor(table)"
+							class="mgk-table master-child-table"
+							dataKey="name"
+							:rowHover="false"
+							:tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }"
+						>
+							<Column
+								v-for="column in masterViewColumns(table)"
+								:key="column.fieldname"
+								:field="column.fieldname"
+								:header="column.label"
+								:style="{ width: childColWidth(table.fieldname, column) }"
+							>
+								<template #body="{ data }">
+									<a
+										v-if="column.isLink && documentHref(column.linkTarget, data[column.fieldname])"
+										class="master-cell-link"
+										:href="documentHref(column.linkTarget, data[column.fieldname])"
+										@click="onDocumentLinkClick($event, column.linkTarget, data[column.fieldname])"
+									>{{ displayValue(data[column.fieldname], column.type, column.fieldname) }}</a>
+									<span v-else>{{ displayValue(data[column.fieldname], column.type, column.fieldname) }}</span>
+								</template>
+							</Column>
+						</DataTable>
+					</div>
+				</section>
+			</main>
+
+			<aside class="po-saved-side">
+				<section class="po-totals-card master-summary-view">
+					<header><small>Current master</small><h3>{{ masterEntityLabel }} summary</h3></header>
+					<div class="po-total-lines">
+						<div v-for="line in masterViewSummaryLines" :key="line.label"><span>{{ line.label }}</span><strong>{{ line.value }}</strong></div>
+					</div>
+					<div class="po-grand-total"><span>Status</span><strong>{{ masterViewStatus }}</strong></div>
+				</section>
+
+				<section class="po-progress-card">
+					<h3>Record status</h3>
+					<div class="po-progress-status">
+						<span class="po-progress-dot" :class="{ 'status-1': masterViewStatusSeverity === 'success', 'status-2': masterViewStatusSeverity === 'danger' }" />
+						<div><strong>{{ masterViewStatus }}</strong><small>{{ masterViewStatusDescription }}</small></div>
+					</div>
+					<a v-for="group in linkedGroups" :key="group.doctype" class="po-related-row" :href="documentHref(group.doctype, group.rows[0]?.name)" @click="onDocumentLinkClick($event, group.doctype, group.rows[0]?.name)">
+						<span><small>Linked records</small><strong>{{ group.doctype }}</strong></span><b>{{ group.rows.length }}</b><i class="pi pi-arrow-right" />
+					</a>
+				</section>
+
+				<section v-if="activityEvents.length" class="po-activity-card">
+					<h3>Recent activity</h3>
+					<div v-for="event in activityEvents.slice(0, 4)" :key="`${event.when}-${event.text}`" class="po-activity-row">
+						<span :class="event.tone"><i :class="event.icon" /></span>
+						<div><strong v-html="event.text" /><small>{{ formatDateTime(event.when) }} · {{ event.who }}</small></div>
+					</div>
+				</section>
+			</aside>
+		</div>
+
+		<!-- ════════════════ GENERIC VIEW BODY ════════════════ -->
 		<div v-else-if="doc" class="detail-layout">
 			<!-- Main pane: tabs -->
 			<div class="detail-main">
@@ -1111,25 +2897,27 @@
 									<div class="detail-card__body">
 										<div class="field-grid">
 											<div v-for="f in s.fields" :key="f.fieldname" class="field">
-												<div
-													class="field-value"
-													:class="{
-														link: f.isLink && !isEmptyValue(doc[f.fieldname]),
-														'is-empty': isEmptyValue(doc[f.fieldname]),
-													}"
-													@click="f.isLink && navigateLink(f, doc[f.fieldname])"
-												>
-													<!-- Q1: Link shows the human name + muted code; plain fields show the
-													     formatted value (Q20 bool words via fieldname). -->
-													<template v-if="f.isLink && !isEmptyValue(doc[f.fieldname])">
-														<span class="lv-name">{{ linkPartsFor(f, doc[f.fieldname]).primary }}</span>
-														<span
-															v-if="linkPartsFor(f, doc[f.fieldname]).code"
-															class="lv-code mgk-mono"
-														>{{ linkPartsFor(f, doc[f.fieldname]).code }}</span>
-													</template>
-													<template v-else>{{ displayValue(doc[f.fieldname], f.type, f.fieldname) }}</template>
-												</div>
+										<a
+											v-if="f.isLink && !isEmptyValue(doc[f.fieldname]) && documentHref(linkTargetFor(f), doc[f.fieldname])"
+											class="field-value link"
+											:href="documentHref(linkTargetFor(f), doc[f.fieldname])"
+											@click="onDocumentLinkClick($event, linkTargetFor(f), doc[f.fieldname])"
+										>
+											<!-- Q1: Link shows the human name + muted code; plain fields show the
+											     formatted value (Q20 bool words via fieldname). -->
+											<span class="lv-name">{{ linkPartsFor(f, doc[f.fieldname]).primary }}</span>
+											<span
+												v-if="linkPartsFor(f, doc[f.fieldname]).code"
+												class="lv-code mgk-mono"
+											>{{ linkPartsFor(f, doc[f.fieldname]).code }}</span>
+										</a>
+										<div v-else class="field-value" :class="{ 'is-empty': isEmptyValue(doc[f.fieldname]) }">
+											<template v-if="f.isLink && !isEmptyValue(doc[f.fieldname])">
+												<span class="lv-name">{{ linkPartsFor(f, doc[f.fieldname]).primary }}</span>
+												<span v-if="linkPartsFor(f, doc[f.fieldname]).code" class="lv-code mgk-mono">{{ linkPartsFor(f, doc[f.fieldname]).code }}</span>
+											</template>
+											<template v-else>{{ displayValue(doc[f.fieldname], f.type, f.fieldname) }}</template>
+										</div>
 												<label class="field-label">{{ f.label }}</label>
 											</div>
 										</div>
@@ -1300,7 +3088,8 @@
 										v-for="row in g.rows"
 										:key="row.name"
 										class="linked-row"
-										@click="navigateDoc(g.doctype, row.name)"
+										:href="documentHref(g.doctype, row.name)"
+										@click="onDocumentLinkClick($event, g.doctype, row.name)"
 									>
 										<span class="lr-id mgk-mono">{{ row.name }}</span>
 										<span class="lr-meta">{{ linkedRowMeta(row) }}</span>
@@ -1404,15 +3193,15 @@
 						</header>
 					</template>
 					<template #content>
-						<a
+						<RouterLink
 							v-for="c in connections"
 							:key="c.doctype"
 							class="meta-row link-row"
-							@click="navigateConnection(c)"
+							:to="connectionRoute(c)"
 						>
 							<span class="k">{{ c.label }}</span>
 							<span class="v count-pill">{{ c.count ?? "…" }}</span>
-						</a>
+						</RouterLink>
 					</template>
 				</Card>
 
@@ -1430,7 +3219,8 @@
 								v-for="g in linkedGroups"
 								:key="g.doctype"
 								class="meta-row link-row"
-								@click="goToFirst(g)"
+								:href="documentHref(g.doctype, g.rows[0]?.name)"
+								@click="onDocumentLinkClick($event, g.doctype, g.rows[0]?.name)"
 							>
 								<span class="k">{{ g.doctype }}</span>
 								<span class="v count-pill">{{ g.rows.length }}</span>
@@ -1446,7 +3236,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
-import { useRouter, onBeforeRouteLeave } from "vue-router"
+import { RouterLink, useRouter, onBeforeRouteLeave } from "vue-router"
 import Tabs from "primevue/tabs"
 import TabList from "primevue/tablist"
 import Tab from "primevue/tab"
@@ -1477,16 +3267,20 @@ import { useRealtime } from "@/composables/useRealtime"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { useAppToast } from "@/composables/useToast"
-import { useLinkTitles } from "@/composables/useLinkTitles"
-import { searchLink, getMeta, getDocWithOnload, callMethod, getCount, getList, errorLines, isConflictError } from "@/api/client"
+import { useLinkTitles, LOCALIZED_NAME_FIELDS } from "@/composables/useLinkTitles"
+import { searchLink, getMeta, getDocWithOnload, getAddressList, callMethod, getCount, getList, errorLines, isConflictError } from "@/api/client"
 import { getRegistryByRoute, getRegistryByDoctype, WORKFLOW_SEVERITY } from "@/config/doctypes"
 import {
 	getDetailFieldConfig,
 	getDetailGroups,
 	getFormFieldOrder,
+	getAllowedFormFields,
+	getFormGroups,
 	getHiddenFormFields,
 	getLinkSearchHandler,
 	getReadOnlyChildFields,
+	getHiddenChildTables,
+	getChildColumnRules,
 	getFieldLabel,
 	getFieldHelp,
 	getBoolLabels,
@@ -1501,9 +3295,6 @@ import {
 	resolvedColumnWidthUnits,
 	persistColumnWidthUnits,
 } from "@/composables/useChildTableColumns"
-// Self-contained per-doctype child-column hide rules (NOT registered in
-// config/fields/index.js — consumed directly here via childColumnHiddenBy).
-import processCostConfig from "@/config/fields/process-cost.js"
 
 // Q10: tooltip directive for gated (disabled-with-reason) action buttons.
 const vTooltip = Tooltip
@@ -1513,20 +3304,33 @@ import AddressContactTab from "./AddressContactTab.vue"
 import CalculateDeliverablesModal from "./CalculateDeliverablesModal.vue"
 import AssignDepartmentModal from "./AssignDepartmentModal.vue"
 import StockItemGridEditor from "./StockItemGridEditor.vue"
+import CorrectionItemsSection from "./CorrectionItemsSection.vue"
 import ItemDependentAttributeEditor from "./ItemDependentAttributeEditor.vue"
 import ItemAttributeListView from "./ItemAttributeListView.vue"
 import LinkField from "@/components/LinkField.vue"
 import GRNReceivedTypeEditor from "./GRNReceivedTypeEditor.vue"
 import WorkflowActions from "./WorkflowActions.vue"
 import InspectionEntryEditor from "./InspectionEntryEditor.vue"
+import IPDYarnFlowEditor from "./IPDYarnFlowEditor.vue"
+import IPDBOMEditor from "./IPDBOMEditor.vue"
+import BOMMappingEditor from "./BOMMappingEditor.vue"
+import UserAccessEditor from "./UserAccessEditor.vue"
+import PurchaseInvoiceEntryEditor from "./PurchaseInvoiceEntryEditor.vue"
+import { commitActiveControl } from "@/utils/commitActiveControl"
+import { focusFirstControl } from "@/utils/focusControl"
 
 const props = defineProps({
 	docRoute: { type: String, required: true },
 	id: { type: String, required: true },
+	presentation: { type: String, default: "default" },
+	presentationCode: { type: String, default: "MST" },
+	presentationLabel: { type: String, default: "Master" },
+	presentationDescription: { type: String, default: "" },
+	linkedRouteResolver: { type: Function, default: null },
 })
 
 const router = useRouter()
-const { canWrite, canCreate, canDelete, canSubmit, canCancel, canAmend, isAdmin, hasRole } = usePermissions()
+const { canRead, canWrite, canCreate, canDelete, canSubmit, canCancel, canAmend, isAdmin, hasRole } = usePermissions()
 const confirm = useAppConfirm()
 const toast = useAppToast()
 const linkTitles = useLinkTitles()
@@ -1535,6 +3339,7 @@ const linkTitles = useLinkTitles()
 // (the toast vanishes; multi-line stock/validation messages need to stay put
 // while the user fixes them). Cleared on a successful action or manual close.
 const serverError = ref(null) // { title, lines: string[], refresh?: bool } | null
+const formCardEl = ref(null)
 
 // ── Realtime: live "document modified by another user" notice ──
 const realtime = useRealtime()
@@ -1547,6 +3352,23 @@ let rtSuppressUntil = 0 // ignore doc_update echoes from our OWN writes until th
 // `modified`), so a short suppression window is enough.
 function markLocalWrite() {
 	rtSuppressUntil = Date.now() + 3000
+}
+
+// Long-running popup actions must suppress realtime from BEFORE the server
+// mutation starts until the parent has reloaded the updated document. Otherwise
+// the popup's own save races the `calculated` callback and appears as "another
+// user" even though the current user made the change.
+function beginLocalWrite() {
+	rtSuppressUntil = Number.POSITIVE_INFINITY
+}
+
+function finishLocalWrite() {
+	rtSuppressUntil = Date.now() + 1500
+	staleNotice.value = false
+}
+
+function cancelLocalWrite() {
+	rtSuppressUntil = 0
 }
 
 // doc_update handler: another user saved this doc. Set a non-blocking flag only —
@@ -1576,14 +3398,20 @@ const registry = computed(() => getRegistryByRoute(props.docRoute))
 const doctype = computed(() => registry.value?.doctype || "")
 const hasAddressContact = computed(() => registry.value?.hasAddressContact || false)
 const isWorkOrder = computed(() => doctype.value === "Work Order")
+const isWorkOrderCorrection = computed(() => doctype.value === "Work Order Correction")
 const isPurchaseOrder = computed(() => doctype.value === "Purchase Order")
 const isDeliveryChallan = computed(() => doctype.value === "Delivery Challan")
 const isGoodsReceivedNote = computed(() => doctype.value === "Goods Received Note")
 const isInspectionEntry = computed(() => doctype.value === "Inspection Entry")
+const isStockEntry = computed(() => doctype.value === "Stock Entry")
 const isPurchaseInvoice = computed(() => doctype.value === "Purchase Invoice")
 const isItem = computed(() => doctype.value === "Item")
+const isItemProductionDetail = computed(() => doctype.value === "Item Production Detail")
 const isItemMasterTemplate = computed(() => doctype.value === "Item Master Template")
 const isBillTracking = computed(() => doctype.value === "Bill Tracking")
+const isProcessCost = computed(() => doctype.value === "Process Cost")
+const isItemPrice = computed(() => doctype.value === "Item Price")
+const isUser = computed(() => doctype.value === "User")
 // Item Master Template shares Item's attribute/mapping shape and the
 // __onload.attr_list contract, so it gets the same Attribute Values editor.
 const hasAttributeValuesEditor = computed(() => isItem.value || isItemMasterTemplate.value)
@@ -1608,8 +3436,593 @@ const error = docState.error
 const isCreate = computed(() => props.id === "new")
 const mode = ref("view")
 const isFormMode = computed(() => mode.value === "edit" || mode.value === "create")
+const isBookEntry = computed(() =>
+	props.presentation === "book-entry" && isPurchaseOrder.value && isFormMode.value,
+)
+const isBookView = computed(() =>
+	props.presentation === "book-entry" && isPurchaseOrder.value && mode.value === "view",
+)
+const isGrnBookEntry = computed(() =>
+	props.presentation === "grn-book-entry" && isGoodsReceivedNote.value && isFormMode.value,
+)
+const isGrnBookView = computed(() =>
+	props.presentation === "grn-book-entry" && isGoodsReceivedNote.value && mode.value === "view",
+)
+const isDcBookEntry = computed(() =>
+	props.presentation === "delivery-challan-book-entry" && isDeliveryChallan.value && isFormMode.value,
+)
+const isDcBookView = computed(() =>
+	props.presentation === "delivery-challan-book-entry" && isDeliveryChallan.value && mode.value === "view",
+)
+const isPiBookEntry = computed(() =>
+	props.presentation === "purchase-invoice-book-entry" && isPurchaseInvoice.value && isFormMode.value,
+)
+const isPiBookView = computed(() =>
+	props.presentation === "purchase-invoice-book-entry" && isPurchaseInvoice.value && mode.value === "view",
+)
+const isStockEntryBookEntry = computed(() =>
+	props.presentation === "stock-entry-book-entry" && isStockEntry.value && isFormMode.value,
+)
+const isStockEntryBookView = computed(() =>
+	props.presentation === "stock-entry-book-entry" && isStockEntry.value && mode.value === "view",
+)
+const isInspectionBookEntry = computed(() =>
+	props.presentation === "inspection-book-entry" && isInspectionEntry.value && isFormMode.value,
+)
+const isInspectionBookView = computed(() =>
+	props.presentation === "inspection-book-entry" && isInspectionEntry.value && mode.value === "view",
+)
+const isIpdBookEntry = computed(() =>
+	props.presentation === "ipd-yarn-entry" && isItemProductionDetail.value && isFormMode.value,
+)
+const isIpdBookView = computed(() =>
+	props.presentation === "ipd-yarn-entry" && isItemProductionDetail.value && mode.value === "view",
+)
+const isWorkOrderBookEntry = computed(() =>
+	props.presentation === "work-order-book-entry" && isWorkOrder.value && isFormMode.value,
+)
+const isWorkOrderBookView = computed(() =>
+	props.presentation === "work-order-book-entry" && isWorkOrder.value && mode.value === "view",
+)
+const isWocBookEntry = computed(() =>
+	props.presentation === "work-order-correction-book-entry" && isWorkOrderCorrection.value && isFormMode.value,
+)
+const isWocBookView = computed(() =>
+	props.presentation === "work-order-correction-book-entry" && isWorkOrderCorrection.value && mode.value === "view",
+)
+const isMasterBookEntry = computed(() => props.presentation === "master-book-entry" && isFormMode.value)
+const isMasterBookView = computed(() => props.presentation === "master-book-entry" && mode.value === "view")
+const isRegisteredBookEntry = computed(() => isBookEntry.value || isGrnBookEntry.value || isDcBookEntry.value || isPiBookEntry.value || isStockEntryBookEntry.value || isInspectionBookEntry.value || isIpdBookEntry.value || isWorkOrderBookEntry.value || isWocBookEntry.value || isMasterBookEntry.value)
+const isRegisteredBookView = computed(() => isBookView.value || isGrnBookView.value || isDcBookView.value || isPiBookView.value || isStockEntryBookView.value || isInspectionBookView.value || isIpdBookView.value || isWorkOrderBookView.value || isWocBookView.value || isMasterBookView.value)
+const MASTER_ENTITY_LABELS = {
+	"Item": "Item",
+	"Supplier": "Supplier",
+	"MGK Agent": "MGK Agent",
+	"Warehouse": "Warehouse",
+	"Item Price": "Item Price",
+	"Process Cost": "Process Cost",
+	"User": "User",
+	"Process": "Process",
+	"Received Type": "Received Type",
+}
+const masterEntityLabel = computed(() => MASTER_ENTITY_LABELS[doctype.value] || props.presentationLabel || doctype.value || "Record")
+const masterHubLabel = computed(() => ["Item Price", "Process Cost"].includes(doctype.value) ? "Prices & Costs" : "Manage")
+const masterHubRoute = computed(() => ["Item Price", "Process Cost"].includes(doctype.value) ? "/prices-costs" : "/manage")
+const poEntrySummary = reactive({ itemCount: 0, totalQty: 0, grandTotal: 0 })
+const poHeaderReady = computed(() => !!form.supplier && !!form.delivery_warehouse)
+const poReadyToSave = computed(() => poHeaderReady.value && poEntrySummary.itemCount > 0)
+const piEntrySummary = reactive({ grnCount: 0, itemCount: 0, totalQty: 0, subtotal: 0, tax: 0, grandTotal: 0, fetched: false })
+const piSourceLabel = computed(() => (form.against || doc.value?.against) === "Work Order" ? "Job Work" : "Purchase Order")
+const piBillReady = computed(() => !!form.supplier && !!form.billing_supplier && !!form.bill_no && !!form.bill_date && !!form.posting_date)
+const piReadyToSave = computed(() => piBillReady.value && piEntrySummary.grnCount > 0 && piEntrySummary.fetched)
+const piEntrySupplierDisplay = computed(() => localizedName("Supplier", form.supplier, "Not selected"))
+const piViewSupplierDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.supplier) || doc.value?.supplier || "Not selected",
+)
+const piViewBillingSupplierDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.billing_supplier) || doc.value?.billing_supplier || "Not selected",
+)
+const piViewGrns = computed(() => Array.isArray(doc.value?.grn) ? doc.value.grn : [])
+const piViewItems = computed(() => Array.isArray(doc.value?.items) ? doc.value.items : [])
+const piViewSummary = computed(() => {
+	const items = piViewItems.value
+	const quantity = items.reduce((total, row) => total + (Number(row.qty) || 0), 0)
+	const subtotal = Number(doc.value?.total) || items.reduce(
+		(total, row) => total + (Number(row.amount) || (Number(row.qty) || 0) * (Number(row.rate) || 0)),
+		0,
+	)
+	const tax = Number(doc.value?.total_tax) || 0
+	return {
+		grnCount: piViewGrns.value.length,
+		itemCount: items.length,
+		totalQty: Number(doc.value?.total_quantity) || quantity,
+		subtotal,
+		tax,
+		grandTotal: Number(doc.value?.grand_total) || subtotal + tax,
+	}
+})
+const ipdEntrySummary = reactive({ processCount: 0, routeCount: 0, startingYarn: "", finalYarn: "" })
+const ipdBomSummary = reactive({ itemCount: 0, mappedCount: 0 })
+const ipdReadyToSave = computed(() => !!form.item && ipdEntrySummary.processCount > 0)
+const poItemFilters = computed(() => {
+	const filters = { disabled: 0, is_purchase_item: 1 }
+	if (form.mgk_is_karigan_order) filters.mgk_is_karigan = 1
+	else if (form.mgk_is_salavai_cone_order) filters.mgk_is_salavai_cone = 1
+	else if (router.currentRoute.value.query?.book === "other-orders") {
+		filters.mgk_is_karigan = 0
+		filters.mgk_is_salavai_cone = 0
+	}
+	return filters
+})
+const poSupplierDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", form.supplier) || form.supplier_name || form.supplier || "Not selected",
+)
+const poViewSupplierDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.supplier) || doc.value?.supplier_name || doc.value?.supplier || "Not selected",
+)
+const poViewWarehouseDisplay = computed(() =>
+	linkTitles.titleFor("Warehouse", doc.value?.delivery_warehouse) || doc.value?.delivery_warehouse || "Not selected",
+)
+const poViewAgentDisplay = computed(() =>
+	linkTitles.titleFor("MGK Agent", doc.value?.mgk_agent) || doc.value?.mgk_agent || "Not assigned",
+)
+const poViewHandlingSupplierDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.mgk_handling_supplier) || doc.value?.mgk_handling_supplier || "Not selected",
+)
+const poViewSummary = computed(() => {
+	const summary = { itemCount: 0, totalQty: 0, pendingQty: 0, receivedQty: 0 }
+	for (const group of viewGrouped.value.items || []) {
+		summary.itemCount += group.items?.length || 0
+		for (const item of group.items || []) {
+			for (const value of Object.values(item.values || {})) {
+				summary.totalQty += Number(value?.qty) || 0
+				summary.pendingQty += Number(value?.pending_quantity) || 0
+				summary.receivedQty += Number(value?.received_quantity) || 0
+			}
+		}
+	}
+	return summary
+})
+const grnEntrySummary = reactive({ itemCount: 0, totalQty: 0, pendingQty: 0, amount: 0 })
+const grnSourceLabel = computed(() => {
+	const source = form.against || doc.value?.against
+	if (source) return source
+	return router.currentRoute.value.query?.book === "po-grn" ? "Purchase Order" : "Work Order"
+})
+const grnSupplierDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", form.supplier) || form.supplier || "Filled from source",
+)
+const grnWarehouseDisplay = computed(() =>
+	linkTitles.titleFor("Warehouse", form.to_warehouse) || form.to_warehouse || "Filled from source",
+)
+const grnViewSupplierDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.supplier) || doc.value?.supplier || "Not available",
+)
+const grnViewWarehouseDisplay = computed(() =>
+	linkTitles.titleFor("Warehouse", doc.value?.to_warehouse) || doc.value?.to_warehouse || "Not available",
+)
+const grnReadyToSave = computed(() =>
+	!!form.against_id && !!form.supplier && !!form.to_warehouse && (grnEntrySummary.totalQty + correctionEntrySummary.totalQty) > 0,
+)
+const grnViewSummary = computed(() => {
+	const summary = { itemCount: 0, totalQty: 0, pendingQty: 0, amount: 0 }
+	for (const group of viewGrouped.value.items || []) {
+		summary.itemCount += group.items?.length || 0
+		for (const item of group.items || []) {
+			for (const value of Object.values(item.values || {})) {
+				const qty = Number(value?.qty) || 0
+				summary.totalQty += qty
+				summary.pendingQty += Number(value?.pending_quantity) || 0
+				summary.amount += Number(value?.amount) || qty * (Number(value?.rate) || 0)
+			}
+		}
+	}
+	return summary
+})
+const dcEntrySummary = reactive({ itemCount: 0, totalQty: 0, pendingQty: 0, amount: 0 })
+const dcFromLocationDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", form.from_location) || form.from_location || "Not selected",
+)
+const dcToLocationDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", form.supplier) || form.supplier || "Filled from Work Order",
+)
+const dcLocationReady = computed(() => !!form.from_location && !!form.from_warehouse)
+const dcReadyToSave = computed(() =>
+	!!form.work_order && dcLocationReady.value && !!form.supplier && !!form.to_warehouse && (dcEntrySummary.totalQty + correctionEntrySummary.totalQty) > 0,
+)
+const dcViewFromLocationDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.from_location) || doc.value?.from_location || "Not available",
+)
+const dcViewToLocationDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.supplier) || doc.value?.supplier || "Not available",
+)
+const dcViewFromWarehouseDisplay = computed(() =>
+	linkTitles.titleFor("Warehouse", doc.value?.from_warehouse) || doc.value?.from_warehouse || "Not available",
+)
+const dcViewToWarehouseDisplay = computed(() =>
+	linkTitles.titleFor("Warehouse", doc.value?.to_warehouse) || doc.value?.to_warehouse || "Not available",
+)
+const dcViewSummary = computed(() => {
+	const summary = { itemCount: 0, totalQty: 0, pendingQty: 0, amount: 0 }
+	for (const group of viewGrouped.value.items || []) {
+		summary.itemCount += group.items?.length || 0
+		for (const item of group.items || []) {
+			for (const value of Object.values(item.values || {})) {
+				const qty = Number(value?.qty) || 0
+				summary.totalQty += qty
+				summary.pendingQty += Number(value?.pending_quantity) || 0
+				summary.amount += Number(value?.total_amount) || qty * (Number(value?.rate) || 0)
+			}
+		}
+	}
+	return summary
+})
+const correctionViewSummary = computed(() => {
+	const summary = { itemCount: 0, totalQty: 0, pendingQty: 0, amount: 0 }
+	for (const block of viewCorrectionBlocks.value || []) {
+		for (const group of block.item_details || []) {
+			summary.itemCount += group.items?.length || 0
+			for (const item of group.items || []) {
+				for (const value of Object.values(item.values || {})) {
+					const qty = Number(value?.qty) || 0
+					summary.totalQty += qty
+					summary.pendingQty += Number(value?.pending_quantity) || 0
+					summary.amount += Number(value?.amount) || qty * (Number(value?.rate) || 0)
+				}
+			}
+		}
+	}
+	return summary
+})
+const stockEntrySummary = reactive({ itemCount: 0, totalQty: 0, grandTotal: 0 })
+const stockEntryNeedsFrom = computed(() => [
+	"Material Issue", "Send to Warehouse", "Receive at Warehouse",
+	"Material Consumed", "DC Completion", "GRN Completion",
+].includes(form.purpose))
+const stockEntryNeedsTo = computed(() => [
+	"Material Receipt", "Send to Warehouse", "Receive at Warehouse",
+	"DC Completion", "GRN Completion",
+].includes(form.purpose))
+const stockEntryRouteReady = computed(() => (
+	!!form.purpose &&
+	(!stockEntryNeedsFrom.value || !!form.from_warehouse) &&
+	(!stockEntryNeedsTo.value || !!form.to_warehouse)
+))
+const stockEntryReadyToSave = computed(() => (
+	!!form.purpose && stockEntryRouteReady.value && stockEntrySummary.itemCount > 0
+))
+const stockEntryViewSummary = computed(() => {
+	const summary = { itemCount: 0, totalQty: 0, amount: 0 }
+	for (const group of viewGrouped.value.items || []) {
+		summary.itemCount += group.items?.length || 0
+		for (const item of group.items || []) {
+			for (const value of Object.values(item.values || {})) {
+				const qty = Number(value?.qty) || 0
+				summary.totalQty += qty
+				summary.amount += Number(value?.amount) || qty * (Number(value?.rate) || 0)
+			}
+		}
+	}
+	return summary
+})
+const inspectionEntrySummary = reactive({ itemCount: 0, totalQty: 0, classifiedQty: 0, unchangedQty: 0 })
+const inspectionReadyToSave = computed(() => !!form.against_id && inspectionEntrySummary.itemCount > 0)
+const inspectionViewSummary = computed(() => {
+	const sources = Array.isArray(viewGrouped.value.items) ? viewGrouped.value.items : []
+	let totalQty = 0
+	let classifiedQty = 0
+	for (const source of sources) {
+		totalQty += Number(source.grn_qty) || 0
+		for (const split of source.splits || []) {
+			if (split.target_received_type !== source.source_received_type) {
+				classifiedQty += Number(split.qty) || 0
+			}
+		}
+	}
+	return {
+		itemCount: sources.length,
+		totalQty,
+		classifiedQty,
+		unchangedQty: Math.max(0, totalQty - classifiedQty),
+	}
+})
+const woJobWorkerDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", form.supplier) || form.supplier_name || form.supplier || "Not selected",
+)
+const woDeliveryDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", form.delivery_location) || form.delivery_location_name || form.delivery_location || "Not selected",
+)
+const woViewJobWorkerDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.supplier) || doc.value?.supplier_name || doc.value?.supplier || "Not selected",
+)
+const woViewDeliveryDisplay = computed(() =>
+	linkTitles.titleFor("Supplier", doc.value?.delivery_location) || doc.value?.delivery_location_name || doc.value?.delivery_location || "Not selected",
+)
+const woViewSummary = computed(() => {
+	const summarize = (field) => {
+		const out = { itemCount: 0, totalQty: 0, pendingQty: 0, totalCost: 0 }
+		for (const group of viewGrouped.value[field] || []) {
+			out.itemCount += group.items?.length || 0
+			for (const item of group.items || []) {
+				for (const value of Object.values(item.values || {})) {
+					out.totalQty += Number(value?.qty) || 0
+					out.pendingQty += Number(value?.pending_quantity) || 0
+					out.totalCost += Number(value?.total_cost) || ((Number(value?.qty) || 0) * (Number(value?.cost) || 0))
+				}
+			}
+		}
+		return out
+	}
+	return {
+		deliverables: summarize("deliverables"),
+		receivables: summarize("receivables"),
+	}
+})
+const woDefinitionReady = computed(() => !!form.process_name && !!form.production_detail)
+const woPartyReady = computed(() => (
+	!!form.supplier && !!form.delivery_location && !!form.supplier_address && !!form.delivery_address
+))
+const woScheduleReady = computed(() => !!form.planned_start_date && !!form.planned_end_date)
+const woReadyToSave = computed(() => woDefinitionReady.value && woPartyReady.value && woScheduleReady.value)
+const wocEntrySummary = reactive({
+	deliverables: { itemCount: 0, totalQty: 0, pendingQty: 0 },
+	receivables: { itemCount: 0, totalQty: 0, pendingQty: 0 },
+})
+const wocReadyToSave = computed(() => !!form.work_order && (
+	wocEntrySummary.deliverables.totalQty + wocEntrySummary.receivables.totalQty > 0
+))
+const wocViewSummary = computed(() => {
+	const summarize = (field) => {
+		const out = { itemCount: 0, totalQty: 0, pendingQty: 0, totalCost: 0 }
+		for (const group of viewGrouped.value[field] || []) {
+			out.itemCount += group.items?.length || 0
+			for (const item of group.items || []) {
+				for (const value of Object.values(item.values || {})) {
+					out.totalQty += Number(value?.qty) || 0
+					out.pendingQty += Number(value?.pending_quantity) || 0
+					out.totalCost += Number(value?.total_cost) || ((Number(value?.qty) || 0) * (Number(value?.cost) || 0))
+				}
+			}
+		}
+		return out
+	}
+	return { deliverables: summarize("deliverables"), receivables: summarize("receivables") }
+})
+const ipdViewSummary = computed(() => {
+	const rows = doc.value?.mgk_yarn_process_routes || []
+	const groups = new Map()
+	for (const [index, row] of rows.entries()) {
+		const sequence = Number(row.sequence || ((index + 1) * 10))
+		if (!groups.has(sequence)) {
+			groups.set(sequence, {
+				sequence,
+				inputItem: row.input_item || "",
+				outputItem: row.output_item || "",
+			})
+		}
+	}
+	const steps = [...groups.values()].sort((a, b) => a.sequence - b.sequence)
+	return {
+		processCount: steps.length,
+		routeCount: rows.length,
+		startingYarn: steps[0]?.inputItem || "",
+		finalYarn: steps[steps.length - 1]?.outputItem || "",
+	}
+})
+const ipdAttributeValues = ref({})
+const ipdAttributeLoading = ref(false)
+const ipdAttributesOpen = ref(false)
+const selectedIpdAttribute = ref("")
+const ipdAttributeDocName = computed(() => (
+	isCreate.value ? "" : (doc.value?.name || props.id || "")
+))
+const isIpdApproved = computed(() => (
+	isItemProductionDetail.value && doc.value?.approval_status === "Approved"
+))
+const canEditIpdAttributes = computed(() => (
+	Boolean(ipdAttributeDocName.value)
+	&& !isIpdApproved.value
+	&& canWrite("Item Production Detail")
+))
+const canManageIpdBomMappings = computed(() => (
+	Boolean(ipdAttributeDocName.value)
+	&& !isIpdApproved.value
+	&& canWrite("Item Production Detail")
+	&& canWrite("Item BOM Attribute Mapping")
+))
+const canManageIpdApproval = computed(() => (
+	isAdmin.value || hasRole("System Manager")
+))
+const ipdApprovalState = ref(null)
+const ipdAttributeItemName = computed(() => form.item || doc.value?.item || "")
+const ipdAttributeCards = computed(() => (doc.value?.item_attributes || [])
+	.filter((row) => row.attribute)
+	.map((row) => ({
+		attribute: row.attribute,
+		values: Array.isArray(ipdAttributeValues.value[row.attribute])
+			? ipdAttributeValues.value[row.attribute]
+			: [],
+	})))
+
+async function loadIpdAttributeValues() {
+	if (!isItemProductionDetail.value || !ipdAttributeDocName.value) {
+		ipdAttributeValues.value = {}
+		return
+	}
+	ipdAttributeLoading.value = true
+	try {
+		const ipd = await getDocWithOnload("Item Production Detail", ipdAttributeDocName.value)
+		const rows = Array.isArray(ipd?.__onload?.attr_list) ? ipd.__onload.attr_list : []
+		ipdAttributeValues.value = Object.fromEntries(rows.map((row) => [
+			row.attr_name,
+			(row.attr_values || []).map((value) => value.attribute_value),
+		]))
+	} catch (e) {
+		ipdAttributeValues.value = {}
+		toast.warn("Could not load Item attributes", e.message)
+	} finally {
+		ipdAttributeLoading.value = false
+	}
+}
+
+async function loadIpdApprovalState() {
+	ipdApprovalState.value = null
+	if (!isItemProductionDetail.value || !ipdAttributeDocName.value) return
+	try {
+		ipdApprovalState.value = await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.experiences.operations_workspace.item_production_detail.get_approval_state",
+			{ name: ipdAttributeDocName.value },
+		)
+	} catch (_) {
+		// The document view itself remains usable when this optional summary fails.
+	}
+}
+
+function onApproveIpd() {
+	confirm.require({
+		header: "Approve Item Production Detail?",
+		message: "Approve this production detail and regenerate its Process Matrices from the current yarn flow?",
+		acceptLabel: "Approve and generate",
+		acceptClass: "p-button-primary",
+		accept: async () => {
+			acting.value = "ipd-approve"
+			try {
+				markLocalWrite()
+				await callMethod(
+					"mgk_clothing_yrp.mgk_clothing_yrp.api.experiences.operations_workspace.item_production_detail.approve",
+					{ name: doc.value.name, modified: doc.value.modified },
+				)
+				toast.success("IPD approved", "Process Matrices were generated from the current yarn flow.", 6000)
+				await reloadView()
+			} catch (e) {
+				showActionError("Approval failed", e)
+			} finally {
+				acting.value = null
+			}
+		},
+	})
+}
+
+function onRejectIpd() {
+	confirm.require({
+		header: "Reject IPD approval?",
+		message: "Return this Item Production Detail to Not Approved? Existing matrices stay available for draft testing.",
+		acceptLabel: "Reject approval",
+		acceptClass: "p-button-danger",
+		accept: async () => {
+			acting.value = "ipd-reject"
+			try {
+				markLocalWrite()
+				await callMethod(
+					"mgk_clothing_yrp.mgk_clothing_yrp.api.experiences.operations_workspace.item_production_detail.reject",
+					{ name: doc.value.name, modified: doc.value.modified },
+				)
+				toast.success("Approval rejected", "The IPD is now Not Approved.", 6000)
+				await reloadView()
+			} catch (e) {
+				showActionError("Reject failed", e)
+			} finally {
+				acting.value = null
+			}
+		},
+	})
+}
+
+function onRegenerateIpdMatrix() {
+	confirm.require({
+		header: "Regenerate Process Matrix?",
+		message: "Replace the matrices for the yarn processes in this IPD using its current flow. The approval status will not change.",
+		acceptLabel: "Regenerate",
+		acceptClass: "p-button-primary",
+		accept: async () => {
+			acting.value = "ipd-matrix"
+			try {
+				markLocalWrite()
+				const state = await callMethod(
+					"mgk_clothing_yrp.mgk_clothing_yrp.api.experiences.operations_workspace.item_production_detail.regenerate_matrix",
+					{ name: doc.value.name, modified: doc.value.modified },
+				)
+				ipdApprovalState.value = state
+				toast.success("Process Matrix regenerated", `${state?.matrix_count || 0} matrix record(s) are ready for Work Order testing.`, 6000)
+				await reloadView()
+			} catch (e) {
+				showActionError("Matrix regeneration failed", e)
+			} finally {
+				acting.value = null
+			}
+		},
+	})
+}
+
+function openIpdAttributes(attribute) {
+	if (!canEditIpdAttributes.value || !attribute) return
+	selectedIpdAttribute.value = attribute
+	ipdAttributesOpen.value = true
+}
+
+async function onIpdAttributesUpdated() {
+	await loadIpdAttributeValues()
+	ipdAttributesOpen.value = false
+}
+const ipdBomMappingOpen = ref(false)
+const ipdBomMappingName = ref("")
+const ipdBomMappingRow = ref(null)
+const ipdBomMappingTitle = computed(() => {
+	const item = ipdBomMappingRow.value?.item || "BOM Item"
+	return `Manage BOM combinations · ${item}`
+})
+
+function onIpdBomSummary(summary = {}) {
+	ipdBomSummary.itemCount = Number(summary.itemCount || 0)
+	ipdBomSummary.mappedCount = Number(summary.mappedCount || 0)
+}
+
+async function openIpdBomMapping(row) {
+	if (!ipdAttributeDocName.value || !row?.name || !row?.item) {
+		toast.warn("Save the IPD first", "The BOM row must be saved before its combinations can be configured.")
+		return
+	}
+	try {
+		markLocalWrite()
+		const mapping = await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.bom_mapping.create_mapping",
+			{
+				ipd: ipdAttributeDocName.value,
+				bom_item: row.item,
+				bom_row: row.name,
+			},
+		)
+		if (!mapping) throw new Error("The server did not return an Item BOM Attribute Mapping.")
+		// create_mapping links the mapping through the parent IPD. Adopt that
+		// server write before opening the popup so our own realtime echo never
+		// appears as a misleading "modified by another user" warning.
+		await reloadView()
+		ipdBomMappingRow.value = row
+		ipdBomMappingName.value = mapping
+		ipdBomMappingOpen.value = true
+	} catch (error) {
+		toast.error("Could not open BOM combinations", error.message)
+	}
+}
+
+async function closeIpdBomMapping() {
+	ipdBomMappingOpen.value = false
+	ipdBomMappingName.value = ""
+	ipdBomMappingRow.value = null
+	await reloadView()
+}
+
+async function onIpdBomMappingSaved() {
+	toast.success("Combinations saved", "The BOM mapping is linked to this production detail.")
+	await closeIpdBomMapping()
+}
 const acting = ref(null) // "submit" | "cancel" | "delete" | "amend" | "duplicate" | "convert" | null
 const fetchingGrn = ref(false) // Purchase Invoice: "Fetch GRN" call in-flight
+const grnClassificationOpen = ref(false)
+const grnClassificationSaving = ref(false)
+const grnClassificationEditor = ref(null)
+const grnClassificationComplete = ref(false)
+let dcWarehouseLookupSequence = 0
 
 // Prompt-named doctypes (autoname="prompt" / naming_rule="Set by user", e.g. Item
 // Master Template, FG Item Master Template) require the USER to supply the document
@@ -1678,6 +4091,8 @@ const forwardActions = computed(() => {
 		out.push({ key: "wo-dc", label: "Create Delivery Challan", icon: "pi pi-send", handler: onCreateDcFromWo, disabled: woGated, tooltip: woTip })
 	if (isWorkOrder.value && canCreate("Goods Received Note"))
 		out.push({ key: "wo-grn", label: "Create Goods Received Note", icon: "pi pi-plus-circle", handler: onCreateGrnFromWo, disabled: woGated, tooltip: woTip })
+	if (isWorkOrder.value && canCreate("Work Order Correction"))
+		out.push({ key: "wo-correction", label: "Create Work Order Correction", icon: "pi pi-pencil", handler: onCreateWocFromWo, disabled: woGated, tooltip: woTip })
 	if (isWorkOrder.value && canCreate("Debit"))
 		out.push({ key: "wo-debit", label: "Create Debit", icon: "pi pi-minus-circle", handler: onCreateDebitFromWo, disabled: woGated, tooltip: woTip })
 	if (isDeliveryChallan.value && canCreate("Goods Received Note"))
@@ -1710,6 +4125,8 @@ const moreMenuModel = computed(() => {
 })
 
 const activeTab = ref("details")
+const ipdWorkspaceTab = ref("production")
+const masterWorkspaceTab = ref("details")
 const approvalRef = ref(null)
 const approvalState = ref(null)
 const workflowRef = ref(null)
@@ -1754,6 +4171,125 @@ function beforeUnloadGuard(e) {
 // genuine user edits; mark the record dirty (once armed) so the guards fire.
 function onGridChange() {
 	if (dirtyArmed.value) isDirty.value = true
+}
+
+function onGridSummary(summary, childField = "") {
+	if (isPurchaseOrder.value) {
+		poEntrySummary.itemCount = Number(summary?.itemCount) || 0
+		poEntrySummary.totalQty = Number(summary?.totalQty) || 0
+		poEntrySummary.grandTotal = Number(summary?.grandTotal) || 0
+	}
+	if (isGoodsReceivedNote.value) {
+		grnEntrySummary.itemCount = Number(summary?.itemCount) || 0
+		grnEntrySummary.totalQty = Number(summary?.totalQty) || 0
+		grnEntrySummary.pendingQty = Number(summary?.pendingQty) || 0
+		grnEntrySummary.amount = Number(summary?.grandTotal) || 0
+	}
+	if (isDeliveryChallan.value) {
+		dcEntrySummary.itemCount = Number(summary?.itemCount) || 0
+		dcEntrySummary.totalQty = Number(summary?.totalQty) || 0
+		dcEntrySummary.pendingQty = Number(summary?.pendingQty) || 0
+		dcEntrySummary.amount = Number(summary?.grandTotal) || 0
+	}
+	if (isStockEntry.value) {
+		stockEntrySummary.itemCount = Number(summary?.itemCount) || 0
+		stockEntrySummary.totalQty = Number(summary?.totalQty) || 0
+		stockEntrySummary.grandTotal = Number(summary?.grandTotal) || 0
+	}
+	if (isWorkOrderCorrection.value && childField && wocEntrySummary[childField]) {
+		wocEntrySummary[childField].itemCount = Number(summary?.itemCount) || 0
+		wocEntrySummary[childField].totalQty = Number(summary?.totalQty) || 0
+		wocEntrySummary[childField].pendingQty = Number(summary?.pendingQty) || 0
+	}
+}
+
+function onCorrectionSummary(summary) {
+	correctionEntrySummary.itemCount = Number(summary?.itemCount) || 0
+	correctionEntrySummary.totalQty = Number(summary?.totalQty) || 0
+	correctionEntrySummary.pendingQty = Number(summary?.pendingQty) || 0
+	correctionEntrySummary.grandTotal = Number(summary?.grandTotal) || 0
+}
+
+function onInspectionSummary(summary) {
+	inspectionEntrySummary.itemCount = Number(summary?.itemCount) || 0
+	inspectionEntrySummary.totalQty = Number(summary?.totalQty) || 0
+	inspectionEntrySummary.classifiedQty = Number(summary?.classifiedQty) || 0
+	inspectionEntrySummary.unchangedQty = Number(summary?.unchangedQty) || 0
+}
+
+function onPiEntrySummary(summary) {
+	piEntrySummary.grnCount = Number(summary?.grnCount) || 0
+	piEntrySummary.itemCount = Number(summary?.itemCount) || 0
+	piEntrySummary.totalQty = Number(summary?.totalQty) || 0
+	piEntrySummary.subtotal = Number(summary?.subtotal) || 0
+	piEntrySummary.tax = Number(summary?.tax) || 0
+	piEntrySummary.grandTotal = Number(summary?.grandTotal) || 0
+	piEntrySummary.fetched = !!summary?.fetched
+}
+
+function onIpdFlowSummary(summary) {
+	ipdEntrySummary.processCount = Number(summary?.processCount) || 0
+	ipdEntrySummary.routeCount = Number(summary?.routeCount) || 0
+	ipdEntrySummary.startingYarn = summary?.startingYarn || ""
+	ipdEntrySummary.finalYarn = summary?.finalYarn || ""
+}
+
+function updateIpdRoutes(rows) {
+	form.mgk_yarn_process_routes = (rows || []).map((row) => ({ ...row }))
+}
+
+function purchaseOrderSectionLabel(label) {
+	return label === "More Information" ? "Notes and instructions" : "Supplier and delivery"
+}
+
+function isBookNotesSection(label) {
+	if (isIpdBookEntry.value) return false
+	if (isStockEntryBookEntry.value) return label === "Transport and notes"
+	if (isInspectionBookEntry.value) return label === "Inspection notes"
+	if (isDcBookEntry.value) return label === "Document and transport"
+	if (isGrnBookEntry.value) return ["Logistics", "Totals", "Document and transport"].includes(label)
+	if (isWorkOrderBookEntry.value) return label === "Additional details"
+	return label === "More Information"
+}
+
+function bookFormSectionStep(label, index = 0) {
+	if (isMasterBookEntry.value) return index + 1
+	if (isIpdBookEntry.value) return 1
+	if (isStockEntryBookEntry.value) {
+		return ({
+			"Movement type and date": 1,
+			"Source and destination": 2,
+			"Transport and notes": 4,
+		})[label] || index + 1
+	}
+	if (isInspectionBookEntry.value) return label === "Inspection notes" ? 3 : 1
+	if (isDcBookEntry.value) return label === "Document and transport" ? (showCorrectionSection.value ? 4 : 3) : 1
+	if (isGrnBookEntry.value) return ["Logistics", "Totals", "Document and transport"].includes(label) ? (showCorrectionSection.value ? 4 : 3) : 1
+	if (isWocBookEntry.value) return label === "Work Order context" ? 2 : 1
+	if (isWorkOrderBookEntry.value) {
+		return ({
+			"Work setup": 1,
+			"Job-worker and delivery": 2,
+			"Schedule and quantity": 3,
+			"Additional details": 4,
+		})[label] || 1
+	}
+	return label === "More Information" ? 3 : 1
+}
+
+function bookFormSectionLabel(label) {
+	if (isMasterBookEntry.value) return label
+	if (isIpdBookEntry.value) return "Finished item"
+	if (isStockEntryBookEntry.value || isInspectionBookEntry.value) return label
+	if (isDcBookEntry.value) return label
+	if (isWocBookEntry.value) return label
+	if (isWorkOrderBookEntry.value) return label
+	if (!isGrnBookEntry.value) return purchaseOrderSectionLabel(label)
+	if (label === "Document and transport") return label
+	if (label === "Logistics") return "Transport and notes"
+	if (label === "Totals") return "Charges"
+	if (label === "Movement") return "Movement filled from source"
+	return `${grnSourceLabel.value} source`
 }
 
 // docstatus convenience.
@@ -1830,7 +4366,7 @@ const META_HIDDEN_FIELDTYPES = new Set([
 ])
 // Hidden grouped-JSON fields — NEVER editable / sent (the flat-rows contract).
 const GROUPED_JSON_FIELDS = new Set([
-	"item_details", "deliverable_details", "receivable_details",
+	"item_details", "deliverable_details", "receivable_details", "correction_item_details",
 ])
 // Child tables with a dedicated surface elsewhere → kept out of the generic
 // per-child-table tabs AND the edit grids. `mgk_approval_log` already renders as
@@ -1887,6 +4423,7 @@ const STOCK_GROUPED_MAP = {
 	"Delivery Challan": [{
 		childField: "items", groupedField: "item_details", ungroupKey: "Delivery Challan",
 		label: "Items",
+		cellFields: [{ name: "pending_quantity", label: "Pending" }],
 		valueFields: [
 			"rate", "valuation_rate", "pending_quantity", "delivered_quantity",
 			"received_quantity", "stock_qty", "amount", "ref_doctype", "ref_docname",
@@ -1902,6 +4439,12 @@ const STOCK_GROUPED_MAP = {
 	"Goods Received Note": [{
 		childField: "items", groupedField: "item_details", ungroupKey: "Goods Received Note",
 		label: "Items",
+		cellFields: [
+			{ name: "pending_quantity", label: "Pending" },
+			{ name: "max_receivable_quantity", label: "Max Allowed" },
+			{ name: "rate", label: "Rate" },
+			{ name: "amount", label: "Amount" },
+		],
 		valueFields: [
 			"rate", "pending_quantity", "max_receivable_quantity", "stock_qty", "amount",
 			"ref_doctype", "ref_docname", "delivery_challan_item",
@@ -1916,7 +4459,12 @@ const STOCK_GROUPED_MAP = {
 	"Purchase Order": [{
 		childField: "items", groupedField: "item_details", ungroupKey: "Purchase Order",
 		label: "Items",
-		cellFields: [{ name: "rate", label: "Rate" }, { name: "pending_quantity", label: "Pending" }, { name: "total_amount", label: "Amount" }],
+		cellFields: [
+			{ name: "rate", label: "Rate" },
+			{ name: "pending_quantity", label: "Pending" },
+			{ name: "tax", label: "Tax", source: "entry", format: "percentage" },
+			{ name: "total_amount", label: "Amount" },
+		],
 		valueFields: [
 			"rate", "pending_quantity", "received_quantity", "cancelled_quantity",
 			"stock_qty", "amount", "discount_amount", "tax_amount", "total_amount",
@@ -1951,6 +4499,31 @@ const STOCK_GROUPED_MAP = {
 			],
 		},
 	],
+	"Work Order Correction": [
+		{
+			childField: "deliverables", groupedField: "deliverable_details",
+			ungroupKey: "Work Order Deliverables", label: "Additional deliverables",
+			cellFields: [{ name: "pending_quantity", label: "Pending" }],
+			valueFields: ["pending_quantity", "stock_update", "valuation_rate"],
+			entryFields: [
+				"comments", "secondary_qty", "secondary_uom", "cancelled_quantity",
+				"additional_parameters", "set_combination", "grn_detail_no", "item_type",
+				"is_calculated", "source_grn", "source_grn_item", "source_inspection_entry_item",
+				"fabric_reference_variant", "fabric_reference_allocations",
+			],
+		},
+		{
+			childField: "receivables", groupedField: "receivable_details",
+			ungroupKey: "Work Order Receivables", label: "Additional receivables",
+			cellFields: [{ name: "cost", label: "Cost", editable: true }, { name: "pending_quantity", label: "Pending" }],
+			valueFields: ["cost", "pending_quantity", "total_cost"],
+			entryFields: [
+				"comments", "secondary_qty", "secondary_uom", "process_cost",
+				"additional_parameters", "set_combination", "fabric_reference_variant",
+				"fabric_reference_allocations",
+			],
+		},
+	],
 	// Inspection Entry: grouped `item_details` (Long Text) ↔ flat `items`, edited
 	// via InspectionEntryEditor (source-bin split across Received Types). The
 	// server's before_validate ungroups item_details → items, so buildPayload emits
@@ -1961,8 +4534,61 @@ const STOCK_GROUPED_MAP = {
 }
 
 // The pivot sections to render for the current doctype (empty ⇒ flat path).
-const stockPivots = computed(() => STOCK_GROUPED_MAP[doctype.value] || [])
+const stockPivots = computed(() => {
+	// In the MGK Work Order book, deliverables and receivables are calculated by
+	// the dedicated popup after the header is saved. Showing the generic stock
+	// pivots here invites manual rows and recreates the old Desk-like form the
+	// operator rejected. Existing rows still round-trip untouched through `form`.
+	if (isWorkOrderBookEntry.value) return []
+	const pivots = STOCK_GROUPED_MAP[doctype.value] || []
+	if (!isStockEntry.value) return pivots
+	const incomingReceipt = form.purpose === "Material Receipt" || doc.value?.purpose === "Material Receipt"
+	return pivots.map((pivot) => ({
+		...pivot,
+		cellFields: (pivot.cellFields || []).map((field) => ({
+			...field,
+			editable: field.name === "rate" ? incomingReceipt : field.editable,
+		})),
+		showAllowZeroRate: incomingReceipt && !!pivot.showAllowZeroRate,
+	}))
+})
 const useStockPivot = computed(() => isFormMode.value && stockPivots.value.length > 0)
+
+// Submitted Work Order Corrections become additional source rows in Delivery
+// Challan (deliverables) and Work Order GRN (receivables). Keep them grouped by
+// correction so the operator can see why the extra quantity exists, while the
+// base YRP controller remains authoritative for pending limits and stock rows.
+const CORRECTION_CONFIG = {
+	"Delivery Challan": {
+		valueFields: STOCK_GROUPED_MAP["Delivery Challan"][0].valueFields,
+		entryFields: STOCK_GROUPED_MAP["Delivery Challan"][0].entryFields,
+		cellFields: [{ name: "pending_quantity", label: "Pending" }],
+	},
+	"Goods Received Note": {
+		valueFields: STOCK_GROUPED_MAP["Goods Received Note"][0].valueFields,
+		entryFields: STOCK_GROUPED_MAP["Goods Received Note"][0].entryFields,
+		cellFields: [
+			{ name: "pending_quantity", label: "Pending" },
+			{ name: "max_receivable_quantity", label: "Allowed" },
+		],
+	},
+}
+const correctionConfig = computed(() => CORRECTION_CONFIG[doctype.value] || null)
+const hasCorrectionSection = computed(() => Boolean(correctionConfig.value))
+const correctionGrid = ref(null)
+const piEntryEditor = ref(null)
+const ipdFlowEditor = ref(null)
+const correctionLoaded = ref(false)
+const viewCorrectionBlocks = ref([])
+const correctionEntrySummary = reactive({ itemCount: 0, totalQty: 0, pendingQty: 0, grandTotal: 0 })
+const showCorrectionSection = computed(() => {
+	if (isDeliveryChallan.value) return Boolean(form.work_order || correctionLoaded.value)
+	if (isGoodsReceivedNote.value) {
+		return (form.against || doc.value?.against) === "Work Order"
+			&& Boolean(form.against_id || correctionLoaded.value)
+	}
+	return false
+})
 
 // ── Connections (Desk's `links` panel equivalent — preference 2026-05-29) ──
 // Each entry: { doctype, route, label?, filters(name) → [[field, op, value], …] }.
@@ -1986,6 +4612,11 @@ const CONNECTIONS_MAP = {
 				["against", "=", "Work Order"],
 				["against_id", "=", name],
 			],
+		},
+		{
+			doctype: "Work Order Correction",
+			route: "/work-order-correction",
+			filters: (name) => [["work_order", "=", name]],
 		},
 	],
 	"Purchase Order": [
@@ -2057,11 +4688,11 @@ async function loadConnections() {
 	)
 }
 
-function navigateConnection(c) {
-	router.push({
+function connectionRoute(c) {
+	return {
 		path: c.route,
 		query: { filters: JSON.stringify(c.filterTriples) },
-	})
+	}
 }
 
 // R3b: Goods Received Note against a Work Order uses the received-type-SPLIT
@@ -2114,6 +4745,10 @@ function entryHasNoValue(entry, cellFields) {
 	return true
 }
 
+function entryHasQuantity(entry) {
+	return Object.values(entry?.values || {}).some((cell) => Number(cell?.qty) > 0)
+}
+
 async function hydratePivotsForView() {
 	if (!stockPivots.value.length) return
 	try {
@@ -2127,6 +4762,7 @@ async function hydratePivotsForView() {
 		if (isInspectionEntry.value) {
 			const pv = stockPivots.value[0]
 			viewGrouped.value = { [pv.childField]: onload[pv.groupedField] || [] }
+			viewCorrectionBlocks.value = []
 			return
 		}
 		for (const pv of stockPivots.value) {
@@ -2142,14 +4778,22 @@ async function hydratePivotsForView() {
 				.map((grp) => ({
 					...grp,
 					items: (grp.items || []).filter(
-						(e) => keepAll || !entryHasNoValue(e, pv.cellFields || []),
+						(e) => keepAll || (
+							isGoodsReceivedNote.value
+								? entryHasQuantity(e)
+								: !entryHasNoValue(e, pv.cellFields || [])
+						),
 					),
 				}))
 				.filter((grp) => (grp.items || []).length)
 		}
 		viewGrouped.value = next
+		viewCorrectionBlocks.value = hasCorrectionSection.value
+			? (onload.correction_item_details || [])
+			: []
 	} catch (_) {
 		viewGrouped.value = {}
+		viewCorrectionBlocks.value = []
 	}
 }
 
@@ -2158,6 +4802,8 @@ async function loadAll() {
 	if (!doctype.value) return
 	approvalState.value = null
 	acting.value = null
+	if (isItemProductionDetail.value) ipdWorkspaceTab.value = "production"
+	if (isItem.value || isUser.value) masterWorkspaceTab.value = "details"
 
 	if (isCreate.value) {
 		// Create mode: meta only, then build a blank form. No doc/linked/activity.
@@ -2165,6 +4811,7 @@ async function loadAll() {
 		await docState.loadMeta()
 		await loadChildMetas()
 		buildCreateForm()
+		await focusFormStart()
 		return
 	}
 
@@ -2183,6 +4830,8 @@ async function loadAll() {
 	const metaReady = loadChildMetas() // awaits loadMeta internally; populates childMetaCache
 	await Promise.all([metaReady, docState.load(props.id)])
 	if (!docState.doc.value) return
+	loadIpdAttributeValues()
+	loadIpdApprovalState()
 	// Realtime: (re)subscribe to this doc's room for live "modified" notices.
 	// Dispose any prior subscription first (the :key remount usually unmounts us,
 	// but the [docRoute,id] watcher can re-run loadAll without an unmount).
@@ -2343,10 +4992,12 @@ function inputDescriptor(mf) {
 	const base = {
 		fieldname: mf.fieldname,
 		// Q18: SPA label override (e.g. supplier → "Job-worker") wins over meta.
-		label: getFieldLabel(doctype.value, mf.fieldname) || mf.label || humanize(mf.fieldname),
+		label: isGrnBookEntry.value && mf.fieldname === "against_id"
+			? grnSourceLabel.value
+			: getFieldLabel(doctype.value, mf.fieldname) || mf.label || humanize(mf.fieldname),
 		// Q13: inline help — SPA override first, else the meta description the Desk
 		// shows but /web users never see. Empty string = no help line rendered.
-		help: getFieldHelp(doctype.value, mf.fieldname) || mf.description || "",
+		help: getFieldHelp(doctype.value, mf.fieldname) ?? mf.description ?? "",
 		reqd: !!mf.reqd,
 		readOnly: !!mf.read_only,
 		fieldtype: ft,
@@ -2395,7 +5046,28 @@ function inputDescriptor(mf) {
 // Per-DocType set of fieldnames to never render in EDIT/CREATE (e.g. WO's
 // `includes_packing`). Empty Set for doctypes without overrides — safe to
 // `.has()` unconditionally.
-const hiddenFormFieldSet = computed(() => getHiddenFormFields(doctype.value))
+const GRN_BOOK_HIDDEN_FIELDS = new Set([
+	"naming_series", "against", "is_rework", "posting_date", "posting_time",
+	"edit_posting_date_and_time", "process_name", "item", "production_detail",
+	"supplier", "delivery_location", "from_warehouse", "to_warehouse",
+	"purchase_invoice_name", "is_internal_unit", "transfer_complete",
+	"ste_transferred", "ste_transferred_percent", "amended_from",
+])
+const IPD_BOOK_HIDDEN_FIELDS = new Set([
+	"version", "approval_status", "approved_by", "primary_item_attribute",
+	"dependent_attribute", "dependent_attribute_mapping", "variants_json",
+	"yarn_item", "amended_from",
+])
+const hiddenFormFieldSet = computed(() => {
+	const hidden = getHiddenFormFields(doctype.value)
+	if (isIpdBookEntry.value) {
+		for (const fieldname of IPD_BOOK_HIDDEN_FIELDS) hidden.add(fieldname)
+		return hidden
+	}
+	if (!isGrnBookEntry.value) return hidden
+	for (const fieldname of GRN_BOOK_HIDDEN_FIELDS) hidden.add(fieldname)
+	return hidden
+})
 
 // The ordered, editable field list for the form. Drives create + edit.
 // Order: per-doctype `formOrder` (when present) → meta order. Either way the
@@ -2409,9 +5081,11 @@ const formFields = computed(() => {
 	const out = []
 	const seen = new Set()
 	const hidden = hiddenFormFieldSet.value
+	const allowed = getAllowedFormFields(doctype.value)
 	const pushByFieldname = (fn) => {
 		if (seen.has(fn)) return
 		if (hidden.has(fn)) return
+		if (allowed && !allowed.has(fn)) return
 		const mf = mfMap[fn]
 		if (!mf) return
 		if (!isEditableMetaField(mf)) return
@@ -2453,6 +5127,7 @@ function evalCondition(expr, parent = form) {
 
 // reqd is the static meta flag OR a currently-satisfied mandatory_depends_on.
 function isReqd(f) {
+	if (isDcBookEntry.value && ["work_order", "from_location"].includes(f.fieldname)) return true
 	if (f.reqd) return true
 	return f.mandatoryDependsOn ? evalCondition(f.mandatoryDependsOn) : false
 }
@@ -2480,6 +5155,7 @@ function isReadOnly(f) {
 // names. User flagged on 2026-05-29.)
 const visibleFormFields = computed(() =>
 	formFields.value.filter((f) => {
+		if (isStockEntryBookEntry.value && f.fieldname === "skip_transit" && form.purpose !== "Send to Warehouse") return false
 		if (f.dependsOn && !evalCondition(f.dependsOn)) return false
 		if (isReadOnly(f)) {
 			const mfType = metaFieldMap.value[f.fieldname]?.fieldtype
@@ -2496,8 +5172,26 @@ const visibleFormFields = computed(() =>
 // boundary). Fields outside any meta section (or with a custom order that has no
 // section breaks) fall into the first "Details" card, so nothing is dropped.
 const visibleFormSections = computed(() => {
+	if (isPiBookEntry.value) return []
 	const fields = visibleFormFields.value
 	if (!fields.length) return []
+	const configuredGroups = getFormGroups(doctype.value)
+	if (configuredGroups?.length) {
+		const byName = Object.fromEntries(fields.map((field) => [field.fieldname, field]))
+		const used = new Set()
+		const groups = configuredGroups.flatMap((group, index) => {
+			const groupedFields = (group.fields || [])
+				.map((fieldname) => byName[fieldname])
+				.filter(Boolean)
+			for (const field of groupedFields) used.add(field.fieldname)
+			return groupedFields.length
+				? [{ key: group.key || `configured-${index}`, label: group.label || "Details", fields: groupedFields }]
+				: []
+		})
+		const remaining = fields.filter((field) => !used.has(field.fieldname))
+		if (remaining.length) groups.push({ key: "configured-more", label: "Additional details", fields: remaining })
+		return groups
+	}
 
 	// Build fieldname → { key, label } section assignment from meta order.
 	const sectionByField = {}
@@ -2574,6 +5268,35 @@ function clearForm() {
 	for (const k of Object.keys(form)) delete form[k]
 }
 
+function updateCheckField(fieldname, checked) {
+	form[fieldname] = checked ? 1 : 0
+	if (isProcessCost.value && fieldname === "depends_on_attribute") {
+		if (!checked) {
+			form.attribute = ""
+			form.process_cost_values = [blankProcessCostValue(form.process_cost_values?.[0])]
+		} else if (form.item && form.attribute) {
+			loadProcessCostAttributeRows()
+		} else {
+			form.process_cost_values = []
+		}
+		return
+	}
+	if (isItemPrice.value && fieldname === "depends_on_attribute") {
+		if (!checked) {
+			form.attribute = ""
+			form.item_price_values = [blankItemPriceValue(form.item_price_values?.[0])]
+		} else if (form.item_name && form.attribute) {
+			loadItemPriceAttributeRows()
+		} else {
+			form.item_price_values = []
+		}
+		return
+	}
+	if (!checked || !isPurchaseOrder.value) return
+	if (fieldname === "mgk_is_karigan_order") form.mgk_is_salavai_cone_order = 0
+	if (fieldname === "mgk_is_salavai_cone_order") form.mgk_is_karigan_order = 0
+}
+
 function buildCreateForm() {
 	clearForm()
 	resetDirty()
@@ -2596,6 +5319,14 @@ function buildCreateForm() {
 	// Initialise editable child tables to empty arrays.
 	for (const ct of editableChildTables.value) {
 		form[ct.fieldname] = []
+	}
+	if (isItemProductionDetail.value) form.mgk_yarn_process_routes = []
+	if (isProcessCost.value) form.process_cost_values = [blankProcessCostValue()]
+	if (isItemPrice.value) form.item_price_values = [blankItemPriceValue()]
+	if (isUser.value) {
+		form.enabled = 1
+		form.roles = []
+		form.role_profiles = []
 	}
 	const duplicateApplied = applyPendingDuplicateDraft()
 	// Pre-fill from route query (Create-from-parent buttons like WO → Create
@@ -2673,6 +5404,8 @@ async function applyCreateFormQuery() {
 		await onFieldChanged("against_id")
 	} else if (dt === "Inspection Entry" && form.against_id) {
 		await onFieldChanged("against_id")
+	} else if (dt === "Work Order Correction" && form.work_order) {
+		await onFieldChanged("work_order")
 	}
 }
 
@@ -2694,6 +5427,10 @@ function buildEditForm() {
 
 async function enterEdit() {
 	if (!doc.value) return
+	if (isIpdApproved.value) {
+		toast.warn("Approved IPD is locked", "Reject the approval before editing this production detail.")
+		return
+	}
 	serverError.value = null
 	missingField.value = null
 	buildEditForm()
@@ -2706,6 +5443,11 @@ async function enterEdit() {
 	// Q6: arm dirty tracking after the form + grids settle (grid hydration is on
 	// the child editor, not `form`, so it never marks dirty).
 	armDirty()
+	await focusFormStart()
+}
+
+function focusFormStart() {
+	return focusFirstControl(formCardEl)
 }
 
 // Fetch the grouped item_details/deliverable_details/receivable_details from the
@@ -2713,6 +5455,7 @@ async function enterEdit() {
 // failure leaves the grids empty (the user can re-enter), but we keep the flat
 // rows on the doc untouched until an actual save.
 async function hydratePivotsForEdit() {
+	correctionLoaded.value = false
 	try {
 		const loaded = await getDocWithOnload(doctype.value, props.id)
 		const onload = loaded?.__onload || {}
@@ -2722,6 +5465,10 @@ async function hydratePivotsForEdit() {
 			const grouped = onload[pv.groupedField]
 			if (grid?.loadData && grouped != null) grid.loadData(grouped)
 		}
+		if (hasCorrectionSection.value && correctionGrid.value?.loadData) {
+			correctionGrid.value.loadData(onload.correction_item_details || [])
+			correctionLoaded.value = true
+		}
 	} catch (e) {
 		toast.warn("Could not load existing items", "Re-enter the items before saving, or edit in Desk.")
 	}
@@ -2729,16 +5476,19 @@ async function hydratePivotsForEdit() {
 
 // ════════════════ EDITABLE CHILD TABLES ════════════════
 
-// Editable child tables = meta Table fields, minus the hidden grouped-JSON
+// Editable child tables = meta Table / Table MultiSelect fields, minus the hidden grouped-JSON
 // twins. Columns come from the child DocType's meta (in the bundle) when
 // available, else from the first existing row.
 const editableChildTables = computed(() => {
 	if (!isFormMode.value) return []
+	if (isPiBookEntry.value || isIpdBookEntry.value || isWorkOrderBookEntry.value) return []
 	const pivotFields = pivotChildFields.value
+	const hiddenTables = getHiddenChildTables(doctype.value)
 	const metaTables = (meta.value?.fields || []).filter(
 		(f) =>
-			f.fieldtype === "Table" &&
+			["Table", "Table MultiSelect"].includes(f.fieldtype) &&
 			!f.hidden &&
+			!hiddenTables.has(f.fieldname) &&
 			!GROUPED_JSON_FIELDS.has(f.fieldname) &&
 			!CHILD_TABLE_EXCLUDE.has(f.fieldname) &&
 			// Honor depends_on on the CHILD-TABLE field itself (e.g. Process'
@@ -2751,6 +5501,9 @@ const editableChildTables = computed(() => {
 			// the deliverables/receivables pivots (see mgkItemsTable). Drop it from
 			// the generic loop so it isn't rendered twice (and below the pivots).
 			!(isWorkOrder.value && f.fieldname === "mgk_items") &&
+			// DC/GRN correction rows use the grouped per-correction surface below,
+			// never the flat child grid.
+			!(hasCorrectionSection.value && f.fieldname === "correction_items") &&
 			// R3a: stock-pivot doctypes edit these child tables through the grouped
 			// pivot editor, not the flat grid — drop them here for those doctypes only.
 			!pivotFields.has(f.fieldname),
@@ -2770,6 +5523,41 @@ const editableChildTables = computed(() => {
 	}
 	return out
 })
+
+const MASTER_SUMMARY_FIELDS = {
+	"Item": [["Item", "name1"], ["Group", "item_group"], ["Primary UOM", "default_unit_of_measure"]],
+	"Supplier": [["Supplier", "supplier_name"], ["GSTIN", "gstin"], ["Department", "department"]],
+	"MGK Agent": [["Agent", "agent_name"], ["Commission", "commission_terms"]],
+	"Warehouse": [["Warehouse", "name1"], ["Supplier", "supplier"]],
+	"Item Price": [["Item", "item_name"], ["Supplier", "supplier"], ["UOM", "uom"]],
+	"Process Cost": [["Process", "process_name"], ["Job-worker", "supplier"], ["Item", "item"]],
+	"User": [["User", "email"], ["Type", "user_type"], ["Roles", "roles"]],
+}
+const masterSummaryLines = computed(() => (MASTER_SUMMARY_FIELDS[doctype.value] || [])
+	.map(([label, fieldname]) => {
+		const value = fieldname === "roles"
+			? `${(form.roles || []).length || (form.role_profiles || []).length || 0} selected`
+			: form[fieldname]
+		return { label, value }
+	})
+)
+const masterEnabledLabel = computed(() => {
+	if (doctype.value === "User") return form.enabled ? "Active" : "Disabled"
+	if ("disabled" in form) return form.disabled ? "Disabled" : "Active"
+	return form.workflow_state || "Draft"
+})
+const masterRequiredChecks = computed(() => {
+	const parent = visibleFormFields.value
+		.filter(isReqd)
+		.map((field) => ({ complete: !isMissing(field) }))
+	const children = editableChildTables.value
+		.filter((table) => metaFieldMap.value[table.fieldname]?.reqd)
+		.map((table) => ({ complete: Array.isArray(form[table.fieldname]) && form[table.fieldname].length > 0 }))
+	return [...parent, ...children]
+})
+const masterRequiredTotal = computed(() => masterRequiredChecks.value.length)
+const masterRequiredComplete = computed(() => masterRequiredChecks.value.filter((check) => check.complete).length)
+const masterReadyToSave = computed(() => masterRequiredTotal.value > 0 && masterRequiredComplete.value === masterRequiredTotal.value)
 
 // F4: Work Order's `mgk_items` (MGK Work Order Item: item Link→Item +
 // production_detail Link→Item Production Detail) renders in a DEDICATED flat
@@ -2899,18 +5687,14 @@ function parentStateForRules() {
 
 // Per-(doctype) child-column hide rules, declared in a self-contained config and
 // keyed by parent doctype. Each rule maps a child-table fieldname → { columnFn:
-// (parent) => true|false }; returning true HIDES that column. Currently only
-// Process Cost (hide `attribute_value` of `process_cost_values` unless the
-// parent's `depends_on_attribute` is ticked — mirrors Desk).
-const CHILD_COLUMN_RULE_CONFIGS = {
-	[processCostConfig.doctype]: processCostConfig.childColumnRules,
-}
-
+// (parent) => true|false }; returning true HIDES that column. Item Price and
+// Process Cost both use this to hide their attribute-value column unless the
+// parent's `depends_on_attribute` is ticked — mirroring Desk.
 // True ⇒ this child-table column must be HIDDEN for the current parent state.
 // Scoped: only fires for a (doctype, childTable, column) that has a declared rule;
 // everything else falls through (never hidden). Reactive via parentStateForRules.
 function childColumnHiddenBy(tableFieldname, columnFieldname) {
-	const rule = CHILD_COLUMN_RULE_CONFIGS[doctype.value]?.[tableFieldname]?.[columnFieldname]
+	const rule = getChildColumnRules(doctype.value)?.[tableFieldname]?.[columnFieldname]
 	if (typeof rule !== "function") return false
 	try {
 		return !!rule(parentStateForRules())
@@ -3064,13 +5848,30 @@ function reqdFieldnames(columns) {
 	return (columns || []).filter((c) => c.reqd).map((c) => c.fieldname)
 }
 
-function addChildRow(ct) {
+async function addChildRow(ct) {
 	if (!Array.isArray(form[ct.fieldname])) form[ct.fieldname] = []
 	const row = {}
 	for (const col of ct.columns) {
 		row[col.fieldname] = col.input === "number" ? null : ""
 	}
 	form[ct.fieldname].push(row)
+	await focusNewChildRow(ct)
+}
+
+async function focusNewChildRow(ct) {
+	await nextTick()
+	const columns = shownColumns(
+		ct.fieldname,
+		ct.columns,
+		reqdFieldnames(ct.columns),
+	)
+	const editableColumnIndex = columns.findIndex((column) => !column.readonly)
+	if (editableColumnIndex < 0) return false
+	const table = document.querySelector(`.edit-dt[data-child-field="${CSS.escape(ct.fieldname)}"]`)
+	const cell = table?.querySelector(`.p-datatable-tbody > tr:last-child > td:nth-child(${editableColumnIndex + 1})`)
+	if (!cell) return false
+	cell.click()
+	return focusFirstControl(cell)
 }
 
 function removeChildRow(ct, index) {
@@ -3080,13 +5881,38 @@ function removeChildRow(ct, index) {
 function onCellEditComplete(ct, e) {
 	// PrimeVue cell edit: commit the new value onto the row.
 	const { data, newValue, field } = e
+	const column = (ct?.columns || []).find((candidate) => candidate.fieldname === field)
+	// LinkField commits only a confirmed canonical Link name. PrimeVue does not
+	// own that component's local autocomplete query, so its cell event must not
+	// overwrite the canonical value with a stale editor value.
+	if (column?.input === "link") return
 	if (data) data[field] = newValue
 }
 
 function childCellDisplay(val, col) {
 	if (val === null || val === undefined || val === "") return "—"
 	if (col.input === "number") return formatNumber(val)
+	if (col.input === "link" && col.linkTarget) {
+		return linkTitles.titleFor(col.linkTarget, val) || String(val)
+	}
 	return String(val)
+}
+
+function childLinkFilters(col, row = {}) {
+	const target = col?.linkTarget
+	if (target === "Goods Received Note" && isPurchaseInvoice.value) {
+		const filters = { docstatus: 1, purchase_invoice_name: ["is", "not set"] }
+		if (form.supplier) filters.supplier = form.supplier
+		if (form.against) filters.against = form.against
+		return filters
+	}
+	if (target === "Item Attribute Value" && (isProcessCost.value || isItemPrice.value) && form.attribute) {
+		return { attribute_name: form.attribute }
+	}
+	if (col?.fieldname === "production_detail" && isWorkOrder.value) {
+		return row?.item ? { item: row.item } : { item: "__no_item_selected__" }
+	}
+	return {}
 }
 
 // ── Link autocomplete (parent fields) ──
@@ -3154,7 +5980,11 @@ function zeroGroupedQtys(itemDetails) {
 	for (const g of itemDetails || []) {
 		for (const it of g.items || []) {
 			for (const cell of Object.values(it.values || {})) {
-				if (cell && typeof cell === "object") cell.qty = 0
+				if (!cell || typeof cell !== "object") continue
+				cell.qty = 0
+				for (const fieldname of ["stock_qty", "amount", "discount_amount", "tax_amount", "total_amount"]) {
+					if (fieldname in cell) cell[fieldname] = 0
+				}
 			}
 		}
 	}
@@ -3173,7 +6003,7 @@ async function onFetchGrn() {
 	try {
 		const r = await callMethod(
 			"yrp.yrp.doctype.purchase_invoice.purchase_invoice.fetch_grn_details",
-			{ grns: JSON.stringify(grns), against: form.against, supplier: form.supplier },
+			{ grns: JSON.stringify(grns), against: form.against, supplier: form.supplier, purchase_invoice: isCreate.value ? null : props.id },
 		)
 		if (!r || typeof r !== "object") return
 		form.items = (r.items || []).map((row) => ({ ...row }))
@@ -3192,6 +6022,43 @@ async function onFetchGrn() {
 
 async function runDocAutofill(fieldname) {
 	const dt = doctype.value
+	if (dt === "Work Order Correction" && fieldname === "work_order") {
+		const contextFields = [
+			"process_name", "item", "production_detail", "supplier", "delivery_location",
+			"wo_date", "supplier_address", "delivery_address",
+		]
+		if (!form.work_order) {
+			for (const field of contextFields) form[field] = ""
+			return
+		}
+		try {
+			const result = await callMethod("frappe.client.get_value", {
+				doctype: "Work Order",
+				filters: form.work_order,
+				fieldname: [...contextFields, "docstatus", "open_status"],
+			})
+			if (Number(result?.docstatus) !== 1 || result?.open_status === "Close") {
+				form.work_order = ""
+				for (const field of contextFields) form[field] = ""
+				toast.warn("Work Order unavailable", "Choose a submitted, open Work Order.")
+				return
+			}
+			for (const field of contextFields) form[field] = result?.[field] || ""
+			await linkTitles.prime([
+				{ doctype: "Item", name: form.item },
+				{ doctype: "Supplier", name: form.supplier },
+				{ doctype: "Supplier", name: form.delivery_location },
+			])
+			await nextTick()
+			const firstCorrectionGrid = stockPivots.value
+				.map((pivot) => gridRefs[pivot.childField])
+				.find((grid) => typeof grid?.focusFirstEntry === "function")
+			await firstCorrectionGrid?.focusFirstEntry?.()
+		} catch (error) {
+			toast.error("Work Order lookup failed", error.message)
+		}
+		return
+	}
 	// Item Production Detail mirrors production_api's item-change handler
 	// (apps/production_api/.../item_production_detail.js line 665) — picking
 	// the parent Item auto-fills primary/dependent attribute + item_attributes
@@ -3233,6 +6100,7 @@ async function runDocAutofill(fieldname) {
 			)
 			await nextTick()
 			if (gridRefs.items?.loadData) gridRefs.items.loadData(payload || [])
+			await gridRefs.items?.focusFirstAction?.()
 		} catch (e) {
 			toast.error("Auto-fill failed", e.message)
 		}
@@ -3241,12 +6109,34 @@ async function runDocAutofill(fieldname) {
 	let method = ""
 	let args = null
 	if (dt === "Delivery Challan" && fieldname === "work_order") {
-		if (!form.work_order) return
+		if (!form.work_order) {
+			gridRefs.items?.loadData?.([])
+			correctionGrid.value?.loadData?.([])
+			correctionLoaded.value = true
+			return
+		}
 		method = "yrp.yrp.doctype.delivery_challan.delivery_challan.get_work_order_defaults"
 		args = { work_order: form.work_order, posting_date: form.posting_date, posting_time: form.posting_time }
 	} else if (dt === "Goods Received Note" && (fieldname === "against_id" || fieldname === "delivery_challan")) {
-		if (!form.against_id) return
+		if (!form.against_id) {
+			gridRefs.items?.loadData?.([])
+			correctionGrid.value?.loadData?.([])
+			correctionLoaded.value = true
+			return
+		}
 		if (form.against === "Work Order") {
+			if (!form.delivery_challan) {
+				try {
+					const { data } = await getList("Delivery Challan", {
+						fields: ["name"],
+						filters: [["work_order", "=", form.against_id], ["docstatus", "=", 1]],
+						limit_page_length: 2,
+					})
+					if (Array.isArray(data) && data.length === 1) form.delivery_challan = data[0].name
+				} catch (_) {
+					/* Source defaults remain usable when no unique challan is available. */
+				}
+			}
 			method = "yrp.yrp.doctype.goods_received_note.goods_received_note.get_work_order_defaults"
 			args = { work_order: form.against_id, delivery_challan: form.delivery_challan || "" }
 		} else if (form.against === "Purchase Order") {
@@ -3256,12 +6146,11 @@ async function runDocAutofill(fieldname) {
 	} else {
 		return
 	}
-	// Per-doctype fields to drop from the autofill response so the user has
-	// to pick them manually (preference 2026-05-29 — DC's from_warehouse is
-	// the floor's pick, not WO-derived). The server-side `set_missing_values`
-	// fallback still rescues an empty value on save.
+	// The Work Order owns the receiving side. The dispatching party remains the
+	// operator's only routing choice; its unique active Warehouse is resolved
+	// after the party is selected rather than copied from the Work Order.
 	const AUTOFILL_SKIP = {
-		"Delivery Challan": new Set(["from_warehouse"]),
+		"Delivery Challan": new Set(["from_location", "from_warehouse"]),
 	}
 	try {
 		const r = await callMethod(method, args)
@@ -3269,17 +6158,42 @@ async function runDocAutofill(fieldname) {
 		const skip = AUTOFILL_SKIP[dt] || new Set()
 		for (const [k, v] of Object.entries(r)) {
 			if (k === "items" || k === "item_details") continue
+			if (k === "correction_items" || k === "correction_item_details") continue
 			if (skip.has(k)) continue
 			if (k in form) form[k] = v // apply returned header fields
+		}
+		if (dt === "Delivery Challan") {
+			await linkTitles.prime([
+				{ doctype: "Supplier", name: form.from_location },
+				{ doctype: "Supplier", name: form.supplier },
+			])
+		}
+		if (dt === "Goods Received Note") {
+			await linkTitles.prime([
+				{ doctype: "Supplier", name: form.supplier },
+				{ doctype: "Warehouse", name: form.to_warehouse },
+			])
 		}
 		// GRN: start every received type at 0 so the user types the actual received
 		// qty per row (total still clamped to pending) — no "all accepted" pre-fill.
 		if (dt === "Goods Received Note") zeroGroupedQtys(r.item_details)
+		// Delivery Challan follows the same source-driven quantity flow: load every
+		// deliverable and its pending limit, but let the operator enter dispatch-now.
+		if (dt === "Delivery Challan") zeroGroupedQtys(r.item_details)
 		await nextTick()
 		for (const pv of stockPivots.value) {
 			const grid = gridRefs[pv.childField]
 			if (grid?.loadData && r.item_details != null) grid.loadData(r.item_details)
 		}
+		if (hasCorrectionSection.value && correctionGrid.value?.loadData) {
+			zeroGroupedQtys((r.correction_item_details || []).flatMap((block) => block.item_details || []))
+			correctionGrid.value.loadData(r.correction_item_details || [])
+			correctionLoaded.value = true
+		}
+		const firstEntryGrid = stockPivots.value
+			.map((pivot) => gridRefs[pivot.childField])
+			.find((grid) => typeof grid?.focusFirstQuantity === "function")
+		await firstEntryGrid?.focusFirstQuantity?.()
 	} catch (e) {
 		toast.error("Auto-fill failed", e.message)
 	}
@@ -3292,6 +6206,39 @@ function resetGrnSource() {
 		if (k in form) form[k] = k === "is_rework" ? 0 : ""
 	}
 	for (const pv of stockPivots.value) gridRefs[pv.childField]?.loadData?.([])
+	correctionGrid.value?.loadData?.([])
+	correctionLoaded.value = true
+}
+
+async function resolveDeliveryChallanFromWarehouse() {
+	const requestId = ++dcWarehouseLookupSequence
+	const fromLocation = form.from_location
+	form.from_warehouse = ""
+	if (!fromLocation) return
+	try {
+		const { data } = await getList("Warehouse", {
+			fields: ["name"],
+			filters: [
+				["supplier", "=", fromLocation],
+				["disabled", "=", 0],
+			],
+			limit_page_length: 2,
+		})
+		if (requestId !== dcWarehouseLookupSequence || form.from_location !== fromLocation) return
+		if (Array.isArray(data) && data.length === 1) {
+			form.from_warehouse = data[0].name
+			await linkTitles.prime([{ doctype: "Supplier", name: fromLocation }])
+			return
+		}
+		if (!data?.length) {
+			toast.warn("Warehouse not configured", "Create one active Warehouse linked to this From Location before saving.")
+			return
+		}
+		toast.warn("Multiple warehouses found", "Keep exactly one active Warehouse linked to this From Location so it can be selected automatically.")
+	} catch (error) {
+		if (requestId !== dcWarehouseLookupSequence || form.from_location !== fromLocation) return
+		toast.error("Warehouse lookup failed", error.message)
+	}
 }
 
 // Per-field custom Link search (e.g. Work Order's address fields filter by the
@@ -3306,13 +6253,92 @@ function linkSearchHandlerFor(f) {
 // Wired on editable link/select inputs: cascade fetch_from + clear dependent
 // address fields + run doctype auto-fill.
 async function onFieldChanged(fieldname) {
+	// WOC has eight fetch_from fields pointing at the same Work Order. Resolve
+	// them in one permission-checked request instead of issuing one API call per
+	// fetched field.
+	if (isWorkOrderCorrection.value && fieldname === "work_order") {
+		await runDocAutofill(fieldname)
+		return
+	}
 	await applyFetchFrom(fieldname)
+	if (doctype.value === "Delivery Challan") {
+		if (fieldname === "work_order") {
+			form.from_location = ""
+			form.from_warehouse = ""
+		}
+		if (fieldname === "from_location") {
+			await resolveDeliveryChallanFromWarehouse()
+		}
+	}
+	if (isProcessCost.value && fieldname === "item") {
+		form.attribute = ""
+		form.process_cost_values = form.depends_on_attribute
+			? []
+			: [blankProcessCostValue()]
+	}
+	if (isItemPrice.value && fieldname === "item_name") {
+		form.attribute = ""
+		form.item_price_values = form.depends_on_attribute
+			? []
+			: [blankItemPriceValue()]
+	}
+	if (
+		isProcessCost.value
+		&& form.depends_on_attribute
+		&& fieldname === "attribute"
+	) {
+		await loadProcessCostAttributeRows()
+	}
+	if (isItemPrice.value && form.depends_on_attribute && fieldname === "attribute") {
+		await loadItemPriceAttributeRows()
+	}
+	if (doctype.value === "Purchase Order" && fieldname === "supplier" && form.supplier) {
+		await linkTitles.prime([{ doctype: "Supplier", name: form.supplier }])
+	}
 	// Work Order: changing the party invalidates any address picked under the
 	// previous party (the address autocomplete is filtered by party — keeping a
 	// stale value would let the user submit an address that doesn't belong).
+	// Then select the preferred/only linked address, matching the quick-entry
+	// expectation of this Registered Experience.
 	if (doctype.value === "Work Order") {
-		if (fieldname === "supplier") form.supplier_address = ""
-		if (fieldname === "delivery_location") form.delivery_address = ""
+		if (fieldname === "supplier") {
+			form.supplier_address = ""
+			form.supplier_address_details = ""
+			await fillPreferredWorkOrderAddress("supplier", "supplier_address", "supplier_address_details", false)
+		}
+		if (fieldname === "delivery_location") {
+			form.delivery_address = ""
+			form.delivery_address_details = ""
+			await fillPreferredWorkOrderAddress("delivery_location", "delivery_address", "delivery_address_details", true)
+		}
+		if (fieldname === "supplier_address") {
+			await fillPreferredWorkOrderAddress("supplier", "supplier_address", "supplier_address_details", false)
+		}
+		if (fieldname === "delivery_address") {
+			await fillPreferredWorkOrderAddress("delivery_location", "delivery_address", "delivery_address_details", true)
+		}
+		if (fieldname === "process_name") {
+			form.production_detail = ""
+			form.item = ""
+		}
+		if (fieldname === "production_detail") {
+			form.item = ""
+			if (form.production_detail && form.process_name) {
+				try {
+					const context = await callMethod(
+						"mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.get_work_order_production_detail_context",
+						{
+							production_detail: form.production_detail,
+							process_name: form.process_name,
+						},
+					)
+					form.item = context?.item || ""
+				} catch (error) {
+					form.production_detail = ""
+					toast.error("Invalid production detail", error.message)
+				}
+			}
+		}
 	}
 	if (doctype.value === "Goods Received Note" && fieldname === "against") {
 		resetGrnSource()
@@ -3324,6 +6350,110 @@ async function onFieldChanged(fieldname) {
 		return
 	}
 	await runDocAutofill(fieldname)
+}
+
+async function onLinkFieldChanged(fieldname, event) {
+	// LinkField emits `change` only for an explicit clear. Committed selections
+	// arrive through `item-select`; partial search text must never run dependent
+	// document logic or server calls.
+	if (event?.value || form[fieldname]) return
+	await onFieldChanged(fieldname)
+}
+
+function workOrderAddressDisplay(address) {
+	return [
+		address?.address_line1,
+		address?.address_line2,
+		[address?.city, address?.state, address?.pincode].filter(Boolean).join(", "),
+		address?.country,
+	].filter(Boolean).join(", ")
+}
+
+async function fillPreferredWorkOrderAddress(partyField, addressField, detailsField, preferShipping) {
+	const party = form[partyField]
+	if (!party) return
+	try {
+		const addresses = (await getAddressList("Supplier", party)).filter((row) => !row.disabled)
+		if (!addresses.length) return
+		let selected = addresses.find((row) => row.name === form[addressField])
+		if (!selected) {
+			selected = (preferShipping && addresses.find((row) => row.is_shipping_address))
+				|| addresses.find((row) => row.is_primary_address)
+				|| addresses[0]
+			form[addressField] = selected.name
+		}
+		form[detailsField] = workOrderAddressDisplay(selected)
+	} catch (error) {
+		// Keep the field available for manual selection. The server remains the
+		// authority for required-address validation.
+		console.warn(`Could not load linked addresses for ${party}`, error)
+	}
+}
+
+function blankProcessCostValue(source = {}) {
+	return {
+		min_order_qty: source?.min_order_qty ?? 0,
+		price: source?.price ?? 0,
+		attribute_value: "",
+	}
+}
+
+function blankItemPriceValue(source = {}) {
+	return {
+		moq: source?.moq ?? 0,
+		price: source?.price ?? 0,
+		lead_time: source?.lead_time ?? 0,
+		attribute_value: "",
+	}
+}
+
+async function loadItemPriceAttributeRows() {
+	if (!form.item_name || !form.attribute || !form.depends_on_attribute) return
+	try {
+		const valuesByAttribute = await callMethod(
+			"yrp.yrp.doctype.item.item.get_attribute_values",
+			{ item: form.item_name, attributes: [form.attribute] },
+		)
+		const values = valuesByAttribute?.[form.attribute] || []
+		const previous = new Map(
+			(form.item_price_values || []).map((row) => [row.attribute_value, row]),
+		)
+		form.item_price_values = values.map((attribute_value) => ({
+			...blankItemPriceValue(previous.get(attribute_value)),
+			attribute_value,
+		}))
+		if (!form.item_price_values.length) {
+			toast.warn("No attribute values", `No ${form.attribute} values are mapped to ${form.item_name}.`)
+		}
+	} catch (error) {
+		toast.error("Could not load price rows", error?.message || "Try again.")
+	}
+}
+
+async function loadProcessCostAttributeRows() {
+	if (!form.item || !form.attribute || !form.depends_on_attribute) return
+	try {
+		const rows = await callMethod(
+			"yrp.yrp.doctype.process_cost.process_cost.get_pc_attribute_values",
+			{ item: form.item, attribute: form.attribute },
+		)
+		const previous = new Map(
+			(form.process_cost_values || []).map((row) => [
+				row.attribute_value,
+				{ price: row.price, min_order_qty: row.min_order_qty },
+			]),
+		)
+		form.process_cost_values = (rows || []).map((row) => ({
+			...row,
+			price: previous.get(row.attribute_value)?.price ?? row.price ?? 0,
+			min_order_qty: previous.get(row.attribute_value)?.min_order_qty ?? row.min_order_qty ?? 0,
+		}))
+		if (!form.process_cost_values.length) {
+			toast.warn("No attribute values", `No ${form.attribute} values are mapped to ${form.item}.`)
+		}
+	} catch (e) {
+		toast.error("Could not load rate rows", e.message)
+	}
 }
 
 async function onLinkComplete(field, e) {
@@ -3357,6 +6487,9 @@ async function onChildLinkComplete(col, e) {
 			filters = { docstatus: 1, purchase_invoice_name: ["is", "not set"] }
 			if (form.supplier) filters.supplier = form.supplier
 			if (form.against) filters.against = form.against
+		}
+		if (target === "Item Attribute Value" && (isProcessCost.value || isItemPrice.value) && form.attribute) {
+			filters = { attribute_name: form.attribute }
 		}
 		const rows = await searchLink(target, e.query || "", filters)
 		childLinkSuggestions.value = rows.map((r) => r.name)
@@ -3430,6 +6563,13 @@ function buildPayload() {
 		// Empty flat child → before_validate clears + rebuilds it from grouped.
 		payload[pv.childField] = []
 	}
+	if (hasCorrectionSection.value && correctionGrid.value?.getItems) {
+		const blocks = correctionGrid.value.getItems()
+		if (mode.value !== "edit" || correctionLoaded.value || blocks.length > 0) {
+			payload.correction_item_details = JSON.stringify(blocks)
+			payload.correction_items = []
+		}
+	}
 	// Prompt-named create: include the user-supplied name in the insert body.
 	// createDoc POSTs JSON.stringify(payload) to /api/resource/<doctype>, and
 	// Frappe's REST insert honours a provided `name` for autoname="prompt" /
@@ -3456,6 +6596,21 @@ function buildPayload() {
 // null for a child-table cell — there's no scroll target on the parent form), or
 // null when everything required is filled. The fieldname drives Q5's scroll+focus.
 function firstMissingRequired() {
+	if (isPiBookEntry.value) {
+		for (const [fieldname, label] of [
+			["supplier", "Supplier"],
+			["billing_supplier", "Billing Supplier"],
+			["bill_no", "Supplier Invoice No"],
+			["bill_date", "Supplier Invoice Date"],
+			["posting_date", "Posting Date"],
+			["against", "Billing source"],
+		]) {
+			if (!form[fieldname]) return { label, fieldname }
+		}
+		if (piEntrySummary.grnCount <= 0) return { label: "Goods Received Notes — select at least one GRN", fieldname: null, target: "pi-grn" }
+		if (!piEntrySummary.fetched || piEntrySummary.itemCount <= 0) return { label: "Billed items — fetch the selected GRNs", fieldname: null, target: "pi-grn" }
+		return null
+	}
 	// 1) Parent fields (only those currently visible — a depends_on-hidden field
 	// is not required).
 	for (const f of visibleFormFields.value) {
@@ -3472,14 +6627,23 @@ function firstMissingRequired() {
 		? [mgkItemsTable.value, ...editableChildTables.value]
 		: editableChildTables.value
 	for (const ct of editGrids) {
+		const rows = Array.isArray(form[ct.fieldname]) ? form[ct.fieldname] : []
+		if (metaFieldMap.value[ct.fieldname]?.reqd && !rows.length) {
+			return { label: `${ct.label} — add at least one row`, fieldname: null, childField: ct.fieldname }
+		}
 		const reqdCols = ct.columns.filter((c) => c.reqd)
 		if (!reqdCols.length) continue
-		const rows = Array.isArray(form[ct.fieldname]) ? form[ct.fieldname] : []
 		for (let i = 0; i < rows.length; i++) {
 			for (const col of reqdCols) {
 				const v = rows[i][col.fieldname]
 				if (v === null || v === undefined || v === "") {
-					return { label: `${ct.label} → ${col.label} (row ${i + 1})`, fieldname: null }
+					return {
+						label: `${ct.label} → ${col.label} (row ${i + 1})`,
+						fieldname: null,
+						childField: ct.fieldname,
+						childRow: i,
+						childColumn: col.fieldname,
+					}
 				}
 			}
 		}
@@ -3490,8 +6654,46 @@ function firstMissingRequired() {
 	if (isInspectionEntry.value) {
 		const grid = gridRefs.items
 		if (grid && grid.hasItems && !grid.hasItems()) {
-			return { label: "Items — select a source document so its items load", fieldname: null }
+			return { label: "Items — select a source document so its items load", fieldname: null, target: "items-action" }
 		}
+	}
+	// Purchase Order items live in StockItemGridEditor rather than `form`, so
+	// enforce the required child table before making the save request.
+	if (isPurchaseOrder.value) {
+		const grid = gridRefs.items
+		if (grid && grid.hasItems && !grid.hasItems()) {
+			return { label: "Items — add at least one ordered item", fieldname: null, target: "items-entry" }
+		}
+	}
+	if (isWorkOrderCorrection.value) {
+		const correctionQty = wocEntrySummary.deliverables.totalQty + wocEntrySummary.receivables.totalQty
+		if (correctionQty <= 0) {
+			return { label: "Correction rows — add at least one deliverable or receivable quantity", fieldname: null, target: "woc-entry" }
+		}
+	}
+	if (isStockEntryBookEntry.value) {
+		if (stockEntryNeedsFrom.value && !form.from_warehouse) {
+			return { label: "From Warehouse — required for this purpose", fieldname: "from_warehouse" }
+		}
+		if (stockEntryNeedsTo.value && !form.to_warehouse) {
+			return { label: "To Warehouse — required for this purpose", fieldname: "to_warehouse" }
+		}
+		const grid = gridRefs.items
+		if (grid && grid.hasItems && !grid.hasItems()) {
+			return { label: "Items — add at least one stock item", fieldname: null, target: "items-entry" }
+		}
+	}
+	if (isGrnBookEntry.value && (grnEntrySummary.totalQty + correctionEntrySummary.totalQty) <= 0) {
+		return { label: "Received quantity — enter the quantity received now", fieldname: null, target: "items-quantity" }
+	}
+	if (isDcBookEntry.value && form.from_location && !form.from_warehouse) {
+		return { label: "From Location — configure exactly one active linked Warehouse", fieldname: "from_location" }
+	}
+	if (isDcBookEntry.value && (dcEntrySummary.totalQty + correctionEntrySummary.totalQty) <= 0) {
+		return { label: "Dispatch quantity — enter the quantity sent now", fieldname: null, target: "items-quantity" }
+	}
+	if (isIpdBookEntry.value && ipdEntrySummary.processCount <= 0) {
+		return { label: "Yarn process flow — add at least one process", fieldname: null, target: "ipd-process" }
 	}
 	return null
 }
@@ -3506,6 +6708,50 @@ async function focusMissingField(fieldname) {
 	wrap.scrollIntoView({ behavior: "smooth", block: "center" })
 	const input = wrap.querySelector("input, textarea, select, [tabindex]")
 	if (input && typeof input.focus === "function") input.focus()
+}
+
+async function focusMissingRequirement(missing) {
+	if (!missing) return false
+	if (missing.fieldname) {
+		await focusMissingField(missing.fieldname)
+		return true
+	}
+	if (missing.childField) {
+		await nextTick()
+		const table = document.querySelector(`.edit-dt[data-child-field="${CSS.escape(missing.childField)}"]`)
+		if (!table) return false
+		if (missing.childColumn != null && missing.childRow != null) {
+			const ct = [mgkItemsTable.value, ...editableChildTables.value]
+				.find((candidate) => candidate?.fieldname === missing.childField)
+			const columns = ct ? shownColumns(ct.fieldname, ct.columns, reqdFieldnames(ct.columns)) : []
+			const columnIndex = columns.findIndex((column) => column.fieldname === missing.childColumn)
+			const cell = columnIndex >= 0
+				? table.querySelector(`.p-datatable-tbody > tr:nth-child(${missing.childRow + 1}) > td:nth-child(${columnIndex + 1})`)
+				: null
+			if (cell) {
+				cell.click()
+				return focusFirstControl(cell)
+			}
+		}
+		const addButton = [...(table.closest(".child-editor")?.querySelectorAll("button") || [])]
+			.find((button) => button.textContent?.includes("Add Row") && !button.disabled)
+		addButton?.scrollIntoView?.({ behavior: "smooth", block: "center" })
+		addButton?.focus?.()
+		return Boolean(addButton)
+	}
+	if (missing.target === "pi-grn") return piEntryEditor.value?.focusFirstGrn?.() || false
+	if (missing.target === "ipd-process") return ipdFlowEditor.value?.focusAddAction?.() || false
+	if (missing.target === "correction-quantity") return correctionGrid.value?.focusFirstQuantity?.() || false
+	if (missing.target === "woc-entry") {
+		const firstGrid = stockPivots.value
+			.map((pivot) => gridRefs[pivot.childField])
+			.find((grid) => typeof grid?.focusFirstEntry === "function")
+		return firstGrid?.focusFirstEntry?.() || false
+	}
+	if (missing.target === "items-action") return gridRefs.items?.focusFirstAction?.() || false
+	if (missing.target === "items-entry") return gridRefs.items?.focusFirstEntry?.() || false
+	if (missing.target === "items-quantity") return gridRefs.items?.focusFirstQuantity?.() || false
+	return false
 }
 
 // Q15: a failed high-stakes action (submit/cancel/delete/amend) both toasts and
@@ -3542,6 +6788,11 @@ async function refreshFromConflict() {
 }
 
 async function onSave() {
+	await commitActiveControl()
+	if (mode.value === "edit" && isIpdApproved.value) {
+		toast.warn("Approved IPD is locked", "Reject the approval before saving changes.")
+		return
+	}
 	// Prompt-named create guard: block here with a clear toast rather than letting
 	// the server return "Please set Document Name" after the round-trip. Only fires
 	// for prompt-named doctypes in create mode; non-prompt doctypes skip this.
@@ -3553,9 +6804,16 @@ async function onSave() {
 	}
 	const missing = firstMissingRequired()
 	if (missing) {
+		if (
+			isIpdBookEntry.value
+			&& ipdWorkspaceTab.value === "bom"
+			&& (missing.fieldname || String(missing.label || "").startsWith("Yarn process flow"))
+		) {
+			ipdWorkspaceTab.value = "production"
+		}
 		missingField.value = missing
 		toast.warn("Missing required field", `“${missing.label}” is required.`)
-		focusMissingField(missing.fieldname)
+		await focusMissingRequirement(missing)
 		return
 	}
 	missingField.value = null
@@ -3565,6 +6823,7 @@ async function onSave() {
 	try {
 		if (mode.value === "create") {
 			const result = await docState.save(payload)
+			showSaveWarnings()
 			const newName = result?.name
 			// Clear dirty BEFORE navigating so the route-leave guard stays silent.
 			isDirty.value = false
@@ -3576,6 +6835,7 @@ async function onSave() {
 			}
 		} else {
 			await docState.save(payload, props.id)
+			showSaveWarnings()
 			isDirty.value = false
 			toast.success("Saved", `${props.id} updated`)
 			mode.value = "view"
@@ -3615,6 +6875,19 @@ async function onSave() {
 	}
 }
 
+function showSaveWarnings() {
+	const warnings = (docState.saveMessages.value || []).filter((message) =>
+		["orange", "yellow", "red"].includes(String(message.indicator || "").toLowerCase())
+		|| /warning/i.test(message.title || ""),
+	)
+	if (!warnings.length) return
+	const text = warnings
+		.map((message) => String(message.message || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim())
+		.filter(Boolean)
+		.join(" ")
+	toast.warn(warnings[0].title || "Warning", text)
+}
+
 // Q6: actually drop the form. Clears the dirty flag FIRST so the create-mode
 // router.push doesn't re-trigger the route-leave confirm (double prompt).
 function doDiscard() {
@@ -3645,7 +6918,64 @@ function onDiscard() {
 	doDiscard()
 }
 
+async function openGrnClassification() {
+	if (!viewGrouped.value.items?.length) await hydratePivotsForView()
+	if (!viewGrouped.value.items?.length) {
+		toast.warn("No received quantities", "Save at least one received quantity before submitting this Work Order GRN.")
+		return
+	}
+	grnClassificationComplete.value = false
+	grnClassificationOpen.value = true
+	await nextTick()
+	grnClassificationEditor.value?.loadData?.(viewGrouped.value.items)
+}
+
+function onGrnAllocationState(state) {
+	grnClassificationComplete.value = Boolean(state?.complete)
+}
+
+async function submitClassifiedGrn() {
+	const editor = grnClassificationEditor.value
+	if (!editor?.hasItems?.()) {
+		toast.warn("No received quantities", "There is nothing to classify or submit.")
+		return
+	}
+	if (!editor.isAllocationComplete?.()) {
+		const issue = editor.allocationIssues?.()?.[0]
+		toast.warn("Complete the allocation", issue || "Allocate every received quantity before submitting.")
+		return
+	}
+
+	grnClassificationSaving.value = true
+	acting.value = "submit"
+	beginLocalWrite()
+	try {
+		const grouped = editor.getItems?.() || []
+		await docState.save({
+			item_details: JSON.stringify(grouped),
+			items: [],
+			modified: doc.value?.modified,
+		}, props.id)
+		showSaveWarnings()
+		await docState.submit(props.id)
+		grnClassificationOpen.value = false
+		toast.success("Submitted", `${props.id} submitted`, 6000)
+		await reloadView()
+		finishLocalWrite()
+	} catch (error) {
+		cancelLocalWrite()
+		showActionError("Submit failed", error)
+	} finally {
+		grnClassificationSaving.value = false
+		acting.value = null
+	}
+}
+
 function onSubmit() {
+	if (isGrnBookView.value && doc.value?.against === "Work Order") {
+		openGrnClassification()
+		return
+	}
 	confirm.require({
 		header: "Submit document",
 		message: `Submit ${props.id}? This runs the server validations and posts stock movements.`,
@@ -3691,6 +7021,10 @@ function onCancel() {
 }
 
 function onDelete() {
+	if (isIpdApproved.value) {
+		toast.warn("Approved IPD is locked", "Reject the approval before deleting this production detail.")
+		return
+	}
 	confirm.require({
 		header: "Delete document",
 		message: `Permanently delete ${props.id}? This cannot be undone.`,
@@ -3738,15 +7072,18 @@ function onCreateDcFromWo() {
 		},
 	})
 }
+function onCreateWocFromWo() {
+	if (!doc.value) return
+	router.push({ path: "/work-order-correction/new", query: { work_order: doc.value.name } })
+}
 // Work Order → Create Debit. Mirrors the other create-from-WO handlers; seeds the
 // new Debit's `work_order` so the create page can autofill against it.
 function onCreateDebitFromWo() {
 	if (!doc.value) return
 	router.push({ path: "/debit/new", query: { work_order: doc.value.name } })
 }
-// Calculate Deliverables — multi-item Work Order (yarn mode). Fetches the
-// per-row payload, then opens CalculateDeliverablesModal with the rows. The
-// modal assembles + posts the payload; we refresh the doc + pivots on success.
+// Calculate Deliverables — the Work Order's mandatory production_detail is the
+// context; the modal asks only for process-specific attributes and quantities.
 const calcDeliverablesOpen = ref(false)
 const calcDeliverablesPayload = ref({})
 
@@ -3767,10 +7104,6 @@ async function onCalculateDeliverables() {
 			)
 			return
 		}
-		if (!(payload.rows || []).length) {
-			toast.warn("No Items", "Add at least one Item row to this Work Order first.")
-			return
-		}
 		calcDeliverablesPayload.value = payload
 		calcDeliverablesOpen.value = true
 	} catch (e) {
@@ -3782,14 +7115,21 @@ async function onCalculateDeliverables() {
 // receivables are current, re-hydrate the stock pivots that render them, then
 // toast the counts and let the modal close itself.
 async function onDeliverablesCalculated(res) {
-	markLocalWrite()
-	await docState.load(props.id)
-	await hydratePivotsForView()
+	try {
+		await docState.load(props.id)
+		await hydratePivotsForView()
+	} finally {
+		finishLocalWrite()
+	}
 	toast.success(
 		"Deliverables calculated",
 		`${res?.deliverables ?? 0} deliverable(s) and ${res?.receivables ?? 0} receivable(s).`,
 		6000,
 	)
+	const warnings = Array.isArray(res?.warnings) ? res.warnings.filter(Boolean) : []
+	if (warnings.length) {
+		toast.warn("Calculated with warnings", warnings.join(" · "), 10000)
+	}
 }
 
 // After a Bill Tracking assignment succeeds: refresh the doc (a new "Assign"
@@ -3984,6 +7324,8 @@ async function reloadView() {
 	// user" notice (incl. a race from our OWN write's realtime echo) is now moot.
 	staleNotice.value = false
 	await docState.load(props.id)
+	loadIpdAttributeValues()
+	loadIpdApprovalState()
 	// See the note in onSave: viewGrouped doesn't refresh from a plain
 	// doc.load, so submit/cancel/amend/approval-change would leave the
 	// stock-pivot grid stale (e.g. receivables get process_cost stamped on
@@ -4181,7 +7523,7 @@ const childTables = computed(() => {
 	// rely on the bare doc-key fallback below to surface it).
 	const pivotFields = pivotChildFields.value
 	const metaTables = (meta.value?.fields || []).filter(
-		(f) => f.fieldtype === "Table" && !CHILD_TABLE_EXCLUDE.has(f.fieldname)
+		(f) => ["Table", "Table MultiSelect"].includes(f.fieldtype) && !CHILD_TABLE_EXCLUDE.has(f.fieldname)
 			&& (!f.hidden || pivotFields.has(f.fieldname))
 			// Honor depends_on on the child-table field (view mode): evaluate the
 			// condition against the loaded `doc` so e.g. Process' `process_details`
@@ -4231,6 +7573,81 @@ const childTables = computed(() => {
 	}
 	return tables
 })
+
+// The Registered Experience's saved master view uses the same document-sheet
+// structure as Purchase Order. Curated detail groups become the overview and
+// follow-up fact sections; populated child tables become compact table panels.
+const masterOverviewSection = computed(() => detailSections.value[0] || null)
+const masterAdditionalSections = computed(() => detailSections.value.slice(1))
+const masterViewChildTables = computed(() => {
+	if (!isMasterBookView.value) return []
+	const hidden = getHiddenChildTables(doctype.value)
+	return childTables.value.filter(
+		(table) => !hidden.has(table.fieldname) && rowsFor(table).length > 0,
+	)
+})
+// Item Additional Parameters is operationally secondary. Keep the normal child
+// tables (UOM conversions, Attributes) before the focused Attribute Values
+// workflow and render Additional Parameters as the final Item panel.
+const masterViewLeadingChildTables = computed(() => masterViewChildTables.value.filter(
+	(table) => !(isItem.value && table.fieldname === "additional_parameters"),
+))
+const masterViewTrailingChildTables = computed(() => masterViewChildTables.value.filter(
+	(table) => isItem.value && table.fieldname === "additional_parameters",
+))
+const masterRoleProfiles = computed(() => (doc.value?.role_profiles || [])
+	.map((row) => row?.role_profile)
+	.filter(Boolean)
+)
+const masterRoles = computed(() => (doc.value?.roles || [])
+	.map((row) => row?.role)
+	.filter(Boolean)
+)
+const masterViewSummaryLines = computed(() => {
+	if (!doc.value) return []
+	return detailFields.value
+		.filter((field) => !isEmptyValue(doc.value[field.fieldname]))
+		.slice(0, 5)
+		.map((field) => ({ label: field.label, value: masterFieldDisplay(field) }))
+})
+
+function masterFieldDisplay(field) {
+	const value = doc.value?.[field.fieldname]
+	if (field.isLink && !isEmptyValue(value)) return linkPartsFor(field, value).primary
+	return displayValue(value, field.type, field.fieldname)
+}
+
+function masterFactIsWide(field, index) {
+	if (index !== 0) return false
+	return field.isLink || ["name", "name1", "item_name", "supplier_name", "agent_name", "email"].includes(field.fieldname)
+}
+
+function masterSectionIcon(label) {
+	const text = String(label || "").toLowerCase()
+	if (text.includes("stock") || text.includes("purchase")) return "pi pi-box"
+	if (text.includes("unit") || text.includes("attribute")) return "pi pi-tags"
+	if (text.includes("tax") || text.includes("rate") || text.includes("cost")) return "pi pi-indian-rupee"
+	if (text.includes("contact")) return "pi pi-phone"
+	if (text.includes("access")) return "pi pi-shield"
+	return "pi pi-list"
+}
+
+function masterSectionDescription(label) {
+	const text = String(label || "").toLowerCase()
+	if (text.includes("stock") || text.includes("purchase")) return "Stock and purchasing behaviour used in transactions."
+	if (text.includes("unit") || text.includes("attribute")) return "Units and variant dimensions configured for this Item."
+	if (text.includes("tax")) return "Tax registration details recorded for this party."
+	if (text.includes("rate") || text.includes("cost")) return "The rule that controls the applicable rate."
+	if (text.includes("period")) return "The dates during which this record is effective."
+	if (text.includes("contact")) return "Contact information for this record."
+	if (text.includes("access")) return "Defaults that control how this user works."
+	return `Additional ${masterEntityLabel.value.toLowerCase()} information.`
+}
+
+function masterViewColumns(table) {
+	const shown = shownColumns(table.fieldname, table.columns)
+	return shown.length ? shown : table.columns.slice(0, 6)
+}
 
 // Row-key column inference — the LAST-RESORT path (no child-DocType meta cached).
 // Used only by the degenerate childTables fallback above. Headers are humanized
@@ -4406,14 +7823,63 @@ const activityEvents = computed(() => {
 const titleLine = computed(() => {
 	const d = doc.value
 	if (!d) return ""
+	const localizedFields = LOCALIZED_NAME_FIELDS[doctype.value]
+	if (localizedFields && d.name) {
+		return linkTitles.linkParts(
+			doctype.value,
+			d.name,
+			d[localizedFields.english],
+			d[localizedFields.tamil],
+		).primary
+	}
+	if (isWorkOrder.value) {
+		return [localizedName("Item", d.item), d.process_name]
+			.filter((value) => value != null && value !== "")
+			.join(" · ")
+	}
+	if (isPurchaseInvoice.value) {
+		const supplier = linkTitles.titleFor("Supplier", d.supplier) || d.supplier
+		return [supplier, d.bill_no]
+			.filter((value) => value != null && value !== "")
+			.join(" · ")
+	}
+	if (isStockEntry.value) {
+		return [
+			d.purpose,
+			localizedName("Warehouse", d.from_warehouse),
+			localizedName("Warehouse", d.to_warehouse),
+		]
+			.filter((value) => value != null && value !== "")
+			.join(" · ")
+	}
+	if (isInspectionEntry.value) {
+		return [d.against_id, d.status]
+			.filter((value) => value != null && value !== "")
+			.join(" · ")
+	}
 	const bits = []
-	for (const f of ["item", "supplier_name", "supplier", "process_name", "total_quantity"]) {
+	if (d.item) bits.push(localizedName("Item", d.item))
+	if (d.supplier) bits.push(linkTitles.titleFor("Supplier", d.supplier) || d.supplier_name || d.supplier)
+	else if (d.supplier_name) bits.push(String(d.supplier_name))
+	for (const f of ["process_name", "total_quantity"]) {
 		if (d[f] != null && d[f] !== "") bits.push(String(d[f]))
 	}
 	if (bits.length) return bits.slice(0, 4).join(" · ")
 	const tf = meta.value?.title_field
 	if (tf && d[tf]) return String(d[tf])
 	return ""
+})
+
+const masterDocumentCode = computed(() => {
+	if (!isMasterBookView.value || !doc.value?.name) return props.id
+	const localizedFields = LOCALIZED_NAME_FIELDS[doctype.value]
+	if (!localizedFields) return props.id
+	return linkTitles.linkParts(
+		doctype.value,
+		doc.value.name,
+		doc.value[localizedFields.english],
+		doc.value[localizedFields.tamil],
+	).code
 })
 
 const DOCSTATUS_LABELS = { 0: "Draft", 1: "Submitted", 2: "Cancelled" }
@@ -4430,6 +7896,27 @@ const statusSeverity = computed(() => {
 	if (ds === 1) return "success"
 	if (ds === 2) return "danger"
 	return "warn"
+})
+const masterViewStatus = computed(() => {
+	const d = doc.value
+	if (!d) return "—"
+	if (d.workflow_state) return d.workflow_state
+	if (d.approval_status) return d.approval_status
+	if (Object.prototype.hasOwnProperty.call(d, "enabled")) return Number(d.enabled) ? "Active" : "Disabled"
+	if (Object.prototype.hasOwnProperty.call(d, "disabled")) return Number(d.disabled) ? "Disabled" : "Active"
+	if (isSubmittable.value) return statusLabel.value
+	return d.status || "Active"
+})
+const masterViewStatusSeverity = computed(() => {
+	const status = String(masterViewStatus.value || "").toLowerCase()
+	if (["active", "approved", "submitted"].some((value) => status.includes(value))) return "success"
+	if (["disabled", "rejected", "cancelled", "expired"].some((value) => status.includes(value))) return "danger"
+	return "warn"
+})
+const masterViewStatusDescription = computed(() => {
+	if (masterViewStatusSeverity.value === "success") return "Available for permitted users"
+	if (masterViewStatusSeverity.value === "danger") return "Not available for normal use"
+	return "Review the current workflow state"
 })
 
 // ── Quick Info (key meta pairs) ──
@@ -4464,26 +7951,36 @@ const deskUrl = computed(() => {
 	return `/app/${encodeURIComponent(slug)}/${encodeURIComponent(props.id)}`
 })
 
-function goHome() {
-	router.push("/home")
+function internalDocumentPath(dt, name) {
+	if (!dt || !name) return ""
+	if (props.linkedRouteResolver) {
+		return props.linkedRouteResolver(dt, name) || ""
+	}
+	const reg = getRegistryByDoctype(dt)
+	return reg ? `/${reg.route}/${encodeURIComponent(name)}` : ""
 }
-function goList() {
-	router.push(`/${props.docRoute}`)
+function documentHref(dt, name) {
+	const path = internalDocumentPath(dt, name)
+	if (path) return `/web${path}`
+	if (props.linkedRouteResolver || !dt || !name) return ""
+	const slug = dt.toLowerCase().replace(/ /g, "-")
+	return `/app/${encodeURIComponent(slug)}/${encodeURIComponent(name)}`
+}
+function onDocumentLinkClick(event, dt, name) {
+	if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+	event.preventDefault()
+	navigateDoc(dt, name)
 }
 function navigateDoc(dt, name) {
-	const reg = getRegistryByDoctype(dt)
-	if (reg) router.push(`/${reg.route}/${encodeURIComponent(name)}`)
-	else {
-		const slug = dt.toLowerCase().replace(/ /g, "-")
-		window.open(`/app/${encodeURIComponent(slug)}/${encodeURIComponent(name)}`, "_blank")
+	const path = internalDocumentPath(dt, name)
+	if (path) {
+		router.push(path)
+		return
 	}
+	if (props.linkedRouteResolver) return
+	const slug = dt.toLowerCase().replace(/ /g, "-")
+	window.open(`/app/${encodeURIComponent(slug)}/${encodeURIComponent(name)}`, "_blank")
 }
-function navigateLink(field, value) {
-	if (!value) return
-	const targetDt = linkTargetFor(field)
-	if (targetDt) navigateDoc(targetDt, value)
-}
-
 // ── Q1: Link code → human name ───────────────────────────────────────────────
 // The target doctype of a Details Link field (Dynamic Links resolve from their
 // controlling field on the loaded doc).
@@ -4497,6 +7994,16 @@ function linkTargetFor(field) {
 function linkPartsFor(field, value) {
 	const sibling = doc.value?.[`${field.fieldname}_name`]
 	return linkTitles.linkParts(linkTargetFor(field), value, sibling)
+}
+
+function localizedName(targetDoctype, value, fallback = "") {
+	if (!value) return fallback
+	return linkTitles.titleFor(targetDoctype, value) || String(value)
+}
+
+function localizedCode(targetDoctype, value) {
+	if (!value) return ""
+	return linkTitles.linkParts(targetDoctype, value).code
 }
 // Batch-resolve titles for the Details links that lack a `_name` sibling, so
 // codes like `S-0003` / `PC-00007` render as the human name. No-ops for values
@@ -4516,10 +8023,6 @@ function primeDetailLinks() {
 	}
 	if (pairs.length) linkTitles.prime(pairs)
 }
-function goToFirst(group) {
-	if (group.rows[0]) navigateDoc(group.doctype, group.rows[0].name)
-}
-
 // ── Approval gate hooks ──
 function onApprovalState(s) {
 	approvalState.value = s
@@ -4631,6 +8134,10 @@ function formatDateTime(val) {
 	const timeStr = timePart ? timePart.slice(0, 5) : ""
 	return timeStr ? `${dateStr} ${timeStr}` : dateStr
 }
+function formatTime(val) {
+	if (!val) return "—"
+	return String(val).split(".")[0]
+}
 function formatNumber(val) {
 	const n = Number(val)
 	return Number.isNaN(n) ? String(val) : n.toLocaleString("en-IN")
@@ -4662,6 +8169,7 @@ function stripHtml(s) {
 .crumbs a {
 	cursor: pointer;
 	color: var(--mgk-muted);
+	text-decoration: none;
 }
 .crumbs a:hover {
 	color: var(--mgk-accent-700);
@@ -4720,6 +8228,43 @@ function stripHtml(s) {
 	display: flex;
 	gap: 8px;
 	align-items: center;
+}
+.work-order-book-view .detail-head {
+	align-items: center;
+	gap: 10px;
+}
+.work-order-book-view .id-block {
+	flex: 1 1 auto;
+	min-width: 220px;
+	overflow: hidden;
+}
+.work-order-book-view .doc-hero {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.work-order-book-view .doc-nav,
+.work-order-book-view .head-status,
+.work-order-book-view .head-actions {
+	flex: 0 0 auto;
+}
+.work-order-book-view .head-actions {
+	flex-wrap: nowrap;
+	gap: 6px;
+}
+.work-order-book-view :deep(.head-actions .p-button-label) {
+	white-space: nowrap;
+}
+@media (max-width: 1180px) {
+	.work-order-book-view .detail-head {
+		flex-wrap: wrap;
+	}
+	.work-order-book-view .head-actions {
+		flex: 1 0 100%;
+		justify-content: flex-end;
+		width: 100%;
+		margin-left: 0;
+	}
 }
 .desk-link {
 	display: inline-flex;
@@ -4952,6 +8497,1499 @@ function stripHtml(s) {
 	font-style: normal;
 	font-size: 11.5px;
 }
+
+/* ── Registered Experience: Purchase Order book entry ─────────────────────
+   This is intentionally a structural presentation, not the generic teal form
+   with different colours. The writing surface, ordered steps and sticky order
+   summary mirror the digital-book metaphor used by the MGK workspace. */
+.book-entry {
+	--book-red: #b94d3d;
+	--book-red-dark: #873529;
+	--book-navy: #14233c;
+	--book-ink: #1d2739;
+	--book-muted: #667085;
+	--book-paper: #fffdf9;
+	--book-cream: #f7f1e7;
+	--book-line: #ded5c7;
+	gap: 16px;
+}
+.book-entry .crumbs {
+	width: max-content;
+	padding: 6px 10px;
+	border: 1px solid #e3dccf;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, .7);
+	color: var(--book-muted);
+}
+.book-entry .detail-head {
+	position: relative;
+	align-items: center;
+	min-height: 132px;
+	padding: 22px 24px 22px 34px;
+	overflow: hidden;
+	border: 1px solid var(--book-line);
+	border-radius: 18px;
+	background:
+		linear-gradient(105deg, rgba(185, 77, 61, .07), transparent 42%),
+		var(--book-paper);
+	box-shadow: 0 10px 28px rgba(42, 35, 27, .06);
+}
+.book-entry .detail-head::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 11px;
+	background: var(--book-red);
+	box-shadow: inset -3px 0 rgba(0, 0, 0, .12);
+}
+.book-entry-title {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	min-width: 0;
+}
+.book-entry-mark {
+	display: flex;
+	flex: 0 0 auto;
+	flex-direction: column;
+	justify-content: center;
+	width: 70px;
+	height: 84px;
+	padding: 12px 12px 12px 18px;
+	border-radius: 6px 14px 14px 6px;
+	background: var(--book-red);
+	box-shadow: inset 9px 0 rgba(0, 0, 0, .13), 0 8px 16px rgba(135, 53, 41, .16);
+	color: #fff;
+}
+.book-entry-mark small {
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: .12em;
+}
+.book-entry-mark strong {
+	margin-top: 6px;
+	font-size: 25px;
+	line-height: 1;
+}
+.book-entry-kicker {
+	margin-bottom: 5px;
+	color: var(--book-red-dark);
+	font-size: 11px;
+	font-weight: 850;
+	letter-spacing: .11em;
+	text-transform: uppercase;
+}
+.book-entry .doc-hero {
+	color: var(--book-ink);
+	font-size: clamp(22px, 2vw, 30px);
+	font-weight: 780;
+	letter-spacing: -.025em;
+}
+.book-entry-title p {
+	margin: 6px 0 0;
+	color: var(--book-muted);
+	font-size: 13px;
+}
+.book-entry :deep(.head-actions .p-button) {
+	min-height: 42px;
+	border-radius: 10px;
+	font-weight: 700;
+}
+.book-entry :deep(.head-actions .forward-cta) {
+	border-color: var(--book-navy);
+	background: var(--book-navy);
+}
+.book-entry .form-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 300px;
+	gap: 18px;
+	align-items: start;
+	min-width: 0;
+}
+.book-entry .form-card {
+	gap: 18px;
+	min-width: 0;
+}
+.book-entry .form-section {
+	order: 1;
+	overflow: hidden;
+	border: 1px solid var(--book-line);
+	border-radius: 16px;
+	background: var(--book-paper);
+	box-shadow: 0 7px 22px rgba(42, 35, 27, .045);
+}
+.book-entry .form-section.book-entry-notes {
+	order: 3;
+}
+.book-entry .form-section > .mgk-card__head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 56px;
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--book-line);
+	background: linear-gradient(90deg, var(--book-cream), #fcfaf5);
+}
+.book-entry .form-section > .mgk-card__head::before {
+	display: none;
+}
+.book-step {
+	display: inline-grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	background: var(--book-navy);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 800;
+}
+.book-entry .form-section .mgk-card__title {
+	color: var(--book-ink);
+	font-size: 15px;
+	font-weight: 750;
+	letter-spacing: 0;
+	text-transform: none;
+}
+.book-entry .form-section > .mgk-card__body {
+	padding: 20px;
+}
+.book-entry .form-grid {
+	gap: 18px 20px;
+}
+.book-entry .form-field > label.field-label {
+	color: #596273;
+	font-size: 11px;
+	font-weight: 750;
+	letter-spacing: .055em;
+}
+.book-entry .form-field .field-help {
+	color: #7b8492;
+	font-size: 11.5px;
+	line-height: 1.4;
+}
+.book-entry .child-editor {
+	order: 2;
+	min-width: 0;
+	gap: 0;
+	overflow: hidden;
+	border: 1px solid var(--book-line);
+	border-radius: 16px;
+	background: var(--book-paper);
+	box-shadow: 0 7px 22px rgba(42, 35, 27, .045);
+}
+.book-entry .child-editor-head {
+	min-height: 64px;
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--book-line);
+	background: linear-gradient(90deg, var(--book-cream), #fcfaf5);
+}
+.child-editor-title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.child-editor-title > div {
+	display: grid;
+	gap: 2px;
+}
+.book-entry .child-editor-title h4 {
+	color: var(--book-ink);
+	font-size: 15px;
+	font-weight: 750;
+}
+.child-editor-title small {
+	color: var(--book-muted);
+	font-size: 11.5px;
+}
+.book-entry .child-cols-note.pivot-note {
+	padding: 5px 9px;
+	border-radius: 999px;
+	background: #f2e5df;
+	color: var(--book-red-dark);
+	font-size: 10.5px;
+	font-weight: 700;
+}
+.book-entry :deep(.stock-grid-editor) {
+	gap: 12px;
+	padding: 16px 18px 18px;
+}
+.book-entry :deep(.stock-grid-editor .grid-empty-state) {
+	padding: 18px;
+	border-color: #d8cdbd;
+	background: #fbf7ef;
+	color: var(--book-muted);
+}
+.book-entry :deep(.stock-grid-editor .add-form) {
+	padding: 16px;
+	border-color: #d8cdbd;
+	border-radius: 12px;
+	background: #fbf7ef;
+}
+.book-entry :deep(.stock-grid-editor .add-head h4) {
+	color: var(--book-ink);
+	font-size: 14px;
+}
+.book-entry :deep(.stock-grid-editor .grid-group) {
+	border-color: #d8cdbd;
+	border-radius: 12px;
+}
+.book-entry :deep(.stock-grid-editor .pivot-dt .p-datatable-thead > tr > th) {
+	background: var(--book-navy);
+	color: #fff;
+}
+.book-entry :deep(.grn-rt-editor) {
+	padding: 16px 18px 18px;
+}
+.book-entry :deep(.grn-rt-editor .grn-group) {
+	overflow-x: auto;
+	overflow-y: hidden;
+	border: 1px solid #d8cdbd;
+	border-radius: 12px;
+}
+.book-entry :deep(.grn-rt-editor .grn-dt .p-datatable-thead > tr > th) {
+	background: var(--book-navy);
+	color: #fff;
+}
+.book-entry .book-entry-mark.grn-mark {
+	width: 80px;
+}
+.book-entry .summary-book.grn-summary-book {
+	width: 54px;
+	padding-left: 11px;
+}
+.book-entry .summary-book.grn-summary-book strong {
+	font-size: 15px;
+}
+.book-entry .summary-book.dc-summary-book {
+	width: 68px;
+	padding-left: 11px;
+}
+.book-entry .summary-book.dc-summary-book small {
+	font-size: 6.5px;
+	letter-spacing: .06em;
+	white-space: nowrap;
+}
+.book-entry.stock-entry-book-entry {
+	--book-red: #356d78;
+	--book-red-dark: #254f58;
+	--book-cream: #edf5f6;
+}
+.book-entry.inspection-book-entry {
+	--book-red: #7a5b2e;
+	--book-red-dark: #5f451f;
+	--book-cream: #f7f1e7;
+}
+.book-entry .book-entry-mark.stock-entry-mark,
+.book-entry .summary-book.stock-entry-summary-book,
+.stock-entry-saved-book {
+	background: #356d78;
+	box-shadow: inset 7px 0 rgba(0, 0, 0, .13), 0 7px 16px rgba(32, 78, 88, .14);
+}
+.book-entry .book-entry-mark.inspection-entry-mark,
+.book-entry .summary-book.inspection-summary-book,
+.inspection-saved-book {
+	background: #7a5b2e;
+	box-shadow: inset 7px 0 rgba(0, 0, 0, .13), 0 7px 16px rgba(93, 66, 28, .14);
+}
+.book-entry .book-entry-mark.stock-entry-mark,
+.book-entry .book-entry-mark.inspection-entry-mark {
+	width: 80px;
+}
+.book-entry .summary-book.stock-entry-summary-book,
+.book-entry .summary-book.inspection-summary-book {
+	width: 56px;
+	padding-left: 11px;
+}
+.book-entry .summary-book.stock-entry-summary-book small,
+.book-entry .summary-book.inspection-summary-book small {
+	font-size: 6px;
+}
+.book-entry .summary-book.stock-entry-summary-book strong,
+.book-entry .summary-book.inspection-summary-book strong {
+	font-size: 16px;
+}
+.inspection-classification-section :deep(.inspection-editor) {
+	padding: 2px;
+}
+.book-entry .book-entry-mark.ipd-mark,
+.book-entry .summary-book.ipd-summary-book,
+.ipd-saved-book {
+	background: #a66f20;
+	box-shadow: inset 7px 0 rgba(0, 0, 0, .13), 0 7px 16px rgba(138, 90, 24, .12);
+}
+.book-entry .book-entry-mark.ipd-mark {
+	width: 80px;
+}
+.book-entry .summary-book.ipd-summary-book {
+	width: 54px;
+	padding-left: 11px;
+}
+.book-entry .summary-book.ipd-summary-book strong {
+	font-size: 15px;
+}
+.book-entry.work-order-book-entry {
+	--book-red: #2869a7;
+	--book-red-dark: #174b79;
+	--book-cream: #edf4fa;
+}
+.book-entry .book-entry-mark.wo-mark {
+	width: 76px;
+}
+.book-entry .book-entry-mark.woc-mark {
+	width: 76px;
+}
+.book-entry .book-entry-mark.woc-mark strong {
+	font-size: 20px;
+}
+.book-entry .summary-book.woc-summary-book {
+	width: 64px;
+	padding-left: 10px;
+}
+.book-entry .summary-book.woc-summary-book small {
+	font-size: 6px;
+}
+.book-entry .summary-book.woc-summary-book strong {
+	font-size: 15px;
+}
+.woc-saved-book strong {
+	font-size: 17px;
+}
+.po-saved-book.grn-saved-book {
+	width: 72px;
+	padding-left: 16px;
+}
+.po-saved-book.woc-saved-book {
+	width: 80px;
+	padding-left: 16px;
+}
+.book-entry .book-entry-mark.master-entry-mark {
+	width: 76px;
+}
+.book-entry .book-entry-mark.master-entry-mark strong {
+	font-size: 21px;
+	overflow-wrap: anywhere;
+}
+.book-entry .summary-book.master-summary-book {
+	width: 58px;
+	padding-left: 11px;
+}
+.book-entry .summary-book.master-summary-book small {
+	font-size: 6px;
+}
+.book-entry .summary-book.master-summary-book strong {
+	font-size: 13px;
+	overflow-wrap: anywhere;
+}
+.book-entry .summary-book.wo-summary-book {
+	width: 56px;
+	padding-left: 11px;
+}
+.book-entry .summary-book.wo-summary-book small {
+	font-size: 6px;
+}
+.book-entry .summary-book.wo-summary-book strong {
+	font-size: 16px;
+}
+.book-entry .ipd-flow-section > .mgk-card__body {
+	padding: 18px;
+}
+.ipd-workspace-tabs {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px;
+	border: 1px solid #ded5c7;
+	border-radius: 13px;
+	background: #f4eee5;
+}
+.ipd-workspace-tabs button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 42px;
+	padding: 9px 15px;
+	border: 0;
+	border-radius: 9px;
+	background: transparent;
+	color: #5e6879;
+	font: inherit;
+	font-size: 13px;
+	font-weight: 700;
+	cursor: pointer;
+}
+.ipd-workspace-tabs button:hover {
+	color: #805313;
+	background: rgba(255, 255, 255, .55);
+}
+.ipd-workspace-tabs button.active {
+	background: #fff;
+	color: #805313;
+	box-shadow: 0 2px 8px rgba(76, 57, 34, .1);
+}
+.ipd-workspace-tabs button b {
+	display: grid;
+	place-items: center;
+	min-width: 21px;
+	height: 21px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: #eee2d0;
+	font-size: 10px;
+}
+.book-entry .form-layout.ipd-bom-tab-active {
+	grid-template-columns: minmax(0, 1fr);
+}
+.book-entry-aside {
+	position: sticky;
+	top: 84px;
+	display: grid;
+	gap: 14px;
+}
+.order-summary-card,
+.order-checklist {
+	overflow: hidden;
+	border: 1px solid var(--book-line);
+	border-radius: 16px;
+	background: #fff;
+	box-shadow: 0 8px 24px rgba(42, 35, 27, .055);
+}
+.order-summary-card > header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 16px;
+	background: var(--book-navy);
+	color: #fff;
+}
+.summary-book {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	width: 46px;
+	height: 54px;
+	padding-left: 13px;
+	border-radius: 4px 9px 9px 4px;
+	background: var(--book-red);
+	box-shadow: inset 6px 0 rgba(0, 0, 0, .13);
+}
+.summary-book small {
+	font-size: 7px;
+	font-weight: 800;
+	letter-spacing: .08em;
+}
+.summary-book strong {
+	margin-top: 3px;
+	font-size: 17px;
+}
+.order-summary-card header > div > small {
+	color: #b8c3d4;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+}
+.order-summary-card h3,
+.order-checklist h3 {
+	margin: 2px 0 0;
+	font-size: 15px;
+}
+.summary-lines {
+	display: grid;
+	padding: 7px 16px;
+}
+.summary-lines > div {
+	display: grid;
+	grid-template-columns: 92px minmax(0, 1fr);
+	gap: 10px;
+	padding: 10px 0;
+	border-bottom: 1px dashed #e2dbcf;
+}
+.summary-lines > div:last-child {
+	border-bottom: 0;
+}
+.summary-lines span,
+.summary-total span {
+	color: var(--book-muted);
+	font-size: 11px;
+}
+.summary-lines strong {
+	overflow-wrap: anywhere;
+	color: var(--book-ink);
+	font-size: 12px;
+	text-align: right;
+}
+.summary-total {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 15px 16px 17px;
+	border-top: 1px solid var(--book-line);
+	background: var(--book-cream);
+}
+.summary-total strong {
+	color: var(--book-red-dark);
+	font-size: 20px;
+	font-variant-numeric: tabular-nums;
+}
+.order-checklist {
+	padding: 16px;
+}
+.order-checklist h3 {
+	margin: 0 0 12px;
+	color: var(--book-ink);
+}
+.order-checklist > div {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 0;
+	color: #a0a7b1;
+}
+.order-checklist > div + div {
+	border-top: 1px solid #eee9e1;
+}
+.order-checklist > div.complete {
+	color: #267c69;
+}
+.order-checklist i {
+	display: grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: #f2f3f5;
+	font-size: 11px;
+}
+.order-checklist .complete i {
+	background: #e2f3ed;
+}
+.order-checklist span,
+.order-checklist strong,
+.order-checklist small {
+	display: block;
+}
+.order-checklist strong {
+	color: var(--book-ink);
+	font-size: 12px;
+}
+.order-checklist small {
+	margin-top: 2px;
+	color: var(--book-muted);
+	font-size: 10.5px;
+}
+.grn-classification-intro {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	margin-bottom: 14px;
+	padding: 13px 15px;
+	border: 1px solid #c8e4df;
+	border-radius: 12px;
+	background: #eef8f6;
+	color: #173f3a;
+}
+.grn-classification-intro > span {
+	display: grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	background: #d8efeb;
+	color: #087c71;
+}
+.grn-classification-intro strong,
+.grn-classification-intro p {
+	display: block;
+}
+.grn-classification-intro p {
+	margin: 4px 0 0;
+	color: #5c6d70;
+	font-size: 12px;
+	line-height: 1.45;
+}
+.grn-classification-dialog :deep(.grn-rt-editor) {
+	max-height: 58vh;
+	overflow-y: auto;
+	padding-right: 2px;
+}
+@media (max-width: 1080px) {
+	.book-entry .form-layout {
+		grid-template-columns: 1fr;
+	}
+	.book-entry-aside {
+		position: static;
+		grid-template-columns: 1fr 1fr;
+		order: -1;
+	}
+}
+@media (max-width: 700px) {
+	.book-entry .detail-head {
+		align-items: stretch;
+		flex-direction: column;
+		padding: 18px 16px 18px 25px;
+	}
+	.book-entry-mark {
+		width: 58px;
+		height: 68px;
+	}
+	.book-entry-title p {
+		display: none;
+	}
+	.book-entry .head-actions {
+		width: 100%;
+		margin-left: 0;
+	}
+	.book-entry :deep(.head-actions .p-button) {
+		flex: 1;
+	}
+	.book-entry .form-section > .mgk-card__body,
+	.book-entry :deep(.stock-grid-editor) {
+		padding: 14px;
+	}
+	.book-entry .child-editor-head {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 9px;
+	}
+	.book-entry-aside {
+		grid-template-columns: 1fr;
+		order: 4;
+	}
+	.ipd-workspace-tabs button {
+		flex: 1;
+		padding-inline: 9px;
+	}
+}
+
+/* ── Registered Experience: saved Purchase Order ──────────────────────────
+   The shared document header remains untouched. The body reads as one order
+   sheet instead of returning to the generic Details/Items tab presentation. */
+.book-view {
+	--po-red: #b94d3d;
+	--po-red-dark: #873529;
+	--po-navy: #14233c;
+	--po-ink: #1d2739;
+	--po-muted: #667085;
+	--po-paper: #fffdf9;
+	--po-cream: #f7f1e7;
+	--po-line: #ded5c7;
+}
+.ipd-book-view {
+	--po-red: #a66f20;
+	--po-red-dark: #805313;
+	--po-cream: #f8f1e3;
+}
+.master-book-view {
+	--po-red: #b94d3d;
+	--po-red-dark: #873529;
+	--po-cream: #f7f1e7;
+}
+.ipd-route-overview > header {
+	background: linear-gradient(105deg, rgba(166, 111, 32, .1), transparent 48%), #fcfaf5;
+}
+.ipd-saved-flow :deep(.ipd-yarn-flow) {
+	padding: 18px;
+}
+.ipd-saved-flow :deep(.finished-context) {
+	display: none;
+}
+.ipd-route-card .po-total-lines strong {
+	max-width: 164px;
+	overflow-wrap: anywhere;
+	text-align: right;
+}
+.ipd-attributes-panel {
+	display: block;
+	width: 100%;
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var(--po-line);
+	border-radius: 16px;
+	background: var(--po-paper);
+	box-shadow: 0 8px 24px rgba(42, 35, 27, .05);
+	color: inherit;
+	text-align: left;
+}
+.ipd-attributes-panel > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 64px;
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--po-line);
+	background: linear-gradient(90deg, var(--po-cream), #fcfaf5);
+}
+.ipd-bom-view-panel :deep(.ipd-bom-editor) {
+	padding: 16px 18px 18px;
+}
+.ipd-bom-icon {
+	background: #8a5a18;
+}
+.ipd-section-note {
+	margin-left: auto;
+	color: #667085;
+	font-size: 11px;
+	font-weight: 500;
+}
+.ipd-bom-mapping-body {
+	max-height: min(72vh, 760px);
+	overflow: auto;
+	padding: 2px;
+}
+.ipd-bom-mapping-body :deep(.bom-mapping-editor) {
+	min-width: 760px;
+}
+.ipd-attribute-icon {
+	background: #8a5a18;
+}
+.ipd-attribute-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 12px;
+	padding: 16px 18px 18px;
+}
+.ipd-attribute-card {
+	position: relative;
+	display: grid;
+	gap: 9px;
+	min-width: 0;
+	padding: 13px 40px 13px 14px;
+	border: 1px solid #e5dccf;
+	border-radius: 12px;
+	background: #fff;
+	color: inherit;
+	text-align: left;
+}
+.ipd-attribute-card:disabled {
+	opacity: 1;
+}
+.ipd-attribute-card.editable {
+	cursor: pointer;
+}
+.ipd-attribute-card.editable:hover {
+	border-color: #c99b55;
+	box-shadow: 0 4px 12px rgba(128, 83, 19, .08);
+}
+.ipd-attribute-card > span {
+	color: var(--po-muted);
+	font-size: 10.5px;
+	font-weight: 800;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+}
+.ipd-attribute-card > div {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+}
+.ipd-attribute-card b {
+	padding: 5px 10px;
+	border-radius: 999px;
+	background: #eef6ff;
+	color: #285d9b;
+	font-size: 12px;
+	font-weight: 700;
+}
+.ipd-attribute-card > i {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	color: #9b671f;
+	font-size: 12px;
+}
+.ipd-attribute-card small,
+.ipd-attribute-loading,
+.ipd-attribute-empty {
+	color: var(--po-muted);
+	font-size: 12px;
+}
+.ipd-attribute-loading,
+.ipd-attribute-empty {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 18px;
+}
+.ipd-attributes-dialog-body {
+	display: grid;
+	gap: 16px;
+}
+.ipd-dialog-context {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 14px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #e7e0d7;
+}
+.ipd-dialog-context strong {
+	color: #17233a;
+	font-size: 14px;
+}
+.ipd-dialog-context small {
+	color: #667085;
+	font-size: 11px;
+	text-align: right;
+}
+.po-saved-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 310px;
+	gap: 18px;
+	align-items: start;
+}
+.ipd-saved-layout > .ipd-workspace-tabs {
+	grid-column: 1 / -1;
+}
+.ipd-saved-layout.ipd-bom-tab-active {
+	grid-template-columns: minmax(0, 1fr);
+}
+.po-saved-main,
+.po-saved-side {
+	display: grid;
+	gap: 16px;
+}
+.po-saved-side {
+	position: sticky;
+	top: 84px;
+}
+.po-order-overview,
+.po-saved-items,
+.po-saved-notes,
+.po-totals-card,
+.po-progress-card,
+.po-activity-card {
+	overflow: hidden;
+	border: 1px solid var(--po-line);
+	border-radius: 16px;
+	background: var(--po-paper);
+	box-shadow: 0 8px 24px rgba(42, 35, 27, .05);
+}
+.po-order-overview > header {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-height: 104px;
+	padding: 18px 20px 18px 28px;
+	border-bottom: 1px solid var(--po-line);
+	background: linear-gradient(105deg, rgba(185, 77, 61, .08), transparent 48%), #fcfaf5;
+}
+.po-order-overview > header::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 8px;
+	background: var(--po-red);
+	box-shadow: inset -2px 0 rgba(0, 0, 0, .12);
+}
+.po-saved-book {
+	display: flex;
+	flex: 0 0 auto;
+	flex-direction: column;
+	justify-content: center;
+	width: 58px;
+	height: 68px;
+	padding-left: 17px;
+	border-radius: 5px 12px 12px 5px;
+	background: var(--po-red);
+	box-shadow: inset 8px 0 rgba(0, 0, 0, .13), 0 7px 16px rgba(135, 53, 41, .14);
+	color: #fff;
+}
+.po-saved-book small {
+	font-size: 8px;
+	font-weight: 800;
+	letter-spacing: .1em;
+}
+.po-saved-book strong {
+	margin-top: 4px;
+	font-size: 20px;
+}
+.po-overview-title {
+	min-width: 0;
+}
+.po-view-kicker {
+	color: var(--po-red-dark);
+	font-size: 10px;
+	font-weight: 850;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+}
+.po-overview-title h2 {
+	margin: 3px 0 0;
+	color: var(--po-ink);
+	font-size: 20px;
+	letter-spacing: -.015em;
+}
+.po-overview-title p,
+.po-section-title p {
+	margin: 4px 0 0;
+	color: var(--po-muted);
+	font-size: 11.5px;
+}
+.po-overview-total {
+	display: grid;
+	gap: 3px;
+	margin-left: auto;
+	text-align: right;
+}
+.po-overview-total small {
+	color: var(--po-muted);
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+}
+.po-overview-total strong {
+	color: var(--po-red-dark);
+	font-size: 24px;
+	font-variant-numeric: tabular-nums;
+}
+.po-facts {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	padding: 4px 20px 18px;
+}
+.po-fact {
+	display: grid;
+	align-content: start;
+	gap: 6px;
+	min-height: 76px;
+	padding: 16px 18px 10px 0;
+	border-bottom: 1px solid #ebe4d9;
+}
+.po-fact-wide {
+	grid-column: span 2;
+}
+.po-fact:not(:nth-child(4n + 1)) {
+	padding-left: 18px;
+	border-left: 1px solid #ebe4d9;
+}
+.po-fact > span,
+.po-notes-grid span {
+	color: var(--po-muted);
+	font-size: 10px;
+	font-weight: 750;
+	letter-spacing: .055em;
+	text-transform: uppercase;
+}
+.po-fact strong {
+	color: var(--po-ink);
+	font-size: 13px;
+	line-height: 1.35;
+}
+.po-fact .po-record-link {
+	display: inline-grid;
+	justify-items: start;
+	justify-self: start;
+	gap: 2px;
+	width: fit-content;
+	max-width: 100%;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	text-align: left;
+	text-decoration: none;
+	cursor: pointer;
+}
+.po-fact .po-record-link strong {
+	color: #087c71;
+}
+.po-fact .po-record-link small {
+	color: #8a93a0;
+	font-size: 10px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.po-saved-items > header,
+.po-saved-notes > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 64px;
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--po-line);
+	background: linear-gradient(90deg, var(--po-cream), #fcfaf5);
+}
+.po-saved-notes > header.po-section-title {
+	justify-content: flex-start;
+}
+.po-section-title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.po-section-icon {
+	display: grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 30px;
+	height: 30px;
+	border-radius: 9px;
+	background: var(--po-navy);
+	color: #fff;
+	font-size: 12px;
+}
+.po-section-title h3 {
+	margin: 0;
+	color: var(--po-ink);
+	font-size: 14px;
+}
+.po-item-count {
+	padding: 5px 9px;
+	border-radius: 999px;
+	background: #f2e5df;
+	color: var(--po-red-dark);
+	font-size: 10.5px;
+	font-weight: 750;
+}
+.po-saved-items :deep(.stock-grid-editor) {
+	gap: 12px;
+	padding: 16px 18px 18px;
+}
+.po-saved-items :deep(.stock-grid-editor .grid-group) {
+	border-color: #d8cdbd;
+	border-radius: 12px;
+}
+.po-saved-items :deep(.stock-grid-editor .pivot-dt .p-datatable-thead > tr > th) {
+	background: var(--po-navy);
+	color: #fff;
+}
+.master-record-overview .po-overview-total strong {
+	font-size: 22px;
+}
+.master-section-facts {
+	padding-top: 4px;
+}
+.master-table-wrap {
+	overflow-x: auto;
+	padding: 16px 18px 18px;
+}
+.master-child-table {
+	min-width: 620px;
+	overflow: hidden;
+	border: 1px solid #d8cdbd;
+	border-radius: 12px;
+}
+.master-child-table :deep(.p-datatable-thead > tr > th) {
+	padding: 10px 12px;
+	border-color: #263752;
+	background: var(--po-navy);
+	color: #fff;
+	font-size: 10.5px;
+	font-weight: 750;
+	letter-spacing: .045em;
+	text-transform: uppercase;
+}
+.master-child-table :deep(.p-datatable-tbody > tr > td) {
+	padding: 11px 12px;
+	border-color: #e8e1d7;
+	color: var(--po-ink);
+	font-size: 12.5px;
+}
+.master-cell-link {
+	color: #087c71;
+	font-weight: 700;
+	text-decoration: none;
+}
+.pi-view-table-wrap {
+	padding: 14px 18px 18px;
+}
+.pi-view-table {
+	min-width: 100%;
+}
+.pi-source-link {
+	display: inline-flex;
+	align-items: center;
+	min-height: 28px;
+}
+.pi-view-item {
+	display: block;
+	color: #087c71;
+}
+.pi-item-table small {
+	display: block;
+	margin-top: 3px;
+	color: #7a8496;
+	font-size: 10.5px;
+}
+.master-special-body {
+	padding: 16px 18px 18px;
+}
+.master-special-body :deep(.attr-list),
+.master-special-body :deep(.dependent-attribute-editor) {
+	margin: 0;
+}
+.master-access-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+	padding: 16px 18px 18px;
+}
+.master-access-grid > div {
+	min-width: 0;
+	padding: 14px;
+	border: 1px solid #e5dccf;
+	border-radius: 12px;
+	background: #fff;
+}
+.master-access-grid > div > span {
+	color: var(--po-muted);
+	font-size: 10.5px;
+	font-weight: 800;
+	letter-spacing: .055em;
+	text-transform: uppercase;
+}
+.master-access-grid p {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+	margin: 10px 0 0;
+}
+.master-access-grid b {
+	padding: 5px 9px;
+	border-radius: 999px;
+	background: #e4f3ef;
+	color: #087c71;
+	font-size: 11px;
+}
+.master-access-grid small {
+	display: block;
+	margin-top: 9px;
+	color: var(--po-muted);
+	font-size: 11.5px;
+}
+.master-summary-view .po-total-lines strong {
+	max-width: 162px;
+	overflow-wrap: anywhere;
+	text-align: right;
+}
+.po-notes-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0;
+	padding: 18px;
+}
+.po-notes-grid > div {
+	min-height: 72px;
+	padding-right: 18px;
+}
+.po-notes-grid > div + div {
+	padding-left: 18px;
+	border-left: 1px solid #e7dfd3;
+}
+.po-notes-grid p {
+	margin: 8px 0 0;
+	color: var(--po-ink);
+	font-size: 13px;
+	line-height: 1.55;
+	white-space: pre-line;
+}
+.po-totals-card > header {
+	padding: 16px 18px;
+	background: var(--po-navy);
+	color: #fff;
+}
+.po-totals-card > header small {
+	color: #b8c3d4;
+	font-size: 9px;
+	font-weight: 750;
+	letter-spacing: .07em;
+	text-transform: uppercase;
+}
+.po-totals-card h3,
+.po-progress-card h3,
+.po-activity-card h3 {
+	margin: 3px 0 0;
+	font-size: 15px;
+}
+.po-total-lines {
+	display: grid;
+	padding: 7px 16px;
+}
+.po-total-lines > div {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 9px 0;
+	border-bottom: 1px dashed #e2dbcf;
+}
+.po-total-lines > div:last-child {
+	border-bottom: 0;
+}
+.po-total-lines span,
+.po-grand-total span {
+	color: var(--po-muted);
+	font-size: 11px;
+}
+.po-total-lines strong {
+	color: var(--po-ink);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+.po-grand-total {
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 15px 16px 17px;
+	border-top: 1px solid var(--po-line);
+	background: var(--po-cream);
+}
+.po-grand-total strong {
+	color: var(--po-red-dark);
+	font-size: 20px;
+	font-variant-numeric: tabular-nums;
+}
+.po-progress-card,
+.po-activity-card {
+	padding: 16px;
+}
+.po-progress-card h3,
+.po-activity-card h3 {
+	margin: 0 0 13px;
+	color: var(--po-ink);
+}
+.po-progress-status {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px;
+	border-radius: 11px;
+	background: #f7f8fa;
+}
+.po-progress-dot {
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: #d28a21;
+	box-shadow: 0 0 0 4px #f8ecd9;
+}
+.po-progress-dot.status-1 {
+	background: #16856f;
+	box-shadow: 0 0 0 4px #ddf1eb;
+}
+.po-progress-dot.status-2 {
+	background: #b42318;
+	box-shadow: 0 0 0 4px #fee4e2;
+}
+.po-progress-status div {
+	display: grid;
+	gap: 2px;
+}
+.po-progress-status strong {
+	color: var(--po-ink);
+	font-size: 12px;
+}
+.po-progress-status small {
+	color: var(--po-muted);
+	font-size: 10.5px;
+}
+.po-related-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	margin-top: 10px;
+	padding: 11px 12px;
+	border: 1px solid #e6e0d7;
+	border-radius: 11px;
+	background: #fff;
+	color: inherit;
+	text-align: left;
+	text-decoration: none;
+	cursor: pointer;
+}
+.po-related-row span {
+	display: grid;
+	gap: 2px;
+}
+.po-related-row small {
+	color: var(--po-muted);
+	font-size: 9px;
+	text-transform: uppercase;
+}
+.po-related-row strong {
+	color: var(--po-ink);
+	font-size: 11.5px;
+}
+.po-related-row b {
+	display: grid;
+	place-items: center;
+	min-width: 24px;
+	height: 24px;
+	border-radius: 999px;
+	background: #e4f3ef;
+	color: #087c71;
+	font-size: 11px;
+}
+.po-related-row > i {
+	color: #8a93a0;
+	font-size: 11px;
+}
+.po-activity-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 0;
+}
+.po-activity-row + .po-activity-row {
+	border-top: 1px solid #eee9e1;
+}
+.po-activity-row > span {
+	display: grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 25px;
+	height: 25px;
+	border-radius: 50%;
+	background: #e5eaf1;
+	color: #596579;
+	font-size: 10px;
+}
+.po-activity-row > span.good {
+	background: #e2f3ed;
+	color: #16856f;
+}
+.po-activity-row > span.danger {
+	background: #fee4e2;
+	color: #b42318;
+}
+.po-activity-row > div {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+.po-activity-row strong {
+	color: var(--po-ink);
+	font-size: 11.5px;
+	font-weight: 650;
+}
+.po-activity-row small {
+	color: var(--po-muted);
+	font-size: 9.5px;
+}
+@media (max-width: 1080px) {
+	.po-saved-layout {
+		grid-template-columns: 1fr;
+	}
+	.po-saved-side {
+		position: static;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+@media (max-width: 760px) {
+	.book-view .detail-head {
+		flex-wrap: wrap;
+	}
+	.book-view .id-block {
+		flex: 1 0 100%;
+		width: 100%;
+	}
+	.book-view .doc-hero {
+		font-size: 20px;
+		line-height: 1.25;
+		overflow-wrap: anywhere;
+	}
+	.book-view .head-actions {
+		display: flex;
+		flex: 1 0 100%;
+		flex-wrap: wrap;
+		width: 100%;
+		margin-left: 0;
+	}
+	.book-view .head-actions > .cta-wrap {
+		flex: 1 0 100%;
+	}
+	.book-view .head-actions > .cta-wrap :deep(.p-button) {
+		width: 100%;
+	}
+	.po-order-overview > header {
+		align-items: flex-start;
+		flex-wrap: wrap;
+		padding-left: 22px;
+	}
+	.po-overview-total {
+		flex: 1 0 100%;
+		margin-left: 72px;
+		text-align: left;
+	}
+	.po-facts {
+		grid-template-columns: 1fr 1fr;
+		padding: 3px 14px 14px;
+	}
+	.po-fact,
+	.po-fact:not(:nth-child(4n + 1)) {
+		grid-column: span 1;
+		padding: 13px 10px;
+		border-left: 0;
+	}
+	.po-fact:nth-child(even) {
+		border-left: 1px solid #ebe4d9;
+	}
+	.po-saved-items > header,
+	.po-saved-notes > header {
+		align-items: flex-start;
+	}
+	.po-saved-items :deep(.stock-grid-editor) {
+		padding: 12px;
+	}
+	.po-notes-grid,
+	.po-saved-side {
+		grid-template-columns: 1fr;
+	}
+	.po-notes-grid > div,
+	.po-notes-grid > div + div {
+		padding: 0;
+		border-left: 0;
+	}
+	.po-notes-grid > div + div {
+		margin-top: 16px;
+		padding-top: 16px;
+		border-top: 1px solid #e7dfd3;
+	}
+	.ipd-attributes-panel > header {
+		align-items: flex-start;
+	}
+	.ipd-section-note {
+		display: none;
+	}
+	.ipd-bom-view-panel :deep(.ipd-bom-editor) {
+		padding: 12px;
+	}
+	.ipd-bom-mapping-body :deep(.bom-mapping-editor) {
+		min-width: 0;
+	}
+	.ipd-attribute-grid {
+		grid-template-columns: 1fr;
+		padding: 12px;
+	}
+	.master-access-grid {
+		grid-template-columns: 1fr;
+		padding: 12px;
+	}
+	.master-special-body,
+	.master-table-wrap {
+		padding: 12px;
+	}
+	.ipd-dialog-context {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 3px;
+	}
+	.ipd-dialog-context small {
+		text-align: left;
+	}
+}
 .edit-dt :deep(.cell-input) {
 	width: 100%;
 }
@@ -5082,6 +10120,7 @@ function stripHtml(s) {
 .field-value.link {
 	color: var(--mgk-accent-700);
 	cursor: pointer;
+	text-decoration: none;
 }
 .field-value.link:hover {
 	text-decoration: underline;
@@ -5219,6 +10258,8 @@ function stripHtml(s) {
 	align-items: center;
 	padding: 11px 14px;
 	border-bottom: 1px solid var(--mgk-line);
+	color: inherit;
+	text-decoration: none;
 	cursor: pointer;
 	transition: background 0.1s;
 }
@@ -5302,6 +10343,8 @@ function stripHtml(s) {
 	color: var(--mgk-ink-2);
 }
 .link-row {
+	color: inherit;
+	text-decoration: none;
 	cursor: pointer;
 }
 .link-row:hover .k {
@@ -5398,4 +10441,69 @@ function stripHtml(s) {
 .srv-err__actions {
 	margin-top: 8px;
 }
+
+/* Registered-experience readability baseline.  These values preserve the
+   table/form geometry while giving the MGK book screens the same legibility as
+   the former UI viewed at 110% browser zoom. */
+.book-entry .crumbs,
+.book-view .crumbs {
+	font-size: 13.75px;
+}
+.book-entry .doc-hero,
+.book-view .doc-hero {
+	font-size: 22px;
+}
+.book-entry .id-block .doc-id,
+.book-view .id-block .doc-id,
+.book-entry .doc-subtle.edit-hint,
+.book-view .doc-subtle.edit-hint {
+	font-size: 13px;
+}
+.book-entry-kicker { font-size: 12px; }
+.book-entry-title p { font-size: 14px; }
+.book-entry-mark small { font-size: 11px; }
+.book-entry-mark strong { font-size: 27.5px; }
+.book-entry .form-section .mgk-card__title,
+.book-entry .child-editor-title h4 { font-size: 16.5px; }
+.book-entry .form-field > label.field-label { font-size: 12px; }
+.book-entry .form-field .field-help,
+.child-editor-title small { font-size: 12.5px; }
+.book-entry .child-cols-note.pivot-note { font-size: 11.5px; }
+.book-entry :deep(.stock-grid-editor .add-head h4) { font-size: 15.5px; }
+.order-summary-card header > div > small { font-size: 11px; }
+.order-summary-card h3,
+.order-checklist h3 { font-size: 16.5px; }
+.summary-lines span,
+.summary-total span { font-size: 12px; }
+.summary-lines strong,
+.order-checklist strong { font-size: 13px; }
+.summary-total strong { font-size: 22px; }
+.order-checklist small { font-size: 11.5px; }
+
+.po-saved-book small { font-size: 9px; }
+.po-saved-book strong { font-size: 22px; }
+.po-view-kicker,
+.po-overview-total small,
+.po-fact > span,
+.po-notes-grid span { font-size: 11px; }
+.po-overview-title h2 { font-size: 22px; }
+.po-overview-title p,
+.po-section-title p { font-size: 12.5px; }
+.po-overview-total strong { font-size: 26.5px; }
+.po-fact strong { font-size: 14.5px; }
+.po-fact .po-record-link small { font-size: 11px; }
+.po-section-title h3 { font-size: 15.5px; }
+.po-item-count { font-size: 11.5px; }
+.po-totals-card > header small,
+.po-related-row small { font-size: 10px; }
+.po-totals-card h3,
+.po-progress-card h3,
+.po-activity-card h3 { font-size: 16.5px; }
+.po-total-lines span,
+.po-grand-total span { font-size: 12px; }
+.po-total-lines strong,
+.po-progress-status strong { font-size: 13px; }
+.po-grand-total strong { font-size: 22px; }
+.po-progress-status small { font-size: 11.5px; }
+.po-related-row strong { font-size: 12.5px; }
 </style>

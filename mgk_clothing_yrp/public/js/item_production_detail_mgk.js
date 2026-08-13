@@ -94,30 +94,15 @@ function mount_finished_item_attribute_values(frm) {
 
 async function get_yarn_process_catalog() {
 	if (yarn_process_catalog) return yarn_process_catalog;
-	const [processes, items, colours] = await Promise.all([
-		frappe.db.get_list("Process", {
-			filters: { is_yarn_process: 1, is_group: 0 },
-			fields: ["name", "is_item_conversion"],
-			order_by: "name asc",
-			limit: 0,
-		}),
-		frappe.db.get_list("Item", {
-			filters: { is_yarn_item: 1, disabled: 0 },
-			fields: ["name"],
-			order_by: "name asc",
-			limit: 0,
-		}),
-		frappe.db.get_list("Item Attribute Value", {
-			filters: { attribute_name: "Colour" },
-			fields: ["name"],
-			order_by: "name asc",
-			limit: 0,
-		}),
-	]);
+	const response = await frappe.call({
+		method: "mgk_clothing_yrp.mgk_clothing_yrp.api.experiences.operations_workspace.item_production_detail.get_entry_context",
+	});
+	const context = response.message || {};
+	const items = context.yarn_items || [];
 	yarn_process_catalog = {
-		processes,
+		processes: context.processes || [],
 		yarn_items: items.map((row) => row.name),
-		colours: colours.map((row) => row.name),
+		colours: [...new Set(items.flatMap((row) => row.colours || []))],
 	};
 	return yarn_process_catalog;
 }

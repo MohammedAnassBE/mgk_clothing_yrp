@@ -1,29 +1,42 @@
 /**
  * Inspection Entry — per-DocType field config consumed by DocDetail.vue.
  *
- * `against_id` is a Dynamic Link controlled by `against` (Goods Received Note /
- * Stock Entry). The default name-search would list ALL records of the target
- * (including draft + rework GRNs), so we mirror the Desk `set_query`
- * (inspection_entry.js): only SUBMITTED sources; GRNs exclude rework; Stock
- * Entries must be Purpose = "Material Receipt". The factory closes over the live
- * `form`, so the filter re-evaluates when `against` changes.
+ * The base DocType supports GRN or Stock Entry. The MGK Registered Experience
+ * deliberately exposes the client-approved GRN flow only: Against is seeded to
+ * Goods Received Note and hidden; the operator chooses one submitted, non-rework
+ * GRN and classifies its received rows.
  */
 import { searchLink } from "@/api/client"
 
-// No `against` chosen yet → no suggestions (the user must pick the source kind
-// first, exactly like the Desk, which can't resolve the Dynamic Link target).
-const emptyHandler = async () => []
-
 const linkSearchHandlers = {
-	against_id: (form) => {
-		if (!form.against) return emptyHandler
-		const filters = { docstatus: 1 }
-		if (form.against === "Goods Received Note") filters.is_rework = 0
-		else if (form.against === "Stock Entry") filters.purpose = "Material Receipt"
-		return (q) => searchLink(form.against, q, filters)
-	},
+	against_id: () => (q) => searchLink("Goods Received Note", q, {
+		docstatus: 1,
+		is_rework: 0,
+	}),
 }
 
 export default {
+	formOrder: ["against_id", "posting_date", "posting_time", "remarks"],
+	formGroups: [
+		{
+			key: "inspection-source",
+			label: "Goods Received Note",
+			fields: ["against_id", "posting_date", "posting_time"],
+		},
+		{
+			key: "inspection-notes",
+			label: "Inspection notes",
+			fields: ["remarks"],
+		},
+	],
+	hideFormFields: ["against", "inspector", "status", "is_converted", "amended_from"],
 	linkSearchHandlers,
+	labels: {
+		against_id: "Goods Received Note",
+		remarks: "Inspection Notes",
+	},
+	help: {
+		against_id: "Choose a submitted Goods Received Note. Its received rows load automatically below.",
+		remarks: "Optional notes about this inspection or classification.",
+	},
 }

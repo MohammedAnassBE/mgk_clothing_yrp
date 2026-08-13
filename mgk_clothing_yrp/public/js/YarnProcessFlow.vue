@@ -1,7 +1,7 @@
 <template>
 	<div class="mgk-yarn-flow">
 		<div v-if="!steps.length" class="yf-empty">
-			{{ __("No yarn processes yet. Add Doubling or Dyeing to define the flow.") }}
+			{{ __("No yarn processes yet. Add the first Process to define the flow.") }}
 		</div>
 
 		<div class="yf-flow">
@@ -11,8 +11,8 @@
 						<span class="yf-sequence">{{ index + 1 }}</span>
 						<div>
 							<div class="yf-process">{{ step.process_name || __("(no process)") }}</div>
-							<span class="yf-badge" :class="isConversion(step) ? 'is-conversion' : 'is-colour'">
-								{{ isConversion(step) ? __("Item Conversion") : __("Colour Change") }}
+						<span class="yf-badge" :class="shapeClass(step)">
+							{{ __(shapeLabel(step)) }}
 							</span>
 						</div>
 						<div v-if="editable" class="yf-actions">
@@ -32,7 +32,7 @@
 						<span class="yf-ratio">{{ ratioLabel(step) }}</span>
 					</div>
 
-					<div v-if="!isConversion(step)" class="yf-colours">
+					<div v-if="changesColour(step)" class="yf-colours">
 						<span
 							v-for="(route, routeIndex) in step.routes"
 							:key="routeIndex"
@@ -44,7 +44,9 @@
 						</span>
 					</div>
 					<p v-else class="yf-note">
-						{{ __("All common yarn attributes carry to the output Item.") }}
+						{{ isConversion(step)
+							? __("All common yarn attributes carry to the output Item.")
+							: __("The Yarn Item and all attributes pass through unchanged.") }}
 					</p>
 				</article>
 				<div v-if="index < steps.length - 1" class="yf-connector">
@@ -72,8 +74,8 @@
 		<section v-if="draft" class="yf-editor">
 			<div class="yf-editor-title">
 				<span>{{ editingIndex === null ? __("Add Yarn Process") : __("Edit Yarn Process") }}</span>
-				<span class="yf-badge" :class="draftConversion ? 'is-conversion' : 'is-colour'">
-					{{ draftConversion ? __("Item Conversion") : __("Colour Change") }}
+				<span class="yf-badge" :class="draftShapeClass">
+					{{ __(draftShapeLabel) }}
 				</span>
 			</div>
 
@@ -106,7 +108,7 @@
 				</label>
 			</div>
 
-			<div v-if="!draftConversion" class="yf-transition-editor">
+			<div v-if="draftChangesColour" class="yf-transition-editor">
 				<div class="yf-transition-head">{{ __("Colour transitions") }}</div>
 				<div v-for="(route, index) in draft.routes" :key="index" class="yf-transition-row">
 					<select v-model="route.from_colour" class="form-control">
@@ -175,6 +177,29 @@ const draftConversion = computed(() => {
 	if (!draft.value) return false;
 	return Boolean(processByName.value[draft.value.process_name]?.is_item_conversion);
 });
+const draftChangedAttributes = computed(() => processChangeAttributes(draft.value?.process_name));
+const draftChangesColour = computed(() => (
+	!draftConversion.value && draftChangedAttributes.value.includes("Colour")
+));
+const draftPassThrough = computed(() => (
+	Boolean(draft.value?.process_name)
+	&& !draftConversion.value
+	&& !draftChangedAttributes.value.length
+));
+const draftUnsupportedAttributes = computed(() => (
+	draftConversion.value && draftChangedAttributes.value.length
+		? draftChangedAttributes.value
+		: draftChangedAttributes.value.filter((attribute) => attribute !== "Colour")
+));
+const draftShapeLabel = computed(() => {
+	if (draftUnsupportedAttributes.value.length) return "Unsupported attribute change";
+	if (draftConversion.value) return "Item Conversion";
+	if (draftChangesColour.value) return "Colour Change";
+	return "Pass-through";
+});
+const draftShapeClass = computed(() => (
+	draftConversion.value ? "is-conversion" : draftChangesColour.value ? "is-colour" : "is-pass-through"
+));
 
 function clone(value) {
 	return JSON.parse(JSON.stringify(value));
@@ -184,6 +209,26 @@ function isConversion(step) {
 	const process = processByName.value[step.process_name];
 	if (process) return Boolean(process.is_item_conversion);
 	return step.input_item !== step.output_item;
+}
+
+function processChangeAttributes(processName) {
+	const values = processByName.value[processName]?.value_change_attributes;
+	return Array.isArray(values) ? values.filter(Boolean) : [];
+}
+
+function changesColour(step) {
+	return !isConversion(step) && processChangeAttributes(step.process_name).includes("Colour");
+}
+
+function shapeLabel(step) {
+	const changedAttributes = processChangeAttributes(step.process_name);
+	if (isConversion(step)) return changedAttributes.length ? "Unsupported attribute change" : "Item Conversion";
+	if (changesColour(step)) return "Colour Change";
+	return changedAttributes.length ? "Unsupported attribute change" : "Pass-through";
+}
+
+function shapeClass(step) {
+	return isConversion(step) ? "is-conversion" : changesColour(step) ? "is-colour" : "is-pass-through";
 }
 
 function ratioLabel(step) {
@@ -257,9 +302,12 @@ function processChanged() {
 			draft.value.output_item = "";
 		}
 		draft.value.routes = [{ from_colour: "", to_colour: "" }];
-	} else {
+	} else if (draftChangesColour.value) {
 		draft.value.output_item = draft.value.input_item;
 		if (!draft.value.routes.length) addColourRoute();
+	} else {
+		draft.value.output_item = draft.value.input_item;
+		draft.value.routes = [{ from_colour: "", to_colour: "" }];
 	}
 }
 
@@ -282,6 +330,10 @@ function validateDraft() {
 		frappe.msgprint(__("Output per Input must be greater than zero."));
 		return false;
 	}
+	if (draftUnsupportedAttributes.value.length) {
+		frappe.msgprint(__("This Yarn Process has unsupported Value Change Attributes: {0}.", [draftUnsupportedAttributes.value.join(", ")]));
+		return false;
+	}
 	if (draftConversion.value) {
 		if (draft.value.input_item === draft.value.output_item) {
 			frappe.msgprint(__("Doubling must convert the input Yarn Item into a different output Yarn Item."));
@@ -290,6 +342,10 @@ function validateDraft() {
 		return true;
 	}
 	draft.value.output_item = draft.value.input_item;
+	if (draftPassThrough.value) {
+		draft.value.routes = [{ from_colour: "", to_colour: "" }];
+		return true;
+	}
 	if (!draft.value.routes.length || draft.value.routes.some(
 		(route) => !route.from_colour || !route.to_colour || route.from_colour === route.to_colour
 	)) {
@@ -342,9 +398,9 @@ function emitChange() {
 	if (!onChange) return;
 	const routes = [];
 	for (const step of steps.value) {
-		const stepRoutes = isConversion(step)
-			? [{ from_colour: "", to_colour: "" }]
-			: step.routes;
+		const stepRoutes = changesColour(step)
+			? step.routes
+			: [{ from_colour: "", to_colour: "" }];
 		for (const route of stepRoutes) {
 			routes.push({
 				sequence: step.sequence,
@@ -427,6 +483,11 @@ defineExpose({ load_data, get_steps });
 .yf-badge.is-conversion {
 	background: #e8f3ff;
 	color: #1768ac;
+}
+
+.yf-badge.is-pass-through {
+	background: #eef7f1;
+	color: #287548;
 }
 
 .yf-badge.is-colour {

@@ -68,7 +68,12 @@ def _match_fields(meta, label_field):
 
 @frappe.whitelist()
 def link_search(doctype, txt="", filters=None, page_length=20):
-	"""Search `doctype` by name + title/search fields. Returns [{name, label}].
+	"""Search `doctype` by name + English title/search fields.
+
+	Returns ``name`` (the canonical Link value), ``label_en`` and, for MGK's
+	bilingual masters, ``label_ta``. Tamil is deliberately a display value only:
+	the user's typed query continues to match the record ID and English
+	title/search fields, exactly as requested for the MGK operations UI.
 
 	`filters` (AND) narrow the result set (e.g. attribute_name for Item Attribute
 	Value); the typed `txt` is matched as an OR across name + the match fields. The
@@ -85,11 +90,12 @@ def link_search(doctype, txt="", filters=None, page_length=20):
 
 	meta = frappe.get_meta(doctype)
 	label_field = _label_field(meta)
+	tamil_field = "mgk_tamil_name" if meta.has_field("mgk_tamil_name") else None
 	match_fields = _match_fields(meta, label_field)
 	txt = (txt or "").strip()
 
 	# Fetch name + the label field (when there is a distinct human title).
-	fields = ["name"] + ([label_field] if label_field else [])
+	fields = ["name"] + ([label_field] if label_field else []) + ([tamil_field] if tamil_field else [])
 
 	# Empty txt → return the top page_length records (Frappe-desk parity): honor
 	# the AND `filters` only, no OR text matching, sorted by modified desc. A
@@ -109,6 +115,16 @@ def link_search(doctype, txt="", filters=None, page_length=20):
 	)
 	out = []
 	for r in rows:
-		label = (r.get(label_field) if label_field else None) or r["name"]
-		out.append({"name": r["name"], "label": label})
+		label_en = (r.get(label_field) if label_field else None) or r["name"]
+		label_ta = (r.get(tamil_field) if tamil_field else None) or ""
+		out.append(
+			{
+				"name": r["name"],
+				# Keep `label` for existing consumers/custom handlers. The shared
+				# LinkField chooses label_en/label_ta reactively from the header toggle.
+				"label": label_en,
+				"label_en": label_en,
+				"label_ta": label_ta,
+			}
+		)
 	return out

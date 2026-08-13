@@ -59,17 +59,17 @@
   We never write Stock Ledger Entries; the server does variant resolution.
 -->
 <template>
-	<div class="stock-grid-editor">
+	<div ref="editorEl" class="stock-grid-editor">
 		<!-- ── Existing logical items (grouped pivot view) ── -->
 		<div v-if="groups.length" class="grid-groups">
 			<div v-for="(group, gi) in groups" :key="'g-' + gi" class="grid-group">
-				<DataTable :value="group.items" class="mgk-table pivot-dt" :rowHover="false" :tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }">
+				<DataTable :value="group.items" class="mgk-table pivot-dt" :rowHover="false" :tableStyle="gridTableStyle(group)">
 					<Column header="#" :style="{ width: '40px' }">
 						<template #body="{ index }">{{ index + 1 }}</template>
 					</Column>
 					<Column header="Item" :style="{ minWidth: '160px' }">
 						<template #body="{ data }">
-							<span class="mgk-mono">{{ data.name }}</span>
+							<span class="mgk-mono">{{ localizedItem(data.name) }}</span>
 						</template>
 					</Column>
 
@@ -106,8 +106,10 @@
 							<template #body="{ data }">
 								<InputNumber
 									v-if="editable && data.values[pv]"
-									v-model="data.values[pv].qty"
+									:modelValue="data.values[pv].qty"
+									@update:modelValue="onExistingQtyInput(data, pv, $event)"
 									:min="0"
+									:max="existingQtyMax(data, pv)"
 									:minFractionDigits="0"
 									:maxFractionDigits="3"
 									class="cell-num"
@@ -115,8 +117,8 @@
 									fluid
 								/>
 								<span v-else class="cell-ro">{{ cellQty(data, pv) }}</span>
-									<template v-if="data.values[pv] && cellFields.length">
-										<span v-for="cf in cellFields" :key="'cf-' + cf.name" class="cell-extra">{{ cf.label }}: {{ fmtCell(data.values[pv][cf.name]) }}</span>
+									<template v-if="data.values[pv] && inlineCellFields.length">
+										<span v-for="cf in inlineCellFields" :key="'cf-' + cf.name" class="cell-extra">{{ cf.label }}: {{ fmtCell(data.values[pv][cf.name]) }}</span>
 									</template>
 									<span
 										v-if="hasSecondary(data.values[pv])"
@@ -130,8 +132,10 @@
 							<template #body="{ data }">
 								<InputNumber
 									v-if="editable && data.values.default"
-									v-model="data.values.default.qty"
+									:modelValue="data.values.default.qty"
+									@update:modelValue="onExistingQtyInput(data, 'default', $event)"
 									:min="0"
+									:max="existingQtyMax(data, 'default')"
 									:minFractionDigits="0"
 									:maxFractionDigits="3"
 									class="cell-num"
@@ -139,8 +143,8 @@
 									fluid
 								/>
 								<span v-else class="cell-ro">{{ (data.values.default && data.values.default.qty) || 0 }}</span>
-									<template v-if="data.values.default && cellFields.length">
-										<span v-for="cf in cellFields" :key="'cf-' + cf.name" class="cell-extra">{{ cf.label }}: {{ fmtCell(data.values.default[cf.name]) }}</span>
+									<template v-if="data.values.default && inlineCellFields.length">
+										<span v-for="cf in inlineCellFields" :key="'cf-' + cf.name" class="cell-extra">{{ cf.label }}: {{ fmtCell(data.values.default[cf.name]) }}</span>
 									</template>
 									<span
 										v-if="hasSecondary(data.values.default)"
@@ -150,8 +154,40 @@
 						</Column>
 					</template>
 
+					<Column
+						v-for="cf in separateColumnFields"
+						:key="'separate-' + cf.name"
+						:header="cf.label"
+						:style="{ width: isCurrencyCellField(cf) ? '132px' : '112px' }"
+					>
+						<template #body="{ data }">
+							<span class="separate-cell-value" :class="{ money: isCurrencyCellField(cf) }">
+								{{ formatSeparateCell(data, cf) }}
+							</span>
+						</template>
+					</Column>
+
 					<Column header="UOM" :style="{ width: '84px' }">
 						<template #body="{ data }">{{ data.default_uom || "—" }}</template>
+					</Column>
+
+					<Column v-if="showPreviousPrice" header="Previous Price" :style="{ width: '138px' }">
+						<template #body="{ data, index }">
+							<div v-if="previousPriceLoading" class="previous-price loading">
+								<i class="pi pi-spin pi-spinner" />
+							</div>
+							<div v-else class="previous-price">
+								<span
+									v-for="line in previousPriceLines(gi, index, data, group)"
+									:key="line.key"
+									v-tooltip.bottom="line.tooltip"
+									:class="{ empty: line.rate === null }"
+								>
+									<small v-if="line.label">{{ line.label }}</small>
+									{{ line.rate === null ? "No history" : `₹ ${fmtPrice(line.rate)}` }}
+								</span>
+							</div>
+						</template>
 					</Column>
 
 					<Column v-if="editable && !lockedItems" :style="{ width: '88px' }" bodyStyle="text-align:center">
@@ -188,9 +224,9 @@
 		</div>
 
 		<!-- ── Add-item form ── -->
-		<section v-if="editable && !lockedItems" class="add-form">
+		<section v-if="editable && !lockedItems" ref="addFormEl" class="add-form">
 			<div class="add-head">
-				<h4>{{ draft.editing ? "Edit item" : (draft.parentItem ? "Configure quantities" : "Add item") }}</h4>
+				<h4>{{ draft.editing ? "Edit item" : (draft.parentItem ? `Configure ${localizedItem(draft.parentItem)}` : "Add item") }}</h4>
 				<span v-if="loadingAttrs" class="add-loading">
 					<i class="pi pi-spin pi-spinner" /> resolving attributes…
 				</span>
@@ -199,9 +235,10 @@
 			<!-- Dimensions + item picker -->
 			<div class="add-row">
 				<div
-					v-for="dim in dimensions"
+					v-for="dim in entryDimensions"
 					:key="'dimctl-' + dim.fieldname"
 					class="add-fld"
+					:data-focus-key="`dimension:${dim.fieldname}`"
 				>
 					<label>
 						{{ dim.label }}<span v-if="dim.mandatory" class="req"> *</span>
@@ -217,18 +254,15 @@
 					/>
 				</div>
 
-				<div class="add-fld item-fld">
+				<div class="add-fld item-fld" data-focus-key="item">
 					<label>Item <span class="req">*</span></label>
-					<AutoComplete
+					<LinkField
 						v-model="draft.parentItem"
-						:suggestions="itemSuggestions"
-						@complete="searchItem"
+						target-doctype="Item"
+						:filters="itemFilters"
 						@item-select="onParentItemSelected"
 						@change="onParentItemMaybeCleared"
 						placeholder="Parent item"
-						dropdown
-						completeOnFocus
-						fluid
 					/>
 				</div>
 			</div>
@@ -237,7 +271,7 @@
 			<template v-if="draft.parentItem && draft.resolved">
 				<!-- Dependent attribute (e.g. Stage) selector — pick a stage first -->
 				<div v-if="draft.dependentAttribute" class="add-row attr-row">
-					<div class="add-fld">
+					<div class="add-fld" data-focus-key="dependent">
 						<label>{{ draft.dependentAttribute }} <span class="req">*</span></label>
 						<Select
 							v-model="draft.dependentValue"
@@ -258,6 +292,7 @@
 						v-for="attr in draft.attributes"
 						:key="'attrctl-' + attr"
 						class="add-fld"
+						:data-focus-key="`attribute:${attr}`"
 					>
 						<label>{{ attr }} <span class="req">*</span></label>
 						<AutoComplete
@@ -306,6 +341,7 @@
 						v-for="pv in draft.primaryValues"
 						:key="'qty-' + pv"
 						class="qty-cell"
+						:data-focus-key="`quantity:${pv}`"
 					>
 						<label>{{ pv }}</label>
 						<span class="qty-uom">{{ draft.defaultUom || "" }}</span>
@@ -342,7 +378,7 @@
 					</div>
 				</div>
 				<!-- No primary attribute → a single qty + the same editable cell fields -->
-				<div v-else class="qty-single">
+				<div v-else class="qty-single" data-focus-key="quantity:default">
 					<label>{{ draft.defaultUom || "Qty" }} <span class="req">*</span></label>
 					<InputNumber
 						v-model="draft.values.default.qty"
@@ -393,6 +429,8 @@
 						:label="draft.editing ? 'Update Item' : 'Add Item'"
 						icon="pi pi-plus"
 						size="small"
+						:loading="pricing"
+						:disabled="pricing"
 						@click="commitDraft"
 					/>
 					<Button
@@ -401,7 +439,7 @@
 						size="small"
 						severity="secondary"
 						text
-						@click="resetDraft"
+						@click="resetDraft({ focus: true })"
 					/>
 				</div>
 				</template>
@@ -426,6 +464,9 @@ import ToggleSwitch from "primevue/toggleswitch"
 import Tooltip from "primevue/tooltip"
 import { callMethod, searchLink } from "@/api/client"
 import { useAppToast } from "@/composables/useToast"
+import { useLinkTitles } from "@/composables/useLinkTitles"
+import LinkField from "@/components/LinkField.vue"
+import { focusFirstControl } from "@/utils/focusControl"
 
 const vTooltip = Tooltip
 
@@ -446,12 +487,18 @@ const props = defineProps({
 	// the Desk's `ItemDimensionFetch.vue` per-primary-value editable fields
 	// (rate, secondary_qty for Stock Entry/Update/Reconciliation).
 	cellFields: { type: Array, default: () => [] },
+	// Move selected read-only cell fields into their own row-level columns.
+	// Useful for compact business tables such as PO Pending and Amount.
+	separateCellFields: { type: Array, default: () => [] },
 	// Optional item-link query filters (passed to searchLink as Frappe filters).
 	itemFilters: { type: Object, default: () => ({}) },
 	// false → read-only render (used if ever embedded in a view context).
 	editable: { type: Boolean, default: true },
 	// false → hide the dimension controls/columns entirely.
 	showDimensions: { type: Boolean, default: true },
+	// Hide dimensions that are assigned by the server rather than entered by
+	// the user. Values already present in loaded rows are retained on save.
+	hiddenDimensions: { type: Array, default: () => [] },
 	// Optional grouped JSON to load on mount / when it changes (read-only view use).
 	initialData: { type: [Array, String, Object], default: null },
 	// true → render an "Allow Zero Valuation Rate" toggle in the add-form as a
@@ -475,16 +522,25 @@ const props = defineProps({
 	// for vouchers whose item set is derived from a parent doc (DC's items
 	// come from the WO; the user only adjusts qtys).
 	lockedItems: { type: Boolean, default: false },
+	// Purchase Order parity with Desk: supplier controls the active Item Price.
+	// Opt-in props keep every other stock pivot's behaviour unchanged.
+	priceSupplier: { type: String, default: "" },
+	applyAvailablePrice: { type: Boolean, default: false },
+	// Purchase Order comparison aid. This is derived server-side from the most
+	// recent earlier submitted PO and is never written into the child rows.
+	showPreviousPrice: { type: Boolean, default: false },
+	currentDocument: { type: String, default: "" },
 })
 
 const toast = useAppToast()
+const linkTitles = useLinkTitles()
 
 // Q6: let the parent (DocDetail) treat grid edits as "unsaved changes". The grid
 // keeps its own state (not in the parent `form`), so without this a quantity/rate
 // edit wouldn't trip the parent's dirty guard. We emit `change` on genuine user
 // edits to `groups` (cell qty/rate, add/delete row) — armed AFTER loadData/mount
 // so the programmatic hydration/seed never false-fires.
-const emit = defineEmits(["change"])
+const emit = defineEmits(["change", "summary"])
 const changeArmed = ref(false)
 
 // ── grouped state (== save_stock_items.py shape) ──
@@ -492,12 +548,19 @@ const groups = ref([])
 
 watch(
 	groups,
-	() => { if (changeArmed.value) emit("change") },
+	() => {
+		if (changeArmed.value) emit("change")
+		emit("summary", buildSummary())
+	},
 	{ deep: true },
 )
 
 // ── dimension config (lot / received_type …) ──
 const dimensions = ref([])
+const entryDimensions = computed(() => {
+	const hidden = new Set(props.hiddenDimensions || [])
+	return dimensions.value.filter((dim) => !hidden.has(dim.fieldname))
+})
 
 // ── add-item draft ──
 const blankDraft = () => ({
@@ -528,9 +591,14 @@ const blankDraft = () => ({
 })
 const draft = reactive(blankDraft())
 const loadingAttrs = ref(false)
+const pricing = ref(false)
+const previousPriceLoading = ref(false)
+const previousPrices = ref({})
+const editorEl = ref(null)
+const addFormEl = ref(null)
+let previousPriceRequest = 0
 
 // ── autocomplete buffers ──
-const itemSuggestions = ref([])
 const attrValueSuggestions = reactive({}) // { attrName: [values] }
 const dimSuggestions = reactive({}) // { fieldname: [values] }
 
@@ -574,10 +642,113 @@ const totalQty = computed(() => {
 	return t
 })
 
+const previousPriceSignature = computed(() => JSON.stringify(
+	groups.value.map((group) => ({
+		items: (group.items || []).map((item) => ({
+			name: item.name,
+			attributes: item.attributes || {},
+			primary_attribute: item.primary_attribute || "",
+			values: Object.fromEntries(
+				Object.entries(item.values || {})
+					.filter(([, value]) => Number(value?.qty) > 0)
+					.map(([key]) => [key, 1]),
+			),
+		})),
+	})),
+))
+
+watch(
+	[
+		() => props.showPreviousPrice,
+		() => props.priceSupplier,
+		() => props.currentDocument,
+		previousPriceSignature,
+	],
+	loadPreviousPrices,
+	{ immediate: true },
+)
+
+async function loadPreviousPrices() {
+	const request = ++previousPriceRequest
+	if (!props.showPreviousPrice || !props.priceSupplier || !groups.value.length) {
+		previousPrices.value = {}
+		previousPriceLoading.value = false
+		return
+	}
+	previousPriceLoading.value = true
+	try {
+		const prices = await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.purchase_order.get_previous_purchase_prices",
+			{
+				item_details: JSON.stringify(groups.value),
+				supplier: props.priceSupplier,
+				current_purchase_order: props.currentDocument || null,
+			},
+		)
+		if (request === previousPriceRequest) previousPrices.value = prices || {}
+	} catch (_) {
+		if (request === previousPriceRequest) previousPrices.value = {}
+	} finally {
+		if (request === previousPriceRequest) previousPriceLoading.value = false
+	}
+}
+
+function previousPriceLines(groupIndex, itemIndex, item, group) {
+	const keys = group.primary_attribute && group.primary_attribute_values?.length
+		? group.primary_attribute_values.filter((key) => Number(item.values?.[key]?.qty) > 0)
+		: ["default"]
+	if (!keys.length) return [{ key: "empty", label: "", rate: null, tooltip: "No earlier submitted Purchase Order" }]
+	return keys.map((key) => {
+		const history = previousPrices.value[`${groupIndex}:${itemIndex}:${key}`]
+		return {
+			key,
+			label: keys.length > 1 ? key : "",
+			rate: history?.rate === undefined ? null : Number(history.rate),
+			tooltip: history
+				? `${history.purchase_order} · ${history.po_date || "date unavailable"}`
+				: "No earlier submitted Purchase Order",
+		}
+	})
+}
+
+function fmtPrice(value) {
+	const number = Number(value)
+	return Number.isNaN(number)
+		? String(value)
+		: number.toLocaleString("en-IN", { maximumFractionDigits: 3 })
+}
+
+function buildSummary() {
+	let itemCount = 0
+	let qty = 0
+	let pendingQty = 0
+	let grandTotal = 0
+	for (const group of groups.value) {
+		itemCount += group.items?.length || 0
+		for (const item of group.items || []) {
+			for (const value of Object.values(item.values || {})) {
+				const received = Number(value?.qty) || 0
+				qty += received
+				pendingQty += Number(value?.pending_quantity) || 0
+				grandTotal += Number(value?.total_amount ?? value?.amount) || received * (Number(value?.rate) || 0)
+			}
+		}
+	}
+	return { itemCount, totalQty: qty, pendingQty, grandTotal }
+}
+
 // cellFields entries flagged `editable: true` get a per-cell numeric input in
-// the add-form (rate, secondary_qty…). All cellFields are also shown stacked
-// under the qty in the committed read-only grid (line 119/139).
+// the add-form (rate, secondary_qty…). A host may promote selected read-only
+// values into dedicated columns; the remaining values stay beneath Quantity.
 const editableCellFields = computed(() => (props.cellFields || []).filter((cf) => cf?.editable))
+const separateColumnFields = computed(() => {
+	const names = new Set(props.separateCellFields || [])
+	return (props.cellFields || []).filter((cf) => names.has(cf?.name))
+})
+const inlineCellFields = computed(() => {
+	const names = new Set(props.separateCellFields || [])
+	return (props.cellFields || []).filter((cf) => !names.has(cf?.name))
+})
 
 // True when this cell holds a populated Secondary entry (a positive
 // secondary_qty AND a UOM stamped on it). Used by the cell-display template
@@ -623,8 +794,8 @@ async function onUpdateSecondaryToggle(value) {
 }
 
 function visibleDimensions(group) {
-	if (!props.showDimensions || !dimensions.value.length) return []
-	return dimensions.value.filter((dim) => {
+	if (!props.showDimensions || !entryDimensions.value.length) return []
+	return entryDimensions.value.filter((dim) => {
 		for (const it of group.items || []) {
 			const v = (it.dimensions || {})[dim.fieldname]
 			if (v !== undefined && v !== null && v !== "") return true
@@ -633,9 +804,47 @@ function visibleDimensions(group) {
 	})
 }
 
+function gridTableStyle(group) {
+	const dimensionWidth = visibleDimensions(group).length * 110
+	const attributeWidth = (group.attributes || []).length * 110
+	const qtyWidth = group.primary_attribute && group.primary_attribute_values?.length
+		? group.primary_attribute_values.length * 92
+		: 110
+	const separateWidth = separateColumnFields.value.reduce(
+		(total, field) => total + (isCurrencyCellField(field) ? 132 : 112),
+		0,
+	)
+	const optionalWidth = (props.showPreviousPrice ? 138 : 0) + (props.editable && !props.lockedItems ? 88 : 0)
+	const minWidth = Math.max(
+		620,
+		40 + 160 + dimensionWidth + attributeWidth + qtyWidth + separateWidth + 84 + optionalWidth,
+	)
+	return { tableLayout: "fixed", minWidth: `${minWidth}px` }
+}
+
 function cellQty(item, pv) {
 	const cell = (item.values || {})[pv]
 	return cell && cell.qty ? cell.qty : 0
+}
+
+function existingQtyMax(item, key) {
+	const max = Number(item?.values?.[key]?.max_receivable_quantity)
+	return Number.isFinite(max) && max >= 0 ? max : undefined
+}
+
+function onExistingQtyInput(item, key, rawValue) {
+	const value = item?.values?.[key]
+	if (!value) return
+	const qtyValue = Number(rawValue) || 0
+	value.qty = qtyValue
+	if (value.rate === undefined || value.rate === null || value.rate === "") return
+	const rate = Number(value.rate) || 0
+	const discountPercentage = Number(item.discount_percentage) || 0
+	const taxRate = Number(item.tax) || 0
+	value.amount = qtyValue * rate
+	value.discount_amount = value.amount * discountPercentage / 100
+	value.tax_amount = (value.amount - value.discount_amount) * taxRate / 100
+	value.total_amount = value.amount - value.discount_amount + value.tax_amount
 }
 
 // Format a per-cell display value (round floats; blank → "0").
@@ -645,10 +854,47 @@ function fmtCell(v) {
 	return Number.isNaN(n) ? v : Math.round(n * 1000) / 1000
 }
 
+function formatSeparateCell(item, field) {
+	if (field?.source === "entry") {
+		const value = item?.[field.name]
+		if (value === null || value === undefined || value === "") {
+			return field.format === "percentage" ? "0%" : "—"
+		}
+		const numeric = Number(value)
+		const formatted = Number.isFinite(numeric)
+			? numeric.toLocaleString("en-IN", { maximumFractionDigits: 3 })
+			: String(value)
+		return field.format === "percentage" ? `${formatted}%` : formatted
+	}
+	const cells = Object.values(item?.values || {})
+	let value
+	if (field.name === "pending_quantity" && cells.every((cell) => cell?.[field.name] == null)) {
+		value = cells.reduce((total, cell) => total + (Number(cell?.qty) || 0), 0)
+	} else if (field.name === "amount") {
+		// Draft GRN onload rows are rebuilt from their PO/WO source so they carry
+		// quantity and rate but may not carry the already-derived amount. Keep the
+		// saved view useful before submit by deriving the same qty × rate value.
+		value = cells.reduce((total, cell) => {
+			const stored = Number(cell?.amount) || 0
+			const derived = (Number(cell?.qty) || 0) * (Number(cell?.rate) || 0)
+			return total + (stored || derived)
+		}, 0)
+	} else {
+		value = cells.reduce((total, cell) => total + (Number(cell?.[field.name]) || 0), 0)
+	}
+	const formatted = value.toLocaleString("en-IN", { maximumFractionDigits: 3 })
+	return isCurrencyCellField(field) ? `₹ ${formatted}` : formatted
+}
+
+function isCurrencyCellField(field) {
+	return ["rate", "amount", "total_amount"].includes(field?.name)
+}
+
 // ════════════════ ITEM RESOLUTION (get_attribute_details) ════════════════
 async function onParentItemSelected() {
 	if (!draft.parentItem) return
 	await fetchAttributeDetails(draft.parentItem)
+	await focusNextDraftControl()
 }
 
 function onParentItemMaybeCleared() {
@@ -789,22 +1035,26 @@ function onStageChange() {
 		draft.primaryValues = []
 		draft.values = { default: blankCell() }
 	}
+	focusNextDraftControl()
 }
 
 // ════════════════ COMMIT DRAFT → groups ════════════════
-function commitDraft() {
+async function commitDraft() {
 	if (!draft.parentItem || !draft.resolved) {
 		toast.warn("Pick an item", "Choose a parent item first.")
+		focusDraftControl("item")
 		return
 	}
 	if (draft.dependentAttribute && !draft.dependentValue) {
 		toast.warn("Pick a stage", `Select a ${draft.dependentAttribute} first.`)
+		focusDraftControl("dependent")
 		return
 	}
 	// Mandatory dimensions.
-	for (const dim of dimensions.value) {
+	for (const dim of entryDimensions.value) {
 		if (dim.mandatory && !draft.dimensions[dim.fieldname]) {
 			toast.warn("Missing dimension", `${dim.label} is required.`)
+			focusDraftControl(`dimension:${dim.fieldname}`)
 			return
 		}
 	}
@@ -812,6 +1062,7 @@ function commitDraft() {
 	for (const a of draft.attributes) {
 		if (!draft.attributeValues[a]) {
 			toast.warn("Missing attribute", `Select a value for ${a}.`)
+			focusDraftControl(`attribute:${a}`)
 			return
 		}
 	}
@@ -819,6 +1070,7 @@ function commitDraft() {
 	const total = Object.values(draft.values).reduce((n, v) => n + (Number(v?.qty) || 0), 0)
 	if (!total) {
 		toast.warn("Quantity required", "Enter a quantity in at least one cell.")
+		focusDraftControl(`quantity:${draft.primaryValues[0] || "default"}`)
 		return
 	}
 
@@ -868,6 +1120,31 @@ function commitDraft() {
 		itemEntry.allow_zero_valuation_rate = draft.allow_zero_valuation_rate ? 1 : 0
 	}
 
+	// Purchase Orders use supplier-specific Item Prices. Apply one when it is
+	// available, but never block a draft item here: base YRP warns during draft
+	// validation and enforces the active price only during submit.
+	if (props.applyAvailablePrice) {
+		if (!props.priceSupplier) {
+			toast.warn("Select supplier", "Choose the supplier before adding Purchase Order items.")
+			return
+		}
+		pricing.value = true
+		try {
+			const price = await callMethod(
+				"yrp.yrp.doctype.purchase_order.purchase_order.get_item_price_for_ui",
+				{
+					item_detail: JSON.stringify(itemEntry),
+					supplier: props.priceSupplier,
+				},
+			)
+			if (price) applyPurchaseOrderPrice(itemEntry, price)
+		} catch (e) {
+			toast.warn("Price lookup unavailable", "The item was added without a price. It will be checked again when you save.")
+		} finally {
+			pricing.value = false
+		}
+	}
+
 	// Group attribute NAMES include the dependent attribute (it's a real attribute
 	// of the variant, just entered via the stage selector).
 	const groupAttrNames = draft.dependentAttribute
@@ -886,7 +1163,36 @@ function commitDraft() {
 		groups.value[gi].items.push(itemEntry)
 	}
 
-	resetDraft()
+	resetDraft({ focus: true })
+}
+
+// Exact calculation used by the existing Purchase Order Desk item editor. Item
+// Price can return one common rate or a rate per primary attribute value (size).
+function applyPurchaseOrderPrice(itemEntry, price) {
+	const values = itemEntry.values || {}
+	const taxRate = Number(price.tax_rate) || 0
+	const discountPercentage = Number(itemEntry.discount_percentage) || 0
+	const missing = []
+
+	itemEntry.tax = price.tax || ""
+	for (const [key, value] of Object.entries(values)) {
+		const qty = Number(value.qty) || 0
+		const rate = price.rates ? price.rates[key] : price.rate
+		if (qty > 0 && (rate === undefined || rate === null || rate === "")) {
+			missing.push(key)
+			continue
+		}
+		value.rate = Number(rate) || 0
+		value.amount = qty * value.rate
+		value.discount_amount = value.amount * discountPercentage / 100
+		value.tax_amount = (value.amount - value.discount_amount) * taxRate / 100
+		value.total_amount = value.amount - value.discount_amount + value.tax_amount
+	}
+
+	if (missing.length) {
+		return false
+	}
+	return true
 }
 
 // Match a group by attribute structure (same rule as save_stock_items._get_item_group_index).
@@ -903,8 +1209,26 @@ function findGroupIndex(attrNames, primary, primaryValues) {
 	return -1
 }
 
-function resetDraft() {
+function firstDraftFocusKey() {
+	const firstDimension = entryDimensions.value[0]?.fieldname
+	return firstDimension ? `dimension:${firstDimension}` : "item"
+}
+
+function focusDraftControl(key = firstDraftFocusKey()) {
+	return focusFirstControl(addFormEl, {
+		selector: `[data-focus-key="${CSS.escape(String(key))}"]`,
+	})
+}
+
+function focusNextDraftControl() {
+	if (draft.dependentAttribute && !draft.dependentValue) return focusDraftControl("dependent")
+	if (draft.attributes.length) return focusDraftControl(`attribute:${draft.attributes[0]}`)
+	return focusDraftControl(`quantity:${draft.primaryValues[0] || "default"}`)
+}
+
+function resetDraft({ focus = false } = {}) {
 	Object.assign(draft, blankDraft())
+	if (focus) focusDraftControl()
 }
 
 function removeItem(gi, index) {
@@ -971,13 +1295,10 @@ async function startEdit(gi, index) {
 	}
 	draft.resolved = true
 	removeItem(gi, index)
+	await focusDraftControl(firstDraftFocusKey())
 }
 
 // ════════════════ AUTOCOMPLETE QUERIES ════════════════
-async function searchItem(e) {
-	itemSuggestions.value = await searchNames("Item", e.query, props.itemFilters)
-}
-
 async function searchDimension(dim, e) {
 	if (!dim.options) {
 		dimSuggestions[dim.fieldname] = []
@@ -1017,6 +1338,11 @@ async function searchNames(doctype, txt, filters = {}) {
 	}
 }
 
+function localizedItem(value) {
+	if (!value) return ""
+	return linkTitles.titleFor("Item", value) || String(value)
+}
+
 // ════════════════ PUBLIC API ════════════════
 // Deep-cloned grouped JSON for buildPayload. Strips empty groups defensively.
 function getItems() {
@@ -1027,6 +1353,15 @@ function getItems() {
 
 function hasItems() {
 	return totalLogicalItems.value > 0
+}
+
+function focusFirstQuantity() {
+	if (props.lockedItems) return focusFirstControl(editorEl, { selector: ".grid-groups" })
+	return focusDraftControl(`quantity:${draft.primaryValues[0] || "default"}`)
+}
+
+function focusFirstEntry() {
+	return focusDraftControl(firstDraftFocusKey())
 }
 
 // Rebuild internal state from a saved grouped payload (array or JSON string).
@@ -1052,14 +1387,24 @@ function loadData(grouped) {
 		primary_attribute_values: Array.isArray(g.primary_attribute_values)
 			? [...g.primary_attribute_values]
 			: [],
-		items: (g.items || []).map((it) => ({
-			name: it.name || "",
-			dimensions: { ...(it.dimensions || {}) },
-			attributes: { ...(it.attributes || {}) },
-			primary_attribute: it.primary_attribute || g.primary_attribute || "",
-			default_uom: it.default_uom || "",
-			values: cloneValues(it.values),
-		})),
+		items: (g.items || []).map((it) => {
+			const item = {
+				name: it.name || "",
+				dimensions: { ...(it.dimensions || {}) },
+				attributes: { ...(it.attributes || {}) },
+				primary_attribute: it.primary_attribute || g.primary_attribute || "",
+				default_uom: it.default_uom || "",
+				values: cloneValues(it.values),
+			}
+			// Entry-level fields (for example Purchase Order tax percentage) live
+			// beside `values`, not inside each quantity cell. Preserve them when a
+			// saved grouped payload is hydrated so dedicated read-only columns can
+			// render them and edit/save round-trips do not silently discard them.
+			for (const field of props.entryFields || []) {
+				if (it[field] !== undefined) item[field] = it[field]
+			}
+			return item
+		}),
 	}))
 	nextTick(() => { changeArmed.value = true })
 }
@@ -1076,7 +1421,7 @@ function cloneValues(values) {
 	return out
 }
 
-defineExpose({ getItems, loadData, hasItems })
+defineExpose({ getItems, loadData, hasItems, focusFirstEntry, focusFirstQuantity })
 </script>
 
 <style scoped>
@@ -1095,7 +1440,8 @@ defineExpose({ getItems, loadData, hasItems })
 .grid-group {
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius-sm);
-	overflow: hidden;
+	overflow-x: auto;
+	overflow-y: hidden;
 }
 .pivot-dt {
 	font-size: 13px;
@@ -1139,6 +1485,46 @@ defineExpose({ getItems, loadData, hasItems })
 	font-size: 10.5px;
 	color: var(--mgk-muted);
 	white-space: nowrap;
+}
+.separate-cell-value {
+	display: block;
+	text-align: center;
+	color: var(--mgk-ink-2);
+	font-size: 12px;
+	font-weight: 650;
+	font-variant-numeric: tabular-nums;
+}
+.separate-cell-value.money {
+	color: var(--mgk-accent-dark);
+}
+.previous-price {
+	display: grid;
+	justify-items: center;
+	gap: 3px;
+	color: var(--mgk-ink-2);
+	font-size: 12px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+.previous-price.loading {
+	color: var(--mgk-muted);
+}
+.previous-price > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+.previous-price small {
+	padding: 1px 4px;
+	border-radius: 4px;
+	background: var(--mgk-slate-50);
+	color: var(--mgk-muted);
+	font-size: 9px;
+}
+.previous-price > span.empty {
+	color: var(--mgk-muted);
+	font-size: 10.5px;
+	font-weight: 500;
 }
 
 .grid-empty,
@@ -1293,4 +1679,16 @@ defineExpose({ getItems, loadData, hasItems })
 	color: var(--mgk-muted);
 	padding: 0 2px;
 }
+
+/* Keep dense item grids readable at the registered experience's 110%-equivalent
+   type scale without shrinking the columns as CSS/browser zoom would. */
+:deep(.pivot-dt .p-datatable-thead > tr > th) {
+	font-size: 12.5px;
+}
+:deep(.pivot-dt .p-datatable-tbody > tr > td) {
+	font-size: 14px;
+}
+.cell-extra { font-size: 11.5px; }
+.separate-cell-value { font-size: 13px; }
+.previous-price { font-size: 13px; }
 </style>

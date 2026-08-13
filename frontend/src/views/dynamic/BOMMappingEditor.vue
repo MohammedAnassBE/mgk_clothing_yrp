@@ -53,9 +53,9 @@
     (bom_item, bomAttrs) for the BOM-side dropdown options.
 -->
 <template>
-	<div class="bom-mapping-editor">
+	<div ref="editorEl" class="bom-mapping-editor">
 		<!-- Breadcrumb -->
-		<nav class="crumbs">
+		<nav v-if="!embedded" class="crumbs">
 			<a @click="goHome">Home</a>
 			<span class="sep">/</span>
 			<a v-if="ipdName" @click="goIpd">{{ ipdLabel }}</a>
@@ -65,7 +65,7 @@
 		</nav>
 
 		<!-- Header (Q2: produced item is the hero; the mapping code is a chip). -->
-		<div class="detail-head">
+		<div v-if="!embedded" class="detail-head">
 			<div class="id-block">
 				<div class="doc-hero">
 					Item BOM Mapping<span v-if="itemLabel"> · {{ itemLabel }}</span>
@@ -105,20 +105,36 @@
 		<template v-else>
 			<!-- ── Context (read-only Item / BOM Item) ── -->
 			<section class="panel">
-				<div class="panel-head"><h3>Mapping</h3></div>
+				<div class="panel-head">
+					<h3>{{ embedded ? "Set BOM combinations" : "Mapping" }}</h3>
+				</div>
 				<div class="ctx-grid">
 					<div class="ctx-fld">
-						<label>Item</label>
-						<a class="ctx-val mgk-mono" @click="navItem(item)">{{ item || "—" }}</a>
-						<small class="ctx-hint">Produced item (drives the item-side cross-product).</small>
+						<label>{{ embedded ? "Finished Item" : "Item" }}</label>
+						<span v-if="embedded" class="ctx-val mgk-mono">{{ localizedItem(item) }}</span>
+						<a v-else class="ctx-val mgk-mono" @click="navItem(item)">{{ localizedItem(item) }}</a>
+						<small class="ctx-hint">{{ embedded ? "The Item being produced." : "Produced item (drives the item-side cross-product)." }}</small>
 					</div>
 					<div class="ctx-fld">
-						<label>BOM Item</label>
-						<a class="ctx-val mgk-mono" @click="navItem(bomItem)">{{ bomItem || "—" }}</a>
-						<small class="ctx-hint">Consumed item (its attribute values fill the BOM columns).</small>
+						<label>{{ embedded ? "Consumed Item" : "BOM Item" }}</label>
+						<span v-if="embedded" class="ctx-val mgk-mono">{{ localizedItem(bomItem) }}</span>
+						<a v-else class="ctx-val mgk-mono" @click="navItem(bomItem)">{{ localizedItem(bomItem) }}</a>
+						<small class="ctx-hint">{{ embedded ? "The Item used to make the finished Item." : "Consumed item (its attribute values fill the BOM columns)." }}</small>
 					</div>
 				</div>
-				<div v-if="sameAttrs.length" class="same-note">
+				<div v-if="embedded && commonAttrs.length" class="same-value-picker">
+					<span class="same-value-label">Copy unchanged to BOM</span>
+					<label v-for="attr in commonAttrs" :key="'same-' + attr" class="same-value-option">
+						<Checkbox
+							:model-value="isSameAttribute(attr)"
+							binary
+							@update:model-value="setSameAttribute(attr, $event)"
+						/>
+						<strong>{{ attr }}</strong>
+						<span>Finished → BOM</span>
+					</label>
+				</div>
+				<div v-if="sameAttrs.length && !embedded" class="same-note">
 					<i class="pi pi-link" />
 					<span>
 						Passthrough attribute<span v-if="sameAttrs.length > 1">s</span>
@@ -134,7 +150,7 @@
 			     bom_item_attributes grids), side by side: Item Attributes on the
 			     left, BOM Item Attributes on the right. Editing either rebuilds
 			     the cross-product grid below. ── -->
-			<div class="attr-panels-row">
+			<div v-if="!embedded" class="attr-panels-row">
 			<section class="panel attr-panel">
 				<div class="panel-head">
 					<h3>Item Attributes</h3>
@@ -248,18 +264,21 @@
 					<i class="pi pi-table empty-icon" />
 					<div class="empty-text">
 						<h3>No attribute columns yet</h3>
-						<p>
+						<p v-if="!embedded">
 							Add at least one <strong>item-side</strong> and one
 							<strong>BOM-side</strong> attribute above to build the cross-product
-							grid — or auto-fill from the owning IPD (item side = the IPD's
-							primary attribute, BOM side = every attribute on
-							<strong>{{ bomItem || "the BOM item" }}</strong>).
+							grid — or auto-fill from the owning IPD (item side = every IPD
+							attribute, BOM side = every attribute on
+						<strong>{{ localizedItem(bomItem, "the BOM item") }}</strong>).
+						</p>
+						<p v-else>
+							Prepare the finished Item and consumed Item attributes to create the combination rows.
 						</p>
 					</div>
 				</div>
 				<div class="empty-config-actions">
 					<Button
-						label="Configure columns from IPD"
+						:label="embedded ? 'Prepare combinations' : 'Configure columns from IPD'"
 						icon="pi pi-sparkles"
 						size="small"
 						:loading="configuring"
@@ -279,17 +298,17 @@
 				<div class="grid-toolbar">
 					<div class="grid-meta">
 						<Tag
-							:value="`${includedCount} of ${data.length} included`"
+							:value="`${includedCount} of ${data.length} rows active`"
 							severity="primary"
 							rounded
 						/>
-						<span v-if="bomAttrs.length === 0" class="grid-warn">
-							This mapping has no BOM-side attribute columns — nothing to map.
+						<span v-if="bomAttrs.length === 0 && !sameAttrs.length" class="grid-warn">
+							No BOM Item attribute columns are selected.
 						</span>
 					</div>
 					<div class="grid-toolbar-actions">
 						<Button
-							label="Enable all"
+							label="Use all"
 							icon="pi pi-check-circle"
 							size="small"
 							:disabled="!data.length"
@@ -297,7 +316,7 @@
 							@click="enableRows"
 						/>
 						<Button
-							label="Disable incomplete"
+							label="Ignore incomplete"
 							icon="pi pi-ban"
 							size="small"
 							severity="secondary"
@@ -308,6 +327,9 @@
 						/>
 					</div>
 				</div>
+				<small v-if="embedded" class="mobile-grid-hint">
+					Swipe the table left to enter BOM Qty <i class="pi pi-arrow-right" />
+				</small>
 
 				<!-- ── Cross-product grid ── -->
 				<section class="panel grid-panel">
@@ -318,33 +340,23 @@
 						</Column>
 
 						<!-- include / exclude toggle -->
-						<Column header="" :style="{ width: '56px' }">
+						<Column header="Use" :style="{ width: '64px' }">
 							<template #body="{ data: row, index }">
-								<Button
-									v-if="row.included"
-									icon="pi pi-times-circle"
-									text
-									rounded
-									severity="danger"
-									size="small"
-									v-tooltip.right="'Exclude this combination'"
-									@click="toggleRow(index, false)"
-								/>
-								<Button
-									v-else
-									icon="pi pi-plus-circle"
-									text
-									rounded
-									severity="success"
-									size="small"
-									v-tooltip.right="'Include this combination'"
-									@click="toggleRow(index, true)"
+								<Checkbox
+									:model-value="row.included"
+									binary
+									:aria-label="`Use combination ${index + 1}`"
+									@update:model-value="toggleRow(index, $event)"
 								/>
 							</template>
 						</Column>
 
 						<!-- item attribute columns (read-only chips) -->
-						<Column v-for="attr in itemAttrs" :key="'i-' + attr" :header="attr">
+						<Column
+							v-for="attr in itemAttrs"
+							:key="'i-' + attr"
+							:header="embedded ? `Finished ${attr}` : attr"
+						>
 							<template #body="{ data: row }">
 								<Tag :value="row[itemKey(attr)] || '—'" severity="secondary" rounded class="item-chip" />
 							</template>
@@ -354,7 +366,7 @@
 						<Column v-for="attr in bomAttrs" :key="'b-' + attr">
 							<template #header>
 								<div class="col-head">
-									<span>{{ attr }}</span>
+									<span>{{ embedded ? `BOM ${attr}` : attr }}</span>
 									<div class="col-fill">
 										<Select
 											v-model="fillBom[attr]"
@@ -374,7 +386,8 @@
 									</div>
 								</div>
 							</template>
-							<template #body="{ data: row }">
+							<template #body="{ data: row, index }">
+								<span :data-bom-row="index" :data-bom-attribute="attr">
 								<Select
 									v-model="row[bomKey(attr)]"
 									:options="bomAttrValues[attr] || []"
@@ -385,14 +398,15 @@
 									:class="{ 'cell-missing': row.included && !row[bomKey(attr)] }"
 									fluid
 								/>
+								</span>
 							</template>
 						</Column>
 
 						<!-- quantity column -->
-						<Column v-if="bomAttrs.length > 0">
+						<Column>
 							<template #header>
 								<div class="col-head">
-									<span>Quantity</span>
+									<span>BOM Qty</span>
 									<div class="col-fill">
 										<InputNumber
 											v-model="fillQty"
@@ -412,7 +426,8 @@
 									</div>
 								</div>
 							</template>
-							<template #body="{ data: row }">
+							<template #body="{ data: row, index }">
+								<span :data-bom-row="index" data-bom-quantity>
 								<InputNumber
 									v-model="row.__qty"
 									:disabled="!row.included"
@@ -422,6 +437,7 @@
 									:class="{ 'cell-missing': row.included && !row.__qty }"
 									fluid
 								/>
+								</span>
 							</template>
 						</Column>
 
@@ -434,6 +450,24 @@
 					</DataTable>
 				</section>
 			</template>
+
+			<div v-if="embedded && !loading && !loadError" class="embedded-actions">
+				<Button
+					label="Cancel"
+					icon="pi pi-times"
+					severity="secondary"
+					outlined
+					:disabled="saving"
+					@click="requestEmbeddedClose"
+				/>
+				<Button
+					label="Save combinations"
+					icon="pi pi-check"
+					:loading="saving"
+					:disabled="loading || !!loadError"
+					@click="onSave"
+				/>
+			</div>
 		</template>
 	</div>
 </template>
@@ -455,20 +489,28 @@ import { useDoc } from "@/composables/useDoc"
 import { useAppToast } from "@/composables/useToast"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { usePermissions } from "@/composables/usePermissions"
+import { useLinkTitles } from "@/composables/useLinkTitles"
+import { commitActiveControl } from "@/utils/commitActiveControl"
+import { focusFirstControl } from "@/utils/focusControl"
 
 const vTooltip = Tooltip
 
 const props = defineProps({
 	id: { type: String, required: true },
+	embedded: { type: Boolean, default: false },
 })
+
+const emit = defineEmits(["saved", "close", "dirty-change"])
 
 const router = useRouter()
 const toast = useAppToast()
 const confirm = useAppConfirm()
 const { isAdmin, hasRole } = usePermissions()
+const linkTitles = useLinkTitles()
 
 const DOCTYPE = "Item BOM Attribute Mapping"
 const docState = useDoc(DOCTYPE)
+const editorEl = ref(null)
 
 // ── reactive model ──
 const item = ref("")
@@ -488,6 +530,7 @@ const bomAttrs = ref([])    // bom-side columns (editable)
 const attributes = ref([])  // [{type:'item'|'bom', attribute, attribute_values?}]
 const itemAttrValues = reactive({}) // {attr: [vals]} — builds the cross-product
 const bomAttrValues = reactive({})  // {attr: [vals]} — bom dropdown options
+const ipdAttrValues = reactive({})  // IPD-owned produced-side values
 const data = ref([])        // generated cross-product rows
 const ipdName = ref(null)   // owning IPD (for the breadcrumb), best-effort
 // saved `values` from the last load — re-reconciled whenever the attribute
@@ -504,6 +547,7 @@ watch(
 	() => { if (dirtyArmed.value) isDirty.value = true },
 	{ deep: true },
 )
+watch(isDirty, (value) => emit("dirty-change", value), { immediate: true })
 async function armDirty() {
 	await nextTick()
 	dirtyArmed.value = true
@@ -511,13 +555,14 @@ async function armDirty() {
 function beforeUnloadGuard(e) {
 	if (isDirty.value) { e.preventDefault(); e.returnValue = "" }
 }
-// Q2/Q3: human labels. The produced item's name IS human (Item is autonamed from
-// name1), so itemLabel is just item.value. The owning IPD is hash-autonamed with
-// no title_field, so its breadcrumb label is the IPD's `item` (fetched in
-// fetchOwningIpd), falling back to the IPD code until it resolves.
+// The owning IPD is hash-autonamed with no title_field, so its breadcrumb label
+// is the IPD's localized Item name, falling back to the IPD code.
 const ipdItem = ref("")
-const ipdLabel = computed(() => (ipdName.value ? (ipdItem.value || ipdName.value) : ""))
-const itemLabel = computed(() => item.value || "")
+function localizedItem(value, fallback = "—") {
+	return linkTitles.titleFor("Item", value) || value || fallback
+}
+const ipdLabel = computed(() => (ipdName.value ? (localizedItem(ipdItem.value, ipdName.value)) : ""))
+const itemLabel = computed(() => item.value ? localizedItem(item.value, "") : "")
 
 // ── attribute selectors (mirror the Desk item_attributes / bom_item_attributes
 //    grids). The full attribute pool per side comes from get_attributes(item);
@@ -554,6 +599,12 @@ const deskUrl = computed(
 )
 
 const includedCount = computed(() => data.value.filter((r) => r.included).length)
+const commonAttrs = computed(() => {
+	const bomSet = new Set(bomAttrRows.value.map((row) => row.attribute))
+	return itemAttrRows.value
+		.map((row) => row.attribute)
+		.filter((attribute) => bomSet.has(attribute))
+})
 
 // Column key helpers (mirror get_attribute_name: type_attribute), namespaced to
 // avoid colliding with the row's own bookkeeping keys.
@@ -599,10 +650,12 @@ async function load() {
 
 		// The pickers need every attribute the produced / bom item carries.
 		await loadAttrPools()
+		// Older MGK mappings were seeded with only the IPD primary attribute.
+		// Merge any missing attributes from the owning IPD into the in-memory
+		// editor before the grid is built. They are persisted only when the user
+		// saves, so opening and cancelling the popup never mutates master data.
+		await fetchOwningIpd()
 		await rebuildGrid()
-
-		// Best-effort: find an IPD that links this mapping (for the breadcrumb).
-		fetchOwningIpd()
 	} catch (e) {
 		loadError.value = e.message || "Failed to load"
 	} finally {
@@ -610,6 +663,7 @@ async function load() {
 	}
 	// Q6: arm dirty tracking after load + grid rebuild settle.
 	armDirty()
+	if (props.embedded && !loadError.value) await focusGridControl()
 }
 
 // Full attribute pool per side (mirror the Desk set_query → get_item_attributes
@@ -644,6 +698,22 @@ function recomputeColumns() {
 	const sameSet = new Set(sameAttrs.value)
 	itemAttrs.value = itemAttrRows.value.map((r) => r.attribute).filter((a) => !sameSet.has(a))
 	bomAttrs.value = bomAttrRows.value.map((r) => r.attribute).filter((a) => !sameSet.has(a))
+}
+
+function isSameAttribute(attribute) {
+	const itemRow = itemAttrRows.value.find((row) => row.attribute === attribute)
+	const bomRow = bomAttrRows.value.find((row) => row.attribute === attribute)
+	return !!(itemRow?.same_attribute && bomRow?.same_attribute)
+}
+
+function setSameAttribute(attribute, enabled) {
+	const value = enabled ? 1 : 0
+	const itemRow = itemAttrRows.value.find((row) => row.attribute === attribute)
+	const bomRow = bomAttrRows.value.find((row) => row.attribute === attribute)
+	if (!itemRow || !bomRow) return
+	itemRow.same_attribute = value
+	bomRow.same_attribute = value
+	rebuildGrid()
 }
 
 function buildAttributesList() {
@@ -722,7 +792,12 @@ async function loadItemValues(seq) {
 		})
 		if (seq !== undefined && seq !== rebuildSeq) return // superseded
 		for (const k of Object.keys(itemAttrValues)) delete itemAttrValues[k]
-		for (const [k, v] of Object.entries(r || {})) itemAttrValues[k] = v || []
+		for (const attr of itemAttrs.value) {
+			const values = Object.prototype.hasOwnProperty.call(ipdAttrValues, attr)
+				? ipdAttrValues[attr]
+				: (r || {})[attr]
+			itemAttrValues[attr] = values || []
+		}
 	} catch (e) {
 		toast.warn("Item attribute values", e.message)
 	}
@@ -746,34 +821,35 @@ async function loadBomValues(seq) {
 	}
 }
 
-// Best-effort breadcrumb: which IPD owns this mapping (item_bom.attribute_mapping).
+// Best-effort owning context: identify the IPD through Item BOM and merge its
+// complete configured attribute list into legacy mappings that contain only the
+// primary attribute. New mappings already contain the full list server-side.
 async function fetchOwningIpd() {
 	ipdName.value = null
+	ipdItem.value = ""
+	for (const key of Object.keys(ipdAttrValues)) delete ipdAttrValues[key]
 	try {
-		const rows = await callMethod("frappe.client.get_list", {
-			doctype: "Item BOM",
-			filters: { attribute_mapping: props.id },
-			fields: ["parent", "parenttype"],
-			limit_page_length: 1,
-		})
-		const row = (rows || [])[0]
-		if (row && row.parenttype === "Item Production Detail") {
-			ipdName.value = row.parent
-			// Q3: the IPD is hash-named — fetch its produced item so the breadcrumb
-			// shows a human name instead of the hash.
-			try {
-				const ipd = await callMethod("frappe.client.get_value", {
-					doctype: "Item Production Detail",
-					filters: { name: ipdName.value },
-					fieldname: "item",
-				})
-				ipdItem.value = ipd?.item || ""
-			} catch (_) {
-				ipdItem.value = ""
+		const context = await callMethod(
+			"mgk_clothing_yrp.mgk_clothing_yrp.api.bom_mapping.get_mapping_context",
+			{ mapping: props.id },
+		)
+		if (context?.ipd) {
+			ipdName.value = context.ipd
+			ipdItem.value = context.item || ""
+			for (const [attribute, values] of Object.entries(context.item_attribute_values || {})) {
+				ipdAttrValues[attribute] = values || []
+			}
+
+			const selected = new Set(itemAttrRows.value.map((entry) => entry.attribute))
+			for (const attribute of context.item_attributes || []) {
+				if (!attribute || selected.has(attribute)) continue
+				itemAttrRows.value.push({ attribute, same_attribute: 0 })
+				selected.add(attribute)
 			}
 		}
 	} catch (_) {
 		ipdName.value = null
+		ipdItem.value = ""
 	}
 }
 
@@ -811,26 +887,36 @@ function buildGrid() {
 	data.value = combos
 }
 
-// find_index: locate the generated row matching a saved combo's item-side values.
-function findIndex(itemValues) {
+// Locate every generated row compatible with a saved combo's item-side values.
+// A legacy mapping may contain only Size while the owning IPD now contributes
+// Size + Colour. In that case the saved Size row is expanded across every
+// matching Colour row in memory, preserving its previous BOM value/quantity as
+// a starting point until the operator reviews and saves the full combinations.
+function findIndexes(itemValues) {
+	const knownAttrs = itemAttrs.value.filter((attr) => {
+		const value = itemValues[attr]
+		return value !== undefined && value !== null && value !== ""
+	})
+	const matches = []
 	for (let i = 0; i < data.value.length; i++) {
 		const row = data.value[i]
 		let ok = true
-		for (const attr of itemAttrs.value) {
+		for (const attr of knownAttrs) {
 			if (itemValues[attr] !== row[itemKey(attr)]) {
 				ok = false
 				break
 			}
 		}
-		if (ok) return i
+		if (ok) matches.push(i)
 	}
-	return -1
+	return matches
 }
 
 // ════════════════ RECONCILE (mirror load_data) ════════════════
 // Group saved values by index → {item:{attr:val}, bom:{attr:val}, qty}. Map each
-// saved group's item-side combo back onto a generated row via findIndex and
-// repopulate its bom cells + qty. Rows with no matching saved data are excluded.
+// saved group's item-side combo back onto all compatible generated rows via
+// findIndexes and repopulate their BOM cells + qty. Rows with no matching saved
+// data are excluded.
 function reconcile(values) {
 	if (!data.value.length) return
 
@@ -858,17 +944,18 @@ function reconcile(values) {
 	const matched = new Set()
 	for (const idx of Object.keys(byIndex)) {
 		const g = byIndex[idx]
-		// Build the item-side combo as a plain {attr: value} map for findIndex.
+		// Build the item-side combo as a plain {attr: value} map for findIndexes.
 		const itemValues = {}
 		for (const attr of itemAttrs.value) itemValues[attr] = g.item[attr]
-		const target = findIndex(itemValues)
-		if (target < 0) continue
-		const row = data.value[target]
-		for (const attr of bomAttrs.value) {
-			row[bomKey(attr)] = g.bom[attr] != null ? g.bom[attr] : null
+		const targets = findIndexes(itemValues)
+		for (const target of targets) {
+			const row = data.value[target]
+			for (const attr of bomAttrs.value) {
+				row[bomKey(attr)] = g.bom[attr] != null ? g.bom[attr] : null
+			}
+			row.__qty = g.qty || 0
+			matched.add(target)
 		}
-		if (bomAttrs.value.length > 0) row.__qty = g.qty || 0
-		matched.add(target)
 	}
 
 	// Rows present in saved data → included; the rest → excluded (mirrors the
@@ -914,7 +1001,7 @@ function disableRows() {
 	for (let i = 0; i < data.value.length; i++) {
 		const row = data.value[i]
 		if (!row.included) continue
-		let incomplete = bomAttrs.value.length === 0
+		let incomplete = !row.__qty
 		for (const attr of bomAttrs.value) {
 			if (!row[bomKey(attr)]) {
 				incomplete = true
@@ -941,11 +1028,14 @@ function buildValues() {
 		const row = data.value[i]
 		if (!row.included) continue
 		const qty = row.__qty
+		if (!qty || qty === 0) {
+			return { error: `Combination ${i + 1}: quantity must be greater than 0 (or exclude the row).`, rowIndex: i, quantity: true }
+		}
 
 		// item-side rows
 		for (const attr of itemAttrs.value) {
 			const value = row[itemKey(attr)]
-			if (!value) return { error: `Combination ${i + 1}: missing item value for ${attr}.` }
+			if (!value) return { error: `Combination ${i + 1}: missing item value for ${attr}.`, rowIndex: i }
 			output.push({
 				index: i,
 				type: "item",
@@ -957,10 +1047,7 @@ function buildValues() {
 		// bom-side rows
 		for (const attr of bomAttrs.value) {
 			const value = row[bomKey(attr)]
-			if (!value) return { error: `Combination ${i + 1}: choose a BOM value for ${attr} (or exclude the row).` }
-			if (!qty || qty === 0) {
-				return { error: `Combination ${i + 1}: quantity must be greater than 0 (or exclude the row).` }
-			}
+			if (!value) return { error: `Combination ${i + 1}: choose a BOM value for ${attr} (or exclude the row).`, rowIndex: i, attribute: attr }
 			output.push({
 				index: i,
 				type: "bom",
@@ -974,6 +1061,7 @@ function buildValues() {
 }
 
 async function onSave() {
+	await commitActiveControl()
 	// No item attributes at all → engine treats as an empty mapping; allow a
 	// cleared save (mirrors the validate() branch that empties values).
 	if (!attributes.value.length) {
@@ -983,6 +1071,7 @@ async function onSave() {
 	const built = buildValues()
 	if (built.error) {
 		toast.warn("Incomplete mapping", built.error)
+		await focusGridControl(built.rowIndex, built.attribute, built.quantity)
 		return
 	}
 	if (!built.output.length) {
@@ -990,6 +1079,17 @@ async function onSave() {
 		return
 	}
 	await persist(built.output)
+}
+
+function focusGridControl(rowIndex = null, attribute = "", quantity = false) {
+	let index = rowIndex
+	if (index == null) index = data.value.findIndex((row) => row.included)
+	if (index < 0) return false
+	let selector = `[data-bom-row="${index}"]`
+	if (attribute) selector += `[data-bom-attribute="${CSS.escape(attribute)}"]`
+	else if (quantity || !bomAttrs.value.length) selector += "[data-bom-quantity]"
+	else selector += `[data-bom-attribute="${CSS.escape(bomAttrs.value[0])}"]`
+	return focusFirstControl(editorEl, { selector })
 }
 
 async function persist(values) {
@@ -1010,16 +1110,36 @@ async function persist(values) {
 	}
 	try {
 		await docState.save(payload, props.id)
-		toast.success("Saved", `${props.id} updated`)
+		if (!props.embedded) toast.success("Saved", `${props.id} updated`)
 		await load()
+		emit("saved", props.id)
 	} catch (e) {
 		toast.error("Save failed", e.message)
 	}
 }
 
-// Heal a mapping with empty attribute columns: derive item-side = owning IPD's
-// primary attribute, bom-side = all BOM item attributes (server-side, mirrors
-// production_api). Then reload so the grid renders. Used for legacy mappings
+function requestEmbeddedClose() {
+	if (!isDirty.value) {
+		emit("close")
+		return
+	}
+	confirm.require({
+		header: "Discard combination changes?",
+		message: "Close this popup without saving the BOM combination changes?",
+		icon: "pi pi-exclamation-triangle",
+		acceptLabel: "Discard",
+		acceptClass: "p-button-danger",
+		rejectLabel: "Keep editing",
+		accept: () => {
+			isDirty.value = false
+			emit("close")
+		},
+	})
+}
+
+// Heal a mapping with empty attribute columns: derive item-side = all attributes
+// on the owning IPD, BOM-side = all BOM Item attributes. Then reload so the grid
+// renders. Used for legacy mappings
 // created before openMapping seeded columns at creation time.
 async function configureColumns() {
 	configuring.value = true
@@ -1055,16 +1175,24 @@ function onKeydown(e) {
 
 onMounted(() => {
 	load()
-	window.addEventListener("keydown", onKeydown)
-	window.addEventListener("beforeunload", beforeUnloadGuard)
+	if (!props.embedded) {
+		window.addEventListener("keydown", onKeydown)
+		window.addEventListener("beforeunload", beforeUnloadGuard)
+	}
 })
 onBeforeUnmount(() => {
-	window.removeEventListener("keydown", onKeydown)
-	window.removeEventListener("beforeunload", beforeUnloadGuard)
+	if (!props.embedded) {
+		window.removeEventListener("keydown", onKeydown)
+		window.removeEventListener("beforeunload", beforeUnloadGuard)
+	}
 })
 
 // Q6: confirm before leaving with unsaved mapping edits.
 onBeforeRouteLeave((to, from, next) => {
+	if (props.embedded) {
+		next()
+		return
+	}
 	if (isDirty.value) {
 		confirm.require({
 			header: "Discard unsaved changes?",
@@ -1105,6 +1233,16 @@ function navItem(name) {
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
+}
+.embedded-actions {
+	position: sticky;
+	bottom: 0;
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 14px 0 2px;
+	background: linear-gradient(to bottom, transparent, var(--mgk-card) 22%);
+	z-index: 2;
 }
 .inline-link {
 	color: var(--mgk-accent-700);
@@ -1355,9 +1493,38 @@ function navItem(name) {
 	gap: 16px 24px;
 	padding: 16px;
 }
+.mobile-grid-hint {
+	display: none;
+}
 @media (max-width: 700px) {
 	.ctx-grid {
 		grid-template-columns: 1fr;
+	}
+	.grid-panel {
+		overflow-x: auto;
+		overflow-y: hidden;
+	}
+	.bom-dt {
+		min-width: 700px;
+	}
+	.grid-toolbar-actions {
+		width: 100%;
+		justify-content: flex-start;
+		flex-wrap: wrap;
+	}
+	.embedded-actions {
+		width: 100%;
+	}
+	.embedded-actions :deep(.p-button) {
+		flex: 1;
+	}
+	.mobile-grid-hint {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: -2px 2px 0;
+		color: var(--mgk-muted);
+		font-size: 11px;
 	}
 }
 .ctx-fld {
@@ -1384,6 +1551,46 @@ function navItem(name) {
 .ctx-hint {
 	font-size: 11px;
 	color: var(--mgk-muted-2);
+}
+.same-value-picker {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin: 0 16px 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--mgk-line);
+}
+.same-value-label {
+	font-size: 11.5px;
+	font-weight: 700;
+	letter-spacing: 0.035em;
+	text-transform: uppercase;
+	color: var(--mgk-muted);
+}
+.same-value-option {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 7px 10px;
+	border: 1px solid var(--mgk-line);
+	border-radius: 999px;
+	background: var(--mgk-slate-50);
+	cursor: pointer;
+	font-size: 12px;
+	color: var(--mgk-muted);
+}
+.same-value-option strong {
+	color: var(--mgk-ink);
+}
+@media (max-width: 700px) {
+	.same-value-picker {
+		align-items: stretch;
+		flex-direction: column;
+	}
+	.same-value-option {
+		border-radius: var(--radius-sm);
+	}
 }
 .same-note {
 	display: flex;
@@ -1425,7 +1632,6 @@ function navItem(name) {
 .grid-warn {
 	color: var(--mgk-warn);
 }
-
 /* Grid */
 .grid-panel {
 	padding: 0;

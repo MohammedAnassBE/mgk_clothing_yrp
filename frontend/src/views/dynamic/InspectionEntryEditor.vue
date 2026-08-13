@@ -1,7 +1,7 @@
 <template>
-    <div class="inspection-editor">
+    <div ref="editorEl" class="inspection-editor">
         <div v-if="!sources.length" class="ie-empty">
-            Select a submitted Goods Received Note in <b>Against ID</b> above to load items.
+            Select a submitted <b>Goods Received Note</b> above to load its received items.
         </div>
 
         <div v-else>
@@ -16,7 +16,7 @@
                 <div class="ie-group-header">
                     <div class="ie-group-label">{{ group.group_label }}</div>
                     <div class="ie-group-sub">
-                        {{ group.warehouse }}
+                        {{ localizedWarehouse(group.warehouse) }}
                         <span v-if="group.primary_attribute" class="ie-group-pa">
                             · primary attr: <b>{{ group.primary_attribute }}</b>
                         </span>
@@ -70,6 +70,7 @@
                                     class="btn btn-xs btn-default ie-btn-edit"
                                     type="button"
                                     :disabled="locked || !hasAnyRemaining(row)"
+									:data-inspection-edit="`${gIdx}:${rIdx}`"
                                     @click="openEdit(gIdx, rIdx)"
                                 >Edit</button>
                             </td>
@@ -91,7 +92,7 @@
             >
                 <div class="ie-group-header">
                     <div class="ie-group-label">{{ group.group_label }}</div>
-                    <div class="ie-group-sub">{{ group.warehouse }}</div>
+                    <div class="ie-group-sub">{{ localizedWarehouse(group.warehouse) }}</div>
                 </div>
                 <table class="ie-pivot-table">
                     <thead>
@@ -152,15 +153,15 @@
 
         <!-- MODAL: per-row multi-target / multi-size split -->
         <teleport to="body" v-if="modalCtx">
-            <div class="ie-modal-backdrop" @click.self="cancelEdit">
-                <div class="ie-modal" role="dialog">
+            <div class="ie-modal-backdrop" @click.self="cancelEdit" @keydown.esc.prevent.stop="cancelEdit">
+                <div ref="modalEl" class="ie-modal" role="dialog" aria-modal="true">
                     <div class="ie-modal-header">
                         <div>
                             <div class="ie-modal-title">
                                 Split: {{ modalCtx.group_label }}
                             </div>
                             <div class="ie-modal-sub">
-                                {{ modalCtx.warehouse }} ·
+                                {{ localizedWarehouse(modalCtx.warehouse) }} ·
                                 Source RT:
                                 <span class="ie-pill ie-pill-src">{{ modalCtx.source_received_type }}</span>
                             </div>
@@ -222,7 +223,7 @@
                             <tbody>
                                 <tr v-for="(d, dIdx) in drafts" :key="`d-${dIdx}`">
                                     <td>
-                                        <select v-model="d.target_received_type">
+                                        <select v-model="d.target_received_type" :data-draft-target="dIdx">
                                             <option value="" disabled>Select target…</option>
                                             <option
                                                 v-for="rt in receivedTypes"
@@ -313,8 +314,10 @@
 // Faithful /web port of the Desk InspectionEntryEditor (yrp public/js): same
 // source-bin split logic + JSON shape (loadData/getItems). The only changes are
 // host bindings — Desk `cur_frm`/`frappe.call` → /web props/emit/callMethod.
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { callMethod } from '@/api/client';
+import { useLinkTitles } from '@/composables/useLinkTitles';
+import { focusFirstControl } from '@/utils/focusControl';
 
 const props = defineProps({
     // Parent docstatus (0 draft / 1 submitted / 2 cancelled).
@@ -326,14 +329,39 @@ const props = defineProps({
     // Optional grouped payload to hydrate on mount (read-only view use).
     initialData: { type: [Array, String, Object], default: null },
 });
-const emit = defineEmits(['change']);
+const emit = defineEmits(['change', 'summary']);
+const linkTitles = useLinkTitles();
+
+function localizedWarehouse(value) {
+    return linkTitles.titleFor('Warehouse', value) || value || '—';
+}
 
 const sources = ref([]);
 const receivedTypes = ref([]);
 
+function currentSummary() {
+    let totalQty = 0;
+    let classifiedQty = 0;
+    for (const source of sources.value) {
+        totalQty += Number(source.grn_qty || 0);
+        for (const split of source.explicit_splits || []) {
+            classifiedQty += Number(split.qty || 0);
+        }
+    }
+    return {
+        itemCount: sources.value.length,
+        totalQty,
+        classifiedQty,
+        unchangedQty: Math.max(0, totalQty - classifiedQty),
+    };
+}
+
 // Modal state — null when closed; { groupIdx, rowIdx, ...context, drafts } when open.
 const modalCtx = ref(null);
 const drafts = ref([]);
+const modalEl = ref(null);
+const editorEl = ref(null);
+let modalOpener = null;
 
 // Locked = view mode (not editable) OR a non-draft parent.
 const locked = computed(() => !props.editable || Number(props.docstatus) !== 0);
@@ -529,8 +557,9 @@ function cellClass(src) {
 // =====================================================================
 // Modal logic
 // =====================================================================
-function openEdit(gIdx, rIdx) {
+async function openEdit(gIdx, rIdx) {
     if (locked.value) return;
+	modalOpener = document.activeElement;
     const grp = groups.value[gIdx];
     const row = grp.rows[rIdx];
     modalCtx.value = {
@@ -544,10 +573,15 @@ function openEdit(gIdx, rIdx) {
         sourceCells: row.cells, // pv -> source bin
     };
     drafts.value = [_makeBlankDraft()];
+	await focusFirstControl(modalEl, { selector: '[data-draft-target="0"]' });
 }
-function cancelEdit() {
+async function cancelEdit() {
+	const opener = modalOpener;
     modalCtx.value = null;
     drafts.value = [];
+	modalOpener = null;
+	await nextTick();
+	if (opener && !opener.disabled && opener.isConnected) opener.focus();
 }
 function _makeBlankDraft() {
     const cells = {};
@@ -564,12 +598,14 @@ function _makeBlankDraft() {
         comments: '',
     };
 }
-function addDraft() {
+async function addDraft() {
     drafts.value.push(_makeBlankDraft());
+	await focusFirstControl(modalEl, { selector: `[data-draft-target="${drafts.value.length - 1}"]` });
 }
-function removeDraft(idx) {
+async function removeDraft(idx) {
     if (drafts.value.length === 1) return;
     drafts.value.splice(idx, 1);
+	await focusFirstControl(modalEl, { selector: `[data-draft-target="${Math.min(idx, drafts.value.length - 1)}"]` });
 }
 function availableBySize(pv) {
     const src = modalCtx.value.sourceCells[pv];
@@ -620,8 +656,9 @@ const modalError = computed(() => {
 });
 const canSubmitModal = computed(() => !modalError.value && draftsGrandTotal.value > 0);
 
-function submitEdit() {
+async function submitEdit() {
     if (!canSubmitModal.value) return;
+	const opener = modalOpener;
     for (const d of drafts.value) {
         for (const pv of modalCtx.value.primary_attribute_values) {
             const qty = Number(d.cells[pv] || 0);
@@ -635,8 +672,14 @@ function submitEdit() {
             });
         }
     }
-    cancelEdit();
+	modalCtx.value = null;
+	drafts.value = [];
+	modalOpener = null;
     emit('change');
+	await nextTick();
+	const nextEdit = document.querySelector('.inspection-editor .ie-btn-edit:not(:disabled)');
+	if (nextEdit) nextEdit.focus();
+	else if (opener && !opener.disabled && opener.isConnected) opener.focus();
 }
 
 // =====================================================================
@@ -717,6 +760,10 @@ function hasItems() {
     return sources.value.length > 0;
 }
 
+function focusFirstAction() {
+	return focusFirstControl(editorEl, { selector: '.ie-btn-edit:not(:disabled)' });
+}
+
 onMounted(() => {
     loadReceivedTypes();
     if (props.initialData != null) loadData(props.initialData);
@@ -726,8 +773,9 @@ onMounted(() => {
 // populates AFTER mount (async getDocWithOnload). Read-once in onMounted races
 // that hydrate and loses, so watch it and (re)load — same as StockItemGridEditor.
 watch(() => props.initialData, (v) => { if (v != null) loadData(v); });
+watch(sources, () => emit('summary', currentSummary()), { deep: true });
 
-defineExpose({ loadData, getItems, hasItems });
+defineExpose({ loadData, getItems, hasItems, focusFirstAction });
 </script>
 
 <style scoped>

@@ -447,6 +447,7 @@ import { useDoc } from "@/composables/useDoc"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAppConfirm } from "@/composables/useConfirm"
 import { useAppToast } from "@/composables/useToast"
+import { commitActiveControl } from "@/utils/commitActiveControl"
 
 const vTooltip = Tooltip
 
@@ -923,6 +924,7 @@ function buildValidatedPayload() {
 }
 
 async function onSave() {
+	await commitActiveControl()
 	const built = buildValidatedPayload()
 	if (!built) return
 	try {

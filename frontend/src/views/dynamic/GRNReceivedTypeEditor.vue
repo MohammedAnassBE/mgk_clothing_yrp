@@ -41,6 +41,7 @@
                         (array or JSON string). Tolerant of partial entries.
   - getItems()        → the grouped JSON array (deep clone) for buildPayload.
   - hasItems()        → whether any group carries items.
+  - isAllocationComplete() / allocationIssues() → submit-review guard.
 
   APIs (reused over HTTP via callMethod — same as the Desk component)
   -------------------------------------------------------------------
@@ -50,9 +51,9 @@
         → { received_types: [...], default_received_type } (for the "+RT" buttons)
 -->
 <template>
-	<div class="grn-rt-editor">
+	<div ref="editorEl" class="grn-rt-editor">
 		<div v-if="!logicalRows.length" class="grid-empty-state">
-			No pending receivables{{ editable ? " — open this GRN in Desk to (re)load source items." : "." }}
+			{{ editable ? "Select a Work Order to load its pending items." : "No pending receivables." }}
 		</div>
 
 		<div
@@ -60,7 +61,7 @@
 			:key="row.key"
 			class="grn-group"
 		>
-			<DataTable :value="row.splits" class="mgk-table grn-dt" :rowHover="false" dataKey="key" :tableStyle="{ tableLayout: 'fixed', minWidth: '100%' }">
+			<DataTable :value="quantityMode ? [row] : row.splits" class="mgk-table grn-dt" :rowHover="false" dataKey="key" :tableStyle="{ tableLayout: 'fixed', minWidth: quantityMode ? '720px' : '840px' }">
 				<!-- S.No (rowspan-style: only shown on the first split) -->
 				<Column header="#" :style="{ width: '44px' }">
 					<template #body="{ index }">
@@ -79,8 +80,40 @@
 					</template>
 				</Column>
 
-				<!-- Received Type + remove control -->
-				<Column header="Received Type" :style="{ minWidth: '130px' }">
+				<!-- Size (primary-attribute value) qty cells -->
+				<Column
+					v-for="col in row.columns"
+					:key="'c-' + col.key"
+					:header="col.label"
+					:style="{ width: '92px' }"
+				>
+					<template #body="{ data: split }">
+						<span
+							v-if="editable"
+							class="grn-qty-focus"
+							:data-row-key="row.key"
+							:data-split-key="quantityMode ? 'aggregate' : split.receivedType"
+							:data-column-key="col.key"
+						>
+							<InputNumber
+								:modelValue="quantityMode ? aggregateQty(row, col.key) : qty(split.entry, col.key)"
+								@update:modelValue="quantityMode ? onAggregateQtyInput(row, col.key, $event) : onQtyInput(row, split, col.key, $event)"
+								:min="0"
+								:max="quantityMode ? allowedQty(row, col.key) : undefined"
+								:minFractionDigits="0"
+								:maxFractionDigits="3"
+								class="cell-num"
+								inputClass="cell-num-input"
+								fluid
+							/>
+						</span>
+						<span v-else class="cell-ro">{{ formatQty(quantityMode ? aggregateQty(row, col.key) : qty(split.entry, col.key)) }}</span>
+					</template>
+				</Column>
+
+				<!-- Received Type follows quantity so the operator's only normal input
+				     remains visible before horizontally scrolling on a phone. -->
+				<Column v-if="!quantityMode" header="Received Type" :style="{ minWidth: '130px' }">
 					<template #body="{ data: split }">
 						<span class="grn-rt-name">{{ split.receivedType || "Received" }}</span>
 						<Button
@@ -97,32 +130,8 @@
 					</template>
 				</Column>
 
-				<!-- Size (primary-attribute value) qty cells -->
-				<Column
-					v-for="col in row.columns"
-					:key="'c-' + col.key"
-					:header="col.label"
-					:style="{ width: '92px' }"
-				>
-					<template #body="{ data: split }">
-						<InputNumber
-							v-if="editable"
-							:modelValue="qty(split.entry, col.key)"
-							@update:modelValue="onQtyInput(row, split, col.key, $event)"
-							:min="0"
-							:max="maxQty(row, split, col.key)"
-							:minFractionDigits="0"
-							:maxFractionDigits="3"
-							class="cell-num"
-							inputClass="cell-num-input"
-							fluid
-						/>
-						<span v-else class="cell-ro">{{ formatQty(qty(split.entry, col.key)) }}</span>
-					</template>
-				</Column>
-
 				<!-- Per-split total -->
-				<Column header="Total" :style="{ width: '70px' }">
+				<Column v-if="!quantityMode" header="Total" :style="{ width: '70px' }">
 					<template #body="{ data: split }">
 						<span class="cell-ro">{{ formatQty(splitTotal(split, row.columns)) }}</span>
 					</template>
@@ -134,12 +143,12 @@
 						<span v-if="index === 0" class="cell-ro">{{ formatQty(rowPending(row)) }}</span>
 					</template>
 				</Column>
-				<Column header="Allowed" :style="{ width: '74px' }">
+				<Column header="Max Allowed" :style="{ width: '108px' }">
 					<template #body="{ index }">
 						<span v-if="index === 0" class="cell-ro">{{ formatQty(rowAllowed(row)) }}</span>
 					</template>
 				</Column>
-				<Column header="Bal." :style="{ width: '74px' }">
+				<Column :header="fixedTotal ? 'Unassigned' : 'Balance'" :style="{ width: '92px' }">
 					<template #body="{ index }">
 						<span
 							v-if="index === 0"
@@ -150,7 +159,7 @@
 				</Column>
 
 				<!-- "+ Received Type" add controls under the table -->
-				<template #footer v-if="editable && unusedRTs(row).length">
+				<template #footer v-if="editable && !quantityMode && unusedRTs(row).length">
 					<div class="grn-rt-add-row">
 						<span class="grn-rt-add-label">Add Received Type:</span>
 						<Button
@@ -167,6 +176,10 @@
 					</div>
 				</template>
 			</DataTable>
+			<div v-if="fixedTotal && rowBalance(row) > 0" class="grn-allocation-warning">
+				<i class="pi pi-exclamation-circle" />
+				Allocate the remaining {{ formatQty(rowBalance(row)) }} before submitting.
+			</div>
 		</div>
 	</div>
 </template>
@@ -179,6 +192,7 @@ import Button from "primevue/button"
 import InputNumber from "primevue/inputnumber"
 import Tooltip from "primevue/tooltip"
 import { callMethod } from "@/api/client"
+import { focusFirstControl } from "@/utils/focusControl"
 
 const vTooltip = Tooltip
 
@@ -186,20 +200,35 @@ const props = defineProps({
 	// false → read-only render (e.g. embedded in a view context). DocDetail only
 	// mounts this in edit/create, so default true.
 	editable: { type: Boolean, default: true },
+	// split: the full allocation editor. quantity remains available for callers
+	// that explicitly need one aggregate line, but the MGK Work Order GRN form
+	// intentionally uses split mode so Received Types are entered before save.
+	mode: { type: String, default: "split" },
+	// Submit review freezes the quantity entered on the draft. Received Types
+	// may redistribute it, but the allocation total must remain identical.
+	fixedTotal: { type: Boolean, default: false },
 })
+
+const quantityMode = computed(() => props.mode === "quantity")
 
 // Q6: emit `change` on genuine user edits so DocDetail's dirty guard sees grid
 // edits (this editor's state lives here, not in the parent `form`). Armed after
 // loadData/mount so the programmatic seed never false-fires.
-const emit = defineEmits(["change"])
+const emit = defineEmits(["change", "summary", "allocation-state"])
 const changeArmed = ref(false)
+const editorEl = ref(null)
 
 // ── grouped state (== save_stock_items.py shape; same as the Desk's `items`) ──
 const groups = ref([])
+const allocationTargets = ref({})
 
 watch(
 	groups,
-	() => { if (changeArmed.value) emit("change") },
+	() => {
+		if (changeArmed.value) emit("change")
+		emit("summary", buildSummary())
+		emitAllocationState()
+	},
 	{ deep: true },
 )
 
@@ -207,6 +236,8 @@ watch(
 const dimensions = ref([])
 // ── available received types for the "+RT" add buttons ──
 const availableRTs = ref([])
+const defaultReceivedType = ref("")
+const receivedTypesReady = ref(false)
 
 onMounted(async () => {
 	try {
@@ -220,9 +251,13 @@ onMounted(async () => {
 			"yrp.yrp.doctype.goods_received_note.goods_received_note.get_rework_output_received_types",
 		)
 		availableRTs.value = (r && Array.isArray(r.received_types)) ? r.received_types : []
+		defaultReceivedType.value = r?.default_received_type || ""
 	} catch (_) {
 		availableRTs.value = []
+		defaultReceivedType.value = ""
 	}
+	receivedTypesReady.value = true
+	compactLoadedSplits()
 	// Arm change-emit after initial state settles (a later external loadData re-arms).
 	nextTick(() => { changeArmed.value = true })
 })
@@ -329,6 +364,23 @@ function rowMeta(row) {
 	return parts.join(" | ")
 }
 
+function buildSummary() {
+	const summary = { itemCount: 0, totalQty: 0, pendingQty: 0, grandTotal: 0 }
+	for (const row of logicalRows.value) {
+		summary.itemCount += 1
+		summary.pendingQty += rowPending(row)
+		for (const split of row.splits) {
+			for (const col of row.columns) {
+				const value = valueDetail(split.entry, col.key)
+				const received = qty(split.entry, col.key)
+				summary.totalQty += received
+				summary.grandTotal += received * toNumber(value.rate)
+			}
+		}
+	}
+	return summary
+}
+
 // ════════════════ QTY / CLAMP (mirror the Desk math) ════════════════
 function valueDetail(entry, key) {
 	if (!entry.values) entry.values = {}
@@ -343,6 +395,28 @@ function toNumber(value) {
 
 function qty(entry, key) {
 	return toNumber(valueDetail(entry, key).qty)
+}
+
+function aggregateQty(row, key) {
+	return row.splits.reduce((total, split) => total + qty(split.entry, key), 0)
+}
+
+function preferredSplit(row) {
+	return (
+		row.splits.find((split) => split.receivedType === defaultReceivedType.value)
+		|| row.splits[0]
+		|| null
+	)
+}
+
+// Aggregate mode is retained for other callers. The MGK Work Order GRN screen
+// uses the split editor directly so this path is not used by that form.
+function onAggregateQtyInput(row, key, value) {
+	const split = preferredSplit(row)
+	if (!split) return
+	const next = Math.min(Math.max(toNumber(value), 0), allowedQty(row, key))
+	for (const candidate of row.splits) valueDetail(candidate.entry, key).qty = 0
+	valueDetail(split.entry, key).qty = next
 }
 
 // Pending / Allowed are stored per size-cell on the entries (any split carries
@@ -367,7 +441,11 @@ function allowedQty(row, key) {
 function otherSplitQty(row, currentSplit, key) {
 	let total = 0
 	for (const split of row.splits) {
-		if (split === currentSplit) continue
+		// PrimeVue's DataTable may pass a proxied row object to the body slot, so
+		// object identity is not stable here. Received Type is unique within one
+		// logical row; compare that stable value so the current split never counts
+		// against itself and clamps its own edit to zero on blur.
+		if (split.receivedType === currentSplit?.receivedType) continue
 		total += qty(split.entry, key)
 	}
 	return total
@@ -376,14 +454,22 @@ function otherSplitQty(row, currentSplit, key) {
 // Clamp = max_receivable_quantity for the size minus the qty of the SAME size in
 // this item's OTHER splits.
 function maxQty(row, split, key) {
-	return Math.max(allowedQty(row, key) - otherSplitQty(row, split, key), 0)
+	const budget = props.fixedTotal ? targetQty(row, key) : allowedQty(row, key)
+	return Math.max(budget - otherSplitQty(row, split, key), 0)
 }
 
 function onQtyInput(row, split, key, value) {
-	const detail = valueDetail(split.entry, key)
+	// DataTable can retain the row object it first received while the computed
+	// logicalRows collection has already been rebuilt after another split edit.
+	// Resolve the current row/split by their stable values before clamping.
+	const currentRow = logicalRows.value.find((candidate) => candidate.key === row.key) || row
+	const currentSplit = currentRow.splits.find(
+		(candidate) => candidate.receivedType === split.receivedType,
+	) || split
+	const detail = valueDetail(currentSplit.entry, key)
 	let next = toNumber(value)
 	if (next < 0) next = 0
-	const maxValue = maxQty(row, split, key)
+	const maxValue = maxQty(currentRow, currentSplit, key)
 	if (maxValue !== null && next > maxValue) next = maxValue
 	detail.qty = next
 }
@@ -401,7 +487,64 @@ function rowAllowed(row) {
 	return row.columns.reduce((t, c) => t + allowedQty(row, c.key), 0)
 }
 function rowBalance(row) {
+	if (props.fixedTotal) {
+		return row.columns.reduce(
+			(total, column) => total + Math.max(targetQty(row, column.key) - aggregateQty(row, column.key), 0),
+			0,
+		)
+	}
 	return rowAllowed(row) - rowReceived(row)
+}
+
+function allocationTargetKey(row, key) {
+	return `${row.key}::${key}`
+}
+
+function targetQty(row, key) {
+	return toNumber(allocationTargets.value[allocationTargetKey(row, key)])
+}
+
+function captureAllocationTargets() {
+	if (!props.fixedTotal) {
+		allocationTargets.value = {}
+		return
+	}
+	const targets = {}
+	for (const row of logicalRows.value) {
+		for (const column of row.columns) {
+			targets[allocationTargetKey(row, column.key)] = aggregateQty(row, column.key)
+		}
+	}
+	allocationTargets.value = targets
+}
+
+function isAllocationComplete() {
+	if (!props.fixedTotal) return true
+	return logicalRows.value.every((row) => row.columns.every((column) =>
+		Math.abs(aggregateQty(row, column.key) - targetQty(row, column.key)) <= 0.0001
+	))
+}
+
+function allocationIssues() {
+	if (!props.fixedTotal) return []
+	const issues = []
+	for (const row of logicalRows.value) {
+		for (const column of row.columns) {
+			const remaining = targetQty(row, column.key) - aggregateQty(row, column.key)
+			if (Math.abs(remaining) > 0.0001) {
+				issues.push(`${row.name}${column.key === "default" ? "" : ` · ${column.label}`}: ${formatQty(Math.abs(remaining))} ${remaining > 0 ? "unassigned" : "over-allocated"}`)
+			}
+		}
+	}
+	return issues
+}
+
+function emitAllocationState() {
+	if (!props.fixedTotal) return
+	emit("allocation-state", {
+		complete: isAllocationComplete(),
+		issues: allocationIssues(),
+	})
 }
 
 // ════════════════ ADD / REMOVE SPLIT (mirror addSplit/removeSplit) ════════════════
@@ -419,7 +562,7 @@ function canRemoveSplit(row, split) {
 
 // Clone a template entry within the matching group, stamp the new received_type,
 // zero the qtys (value_fields preserved so they round-trip).
-function addSplit(row, rt) {
+async function addSplit(row, rt) {
 	for (const group of groups.value || []) {
 		for (const entry of group.items || []) {
 			const stripped = stripReceivedType(entry.dimensions || {})
@@ -438,16 +581,18 @@ function addSplit(row, rt) {
 				clone.values[col.key] = { ...src, qty: 0 }
 			}
 			group.items.push(clone)
+			await focusQuantity(row.key, rt, getColumns(group, entry)[0]?.key || "default")
 			return
 		}
 	}
 }
 
-function removeSplit(row, split) {
+async function removeSplit(row, split) {
 	for (const group of groups.value || []) {
 		const idx = (group.items || []).indexOf(split.entry)
 		if (idx !== -1) {
 			group.items.splice(idx, 1)
+			await focusQuantity(row.key, row.splits.find((candidate) => candidate.receivedType !== split.receivedType)?.receivedType || "", row.columns[0]?.key || "default")
 			return
 		}
 	}
@@ -457,6 +602,64 @@ function formatQty(value) {
 	const n = toNumber(value)
 	if (Number.isInteger(n)) return String(n)
 	return n.toFixed(3).replace(/\.?0+$/, "")
+}
+
+function focusQuantity(rowKey = "", splitKey = "", columnKey = "") {
+	const parts = [".grn-qty-focus"]
+	if (rowKey) parts.push(`[data-row-key="${CSS.escape(String(rowKey))}"]`)
+	if (splitKey) parts.push(`[data-split-key="${CSS.escape(String(splitKey))}"]`)
+	if (columnKey) parts.push(`[data-column-key="${CSS.escape(String(columnKey))}"]`)
+	return focusFirstControl(editorEl, { selector: parts.join("") })
+}
+
+function focusFirstQuantity() {
+	return focusQuantity()
+}
+
+// The server deliberately pads every pending receivable with all allowed
+// received types so an advanced user can split Accepted / Rejected / etc. The
+// MGK operator flow should look like the Purchase Order form in the common
+// case, so initially keep only the configured default plus any split that
+// already carries a quantity. The footer still offers the remaining types when
+// an exception really needs to be recorded.
+function compactGroups(data) {
+	const compacted = JSON.parse(JSON.stringify(data || []))
+	for (const group of compacted) {
+		const buckets = new Map()
+		for (const entry of group.items || []) {
+			const key = stableKey({
+				name: entry.name,
+				dimensions: stripReceivedType(entry.dimensions || {}),
+				attributes: entry.attributes || {},
+				columns: getColumns(group, entry).map((col) => col.key),
+			})
+			if (!buckets.has(key)) buckets.set(key, [])
+			buckets.get(key).push(entry)
+		}
+
+		const keep = new Set()
+		for (const entries of buckets.values()) {
+			for (const entry of entries) {
+				const hasQty = Object.values(entry.values || {}).some((value) => toNumber(value?.qty) > 0)
+				if (hasQty) keep.add(entry)
+			}
+			const preferred = entries.find((entry) => receivedType(entry) === defaultReceivedType.value)
+			keep.add(preferred || entries[0])
+		}
+		group.items = (group.items || []).filter((entry) => keep.has(entry))
+	}
+	return compacted
+}
+
+function compactLoadedSplits() {
+	if (!receivedTypesReady.value || !(groups.value || []).length) return
+	changeArmed.value = false
+	groups.value = compactGroups(groups.value)
+	nextTick(() => {
+		captureAllocationTargets()
+		emitAllocationState()
+		changeArmed.value = true
+	})
 }
 
 // ════════════════ PUBLIC API (same surface DocDetail drives) ════════════════
@@ -475,9 +678,15 @@ function loadData(grouped) {
 		groups.value = []
 	} else {
 		// Deep clone so edits don't mutate the caller's onload object.
-		groups.value = JSON.parse(JSON.stringify(data))
+		groups.value = receivedTypesReady.value
+			? compactGroups(data)
+			: JSON.parse(JSON.stringify(data))
 	}
-	nextTick(() => { changeArmed.value = true })
+	nextTick(() => {
+		captureAllocationTargets()
+		emitAllocationState()
+		changeArmed.value = true
+	})
 }
 
 // Deep-cloned grouped JSON for buildPayload. Strips empty groups defensively
@@ -497,10 +706,24 @@ function hasItems() {
 	return false
 }
 
-defineExpose({ loadData, getItems, hasItems })
+defineExpose({ loadData, getItems, hasItems, isAllocationComplete, allocationIssues, focusFirstQuantity })
 </script>
 
 <style scoped>
+.grn-allocation-warning {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	padding: .65rem .8rem;
+	border: 1px solid #f1d39a;
+	border-top: 0;
+	border-radius: 0 0 10px 10px;
+	background: #fff8e8;
+	color: #8a5200;
+	font-size: .82rem;
+	font-weight: 650;
+}
+
 .grn-rt-editor {
 	display: flex;
 	flex-direction: column;
@@ -510,7 +733,8 @@ defineExpose({ loadData, getItems, hasItems })
 .grn-group {
 	border: 1px solid var(--mgk-line);
 	border-radius: var(--radius-sm);
-	overflow: hidden;
+	overflow-x: auto;
+	overflow-y: hidden;
 }
 
 .grn-dt {
@@ -551,6 +775,10 @@ defineExpose({ loadData, getItems, hasItems })
 }
 
 .cell-num {
+	width: 100%;
+}
+.grn-qty-focus {
+	display: block;
 	width: 100%;
 }
 :deep(.cell-num-input) {

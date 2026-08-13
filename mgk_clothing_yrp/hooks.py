@@ -200,12 +200,12 @@ get_website_user_home_page = "mgk_clothing_yrp.www_home.get_website_user_home_pa
 # Override Controller Class
 # ------------------------------
 #
-# Per-row yarn process costing: MGKWorkOrder subclasses yrp's Work Order
-# controller and overrides set_receivable_process_costs so item-less (mgk_items)
-# yarn WOs cost each receivable by its own yarn item's Process Cost. Non-yarn
-# WOs defer to base behaviour.
+# MGKWorkOrder owns per-row yarn process costing. MGKGoodsReceivedNote adds the
+# proportional Work Order input consumption required by MGK's production flow;
+# Work Order Correction rows remain on the unchanged base-YRP path.
 
 override_doctype_class = {
+	"Goods Received Note": "mgk_clothing_yrp.overrides.goods_received_note.MGKGoodsReceivedNote",
 	"Work Order": "mgk_clothing_yrp.overrides.work_order_class.MGKWorkOrder",
 }
 
@@ -214,6 +214,7 @@ override_doctype_class = {
 
 override_whitelisted_methods = {
 	"yrp.yrp.doctype.purchase_invoice.purchase_invoice.fetch_grn_details": "mgk_clothing_yrp.overrides.purchase_invoice.fetch_grn_details",
+	"yrp.yrp.doctype.work_order.work_order.update_stock": "mgk_clothing_yrp.overrides.work_order.update_stock",
 }
 
 # Fixtures
@@ -224,6 +225,8 @@ override_whitelisted_methods = {
 
 fixtures = [
 	{"dt": "Custom Field", "filters": [["module", "=", "MGK Clothing YRP"]]},
+	{"dt": "UI Layout", "filters": [["name", "=", "MGK Operations Workspace"]]},
+	{"dt": "YRP UI Terminology", "filters": [["ui_layout", "=", "MGK Operations Workspace"]]},
 	{
 		"dt": "Property Setter",
 		"filters": [
@@ -234,6 +237,7 @@ fixtures = [
 					"Work Order-item-reqd",
 					"Work Order-item-hidden",
 					"Work Order-production_detail-hidden",
+					"Work Order-production_detail-reqd",
 					"Item Production Detail-ipd_processes-hidden",
 					"Work Order-main-field_order",
 				],
@@ -246,16 +250,39 @@ fixtures = [
 # ---------------
 
 doc_events = {
+	"Item": {
+		"validate": "mgk_clothing_yrp.overrides.item.validate",
+	},
 	"Purchase Order": {
+		"before_validate": "mgk_clothing_yrp.overrides.purchase_order.before_validate",
 		"validate": "mgk_clothing_yrp.overrides.purchase_order.validate",
-		"before_submit": "mgk_clothing_yrp.overrides.purchase_order.before_submit",
+	},
+	"Delivery Challan": {
+		"before_validate": "mgk_clothing_yrp.overrides.delivery_challan.before_validate",
 	},
 	"Work Order": {
 		"before_submit": "mgk_clothing_yrp.overrides.work_order.before_submit",
 	},
 	"Item Production Detail": {
 		"onload": "mgk_clothing_yrp.yarn_process.load_attribute_list",
-		"before_validate": "mgk_clothing_yrp.yarn_process.validate_yarn_process_flow",
+		"before_validate": [
+			"mgk_clothing_yrp.ipd_lock.validate_ipd_change",
+			"mgk_clothing_yrp.yarn_process.validate_yarn_process_flow",
+		],
+		"on_trash": "mgk_clothing_yrp.ipd_lock.validate_ipd_delete",
+		"after_delete": "mgk_clothing_yrp.yarn_process.delete_ipd_attribute_mappings",
+	},
+	"IPD Process Matrix": {
+		"before_validate": "mgk_clothing_yrp.ipd_lock.validate_related_ipd_change",
+		"on_trash": "mgk_clothing_yrp.ipd_lock.validate_related_ipd_change",
+	},
+	"Item BOM Attribute Mapping": {
+		"before_validate": "mgk_clothing_yrp.ipd_lock.validate_related_ipd_change",
+		"on_trash": "mgk_clothing_yrp.ipd_lock.validate_related_ipd_change",
+	},
+	"Item Item Attribute Mapping": {
+		"before_validate": "mgk_clothing_yrp.ipd_lock.validate_related_ipd_change",
+		"on_trash": "mgk_clothing_yrp.ipd_lock.validate_related_ipd_change",
 	},
 }
 

@@ -1,0 +1,12 @@
+[
+ {
+  "doctype": "UI Layout",
+  "name": "MGK Operations Workspace",
+  "layout_name": "MGK Operations Workspace",
+  "disabled": 0,
+  "render_mode": "Registered Experience",
+  "experience_key": "operations-workspace",
+  "description": "Registered Experience for MGK Clothing's digital books and operational workflows.",
+  "config": "{\"schema_version\":1,\"experience_props\":{}}"
+ }
+]

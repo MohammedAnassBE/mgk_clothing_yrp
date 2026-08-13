@@ -127,8 +127,10 @@ def get_approval_state(work_order):
 # ======================================================================
 # Calculate Deliverables (MGK)
 #
-# On a saved Work Order, "Calculate Deliverables" turns each `mgk_items`
-# row into a deliverable + receivable pair. A Yarn IPD with an MGK route
+# The Work Order's base ``production_detail`` field is the single Item/IPD
+# context. "Calculate Deliverables" asks only for process-specific attributes
+# and quantities; it never asks the operator to select the IPD again. A Yarn IPD
+# with an MGK route
 # uses explicit transformation mode:
 #   - Doubling: route Input Item variant -> route Output Item variant.
 #   - Dyeing: route From Colour variant -> route To Colour variant.
@@ -275,13 +277,301 @@ def _item_attribute_options(item):
 	return options
 
 
+def _readable_ipd_records(names=None, *, legacy_only=False):
+	"""Return permission-filtered Item Production Details for the popup.
+
+	The Yarn Process child table is queried only to discover candidate parents;
+	this second query is deliberately made through ``frappe.get_list`` so normal
+	Item Production Detail read permissions remain authoritative.
+	"""
+	filters = {}
+	if names is not None:
+		if not names:
+			return []
+		filters["name"] = ["in", list(names)]
+	elif legacy_only:
+		filters["yarn_item"] = ["is", "set"]
+
+	return frappe.get_list(
+		"Item Production Detail",
+		filters=filters,
+		fields=["name", "item", "yarn_item"],
+		order_by="item asc, name asc",
+		limit=max(len(names or []), 500),
+	)
+
+
+def _route_ipd_names(process_name=None):
+	filters = {"parenttype": "Item Production Detail"}
+	if process_name:
+		filters["process_name"] = process_name
+	return list(dict.fromkeys(frappe.get_all(
+		"MGK Yarn Process Route",
+		filters=filters,
+		pluck="parent",
+		order_by="parent asc, sequence asc, idx asc",
+	)))
+
+
+def _ipd_attribute_context(ipd):
+	"""Return the finished Item attribute values configured on this IPD.
+
+	These values are operator context even when an attribute, such as Size, is
+	not carried by the Yarn Items and therefore must not be sent to
+	``build_route_io``.
+	"""
+	attributes = []
+	for row in ipd.get("item_attributes") or []:
+		attribute = cstr(row.get("attribute")).strip()
+		if not attribute:
+			continue
+
+		values = []
+		mapping_name = row.get("mapping")
+		if mapping_name and frappe.db.exists(
+			"Item Item Attribute Mapping", mapping_name
+		):
+			mapping = frappe.get_cached_doc(
+				"Item Item Attribute Mapping", mapping_name
+			)
+			values = list(dict.fromkeys(
+				cstr(value.get("attribute_value")).strip()
+				for value in mapping.get("values") or []
+				if cstr(value.get("attribute_value")).strip()
+			))
+
+		attributes.append({
+			"attribute": attribute,
+			"label": attribute,
+			"values": values,
+		})
+	return attributes
+
+
+def _apply_ipd_values_to_route_attributes(rows, ipd_attributes):
+	"""Limit same-named route selectors to the values enabled on this IPD."""
+	configured = {
+		row["attribute"]: row["values"]
+		for row in ipd_attributes
+		if row.get("values")
+	}
+	for route in rows:
+		# A later Process in the ordered yarn train is constrained by the exact
+		# attribute states produced upstream. Finished-Item values are useful
+		# context, but must not remove valid intermediate Yarn states.
+		if route.get("chain_constrained"):
+			continue
+		for attribute in route.get("attributes") or []:
+			values = configured.get(attribute.get("attribute"))
+			if not values:
+				continue
+			supported = set(attribute.get("options") or [])
+			attribute["options"] = [value for value in values if value in supported]
+	return rows
+
+
+def _yarn_ipd_option(ipd_name, process_name, mode, idx):
+	"""Build one operator-facing Item/IPD choice and its calculation rows."""
+	ipd = frappe.get_cached_doc("Item Production Detail", ipd_name)
+	ipd.check_permission("read")
+	label = f"{ipd.item} · {ipd.name}" if ipd.item != ipd.name else ipd.name
+	ipd_attributes = _ipd_attribute_context(ipd)
+
+	if mode == "transformation":
+		rows = []
+		for route_row in get_process_route_context(ipd.name, process_name):
+			rows.append({
+				**route_row,
+				"idx": idx,
+				"item": ipd.item,
+				"production_detail": ipd.name,
+			})
+		if not rows:
+			return None
+	else:
+		yarn_item = ipd.get("yarn_item")
+		if not yarn_item:
+			return None
+		rows = [{
+			"idx": idx,
+			"item": ipd.item,
+			"production_detail": ipd.name,
+			"yarn_item": yarn_item,
+			"yarn_item_name": yarn_item,
+			"uom": frappe.get_cached_value(
+				"Item", yarn_item, "default_unit_of_measure"
+			),
+			"attributes": _item_attribute_options(yarn_item),
+		}]
+
+	_apply_ipd_values_to_route_attributes(rows, ipd_attributes)
+
+	return {
+		"label": label,
+		"item": ipd.item,
+		"production_detail": ipd.name,
+		"ipd_attributes": ipd_attributes,
+		"rows": rows,
+	}
+
+
+def _eligible_yarn_ipd_options(process_name, mode):
+	"""All popup choices valid for the selected yarn Process.
+
+	Configured Yarn Flow IPDs are matched by their explicit process step. The
+	legacy direct-yarn fallback is offered only for IPDs that have a Yarn Item and
+	no MGK Yarn Flow at all, preserving the old manual ``mgk_items`` behaviour.
+	"""
+	if mode == "transformation":
+		records = _readable_ipd_records(_route_ipd_names(process_name))
+	else:
+		routed = set(_route_ipd_names())
+		records = [
+			record
+			for record in _readable_ipd_records(legacy_only=True)
+			if record.name not in routed
+		]
+
+	options = []
+	for idx, record in enumerate(records, 1):
+		option = _yarn_ipd_option(record.name, process_name, mode, idx)
+		if option:
+			options.append(option)
+	return options
+
+
+def _eligible_work_order_ipd_records(process):
+	"""Permission-filtered IPDs valid for a Process on the MGK Work Order.
+
+	Yarn Processes are driven by the explicit MGK Yarn Process Route. Legacy
+	Yarn IPDs remain selectable only when they have no route configuration at
+	all. For the upcoming non-yarn/cloth flow, accept IPDs that explicitly refer
+	to the Process through an IPD Process row, Process Matrix, or Item BOM row.
+	"""
+	if process.get("is_yarn_process"):
+		routed = set(_route_ipd_names())
+		names = list(_route_ipd_names(process.name))
+		legacy = [
+			record.name
+			for record in _readable_ipd_records(legacy_only=True)
+			if record.name not in routed
+		]
+		return _readable_ipd_records(list(dict.fromkeys([*names, *legacy])))
+
+	names = []
+	for doctype in ("IPD Process", "Item BOM"):
+		names.extend(frappe.get_all(
+			doctype,
+			filters={
+				"parenttype": "Item Production Detail",
+				"process_name": process.name,
+			},
+			pluck="parent",
+		))
+	names.extend(frappe.get_all(
+		"IPD Process Matrix",
+		filters={"process_name": process.name, "docstatus": ["<", 2]},
+		pluck="ipd",
+	))
+	return _readable_ipd_records(list(dict.fromkeys(names)))
+
+
+def _work_order_ipd_context(wo, *, check_permission=True):
+	"""Validate and return the Work Order's authoritative IPD context."""
+	if not wo.get("production_detail"):
+		frappe.throw(
+			_("Select Item Production Detail on Work Order {0} first.").format(wo.name)
+		)
+
+	ipd = frappe.get_doc("Item Production Detail", wo.production_detail)
+	if check_permission:
+		ipd.check_permission("read")
+	if not ipd.item:
+		frappe.throw(
+			_("Item Production Detail {0} has no finished Item.").format(ipd.name)
+		)
+
+	process = _get_wo_process(wo)
+	mode = None
+	if process.get("is_yarn_process"):
+		if has_yarn_process_route(ipd.name, wo.process_name):
+			mode = "transformation"
+		elif ipd.get("mgk_yarn_process_routes"):
+			frappe.throw(
+				_("Process {0} is not configured on Item Production Detail {1}.").format(
+					wo.process_name, ipd.name
+				)
+			)
+		elif ipd.get("yarn_item"):
+			mode = "legacy"
+		else:
+			frappe.throw(
+				_("Item Production Detail {0} has no Yarn Process configuration.").format(
+					ipd.name
+				)
+			)
+	else:
+		valid_names = {row.name for row in _eligible_work_order_ipd_records(process)}
+		if ipd.name not in valid_names:
+			frappe.throw(
+				_("Process {0} is not configured on Item Production Detail {1}.").format(
+					wo.process_name, ipd.name
+				)
+			)
+
+	return ipd, process, mode
+
+
+@frappe.whitelist()
+def get_work_order_production_detail_options(process_name, txt=None):
+	"""Link options for the MGK Work Order's mandatory Production Detail."""
+	if not process_name:
+		return []
+	process = frappe.get_cached_doc("Process", process_name)
+	needle = cstr(txt).strip().lower()
+	options = []
+	for record in _eligible_work_order_ipd_records(process):
+		label = f"{record.item} · {record.name}" if record.item else record.name
+		if needle and needle not in f"{record.name} {record.item or ''}".lower():
+			continue
+		options.append({"name": record.name, "label": label, "item": record.item})
+		if len(options) >= 20:
+			break
+	return options
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def work_order_production_detail_query(
+	doctype, txt, searchfield, start, page_len, filters
+):
+	"""Desk Link query wrapper for the same Process-filtered IPD options."""
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+	options = get_work_order_production_detail_options(
+		filters.get("process_name"), txt=txt
+	)
+	return [[row["name"], row["label"]] for row in options]
+
+
+@frappe.whitelist()
+def get_work_order_production_detail_context(production_detail, process_name):
+	"""Validate a selected IPD for a Process and return its derived Item."""
+	probe = frappe._dict({
+		"name": _("New Work Order"),
+		"production_detail": production_detail,
+		"process_name": process_name,
+	})
+	ipd, _process, mode = _work_order_ipd_context(probe, check_permission=True)
+	return {"production_detail": ipd.name, "item": ipd.item, "mode": mode}
+
+
 @frappe.whitelist()
 def get_yarn_deliverable_rows(work_order):
 	"""Popup payload for Calculate Deliverables (yarn mode).
 
-	For each `mgk_items` row, returns the IPD's yarn item, its UOM and the
-	attribute picker config. Also reports whether the WO's process is a yarn
-	process so the UI can guard which mode to render.
+	The IPD comes only from the base Work Order ``production_detail`` field. The
+	dialog receives one read-only context and asks only for route attributes and
+	positive input quantities.
 	"""
 	wo = frappe.get_doc("Work Order", work_order)
 	wo.check_permission("read")
@@ -289,66 +579,72 @@ def get_yarn_deliverable_rows(work_order):
 	process = _get_wo_process(wo)
 	is_yarn_process = bool(process.get("is_yarn_process"))
 
-	legacy_rows = []
-	transformation_rows = []
-	missing_routes = []
-	has_any_route_configuration = False
-	for item_row in wo.get("mgk_items") or []:
-		route_rows = get_process_route_context(
-			item_row.production_detail,
-			wo.process_name,
-		) if item_row.production_detail else []
-		for route_row in route_rows:
-			transformation_rows.append({
-				**route_row,
-				"idx": item_row.idx,
-				"item": item_row.item,
-				"production_detail": item_row.production_detail,
-			})
-
-		yarn_item = _yarn_item_for_detail(item_row.production_detail)
-		row = {
-			"idx": item_row.idx,
-			"item": item_row.item,
-			"production_detail": item_row.production_detail,
-			"yarn_item": yarn_item,
-			"yarn_item_name": None,
-			"uom": None,
-			"attributes": [],
+	if not is_yarn_process:
+		return {
+			"work_order": wo.name,
+			"process_name": wo.process_name,
+			"is_yarn_process": False,
+			"mode": None,
+			"default_wastage": flt(process.get("default_wastage")),
+			"default_excess": flt(process.get("default_excess")),
+			"options": [],
+			"selected_production_details": [],
+			"rows": [],
 		}
-		if yarn_item:
-			# yrp's Item has no separate item_name field — its `name` IS the label.
-			row["yarn_item_name"] = yarn_item
-			row["uom"] = frappe.get_cached_value("Item", yarn_item, "default_unit_of_measure")
-			row["attributes"] = _item_attribute_options(yarn_item)
-		legacy_rows.append(row)
 
-		if not route_rows and item_row.production_detail:
-			ipd = frappe.get_cached_doc("Item Production Detail", item_row.production_detail)
-			if ipd.get("mgk_yarn_process_routes"):
-				has_any_route_configuration = True
-			missing_routes.append(item_row.production_detail)
-
-	if missing_routes and (
-		transformation_rows or has_any_route_configuration
-	):
+	ipd, _process, mode = _work_order_ipd_context(wo, check_permission=True)
+	option = _yarn_ipd_option(ipd.name, wo.process_name, mode, 1)
+	if not option:
 		frappe.throw(
-			_(
-				"Process {0} is not configured in Item Production Detail(s): {1}. "
-				"Remove those Item rows from this Work Order or add the matching "
-				"Yarn Process step in the IPD."
-			).format(wo.process_name, ", ".join(sorted(set(missing_routes))))
+			_("No {0} calculation route is available on Item Production Detail {1}.").format(
+				wo.process_name, ipd.name
+			)
 		)
+	options = [option]
+	selected_details = [ipd.name]
+	rows = list(option["rows"])
 
 	return {
 		"work_order": wo.name,
 		"process_name": wo.process_name,
 		"is_yarn_process": is_yarn_process,
-		"mode": "transformation" if transformation_rows else "legacy",
+		"mode": mode,
 		"default_wastage": flt(process.get("default_wastage")),
 		"default_excess": flt(process.get("default_excess")),
-		"rows": transformation_rows or legacy_rows,
+		"options": options,
+		"selected_production_details": selected_details,
+		# Keep both shapes for the Desk dialog and Registered Experience.
+		"rows": rows,
 	}
+
+
+def _sync_yarn_selection_from_rows(wo, rows):
+	"""Validate calculation rows against the Work Order's selected IPD.
+
+	``mgk_items`` is retained as a hidden one-row compatibility mirror for the
+	existing calculation/costing code. It is never an operator input and cannot
+	override the base Work Order ``production_detail`` field.
+	"""
+	if not rows:
+		frappe.throw(_("Enter an input quantity for at least one process route."))
+
+	ipd, _process, mode = _work_order_ipd_context(wo, check_permission=True)
+	for row in rows:
+		if not isinstance(row, dict):
+			frappe.throw(_("Each calculation row must be an object."))
+		supplied = row.get("production_detail")
+		if supplied and supplied != ipd.name:
+			frappe.throw(
+				_(
+					"Calculation Item Production Detail {0} must match Work Order "
+					"Production Detail {1}."
+				).format(supplied, ipd.name)
+			)
+		row["production_detail"] = ipd.name
+
+	wo.set("mgk_items", [])
+	wo.append("mgk_items", {"item": ipd.item, "production_detail": ipd.name})
+	return mode
 
 
 @frappe.whitelist()
@@ -369,50 +665,25 @@ def calculate_deliverables(work_order, rows, modified=None):
 		frappe.throw(_("Calculate Deliverables can only update a draft Work Order."))
 
 	process = _get_wo_process(wo)
-	has_configured_route = False
-	has_any_route_configuration = False
-	missing_process_details = []
-	for row in wo.get("mgk_items") or []:
-		if not row.production_detail:
-			continue
-		ipd = frappe.get_cached_doc(
-			"Item Production Detail",
-			row.production_detail,
-		)
-		has_any_route_configuration = (
-			has_any_route_configuration
-			or bool(ipd.get("mgk_yarn_process_routes"))
-		)
-		detail_has_process = has_yarn_process_route(
-			row.production_detail,
-			wo.process_name,
-		)
-		has_configured_route = has_configured_route or detail_has_process
-		if not detail_has_process:
-			missing_process_details.append(row.production_detail)
-	if has_configured_route:
-		if missing_process_details:
-			frappe.throw(
-				_(
-					"Process {0} is not configured in Item Production "
-					"Detail(s): {1}."
-				).format(
-					wo.process_name,
-					", ".join(sorted(set(missing_process_details))),
-				)
-			)
-		return _calculate_yarn_transformations(wo, rows)
-	if has_any_route_configuration:
-		frappe.throw(
-			_(
-				"Process {0} is not configured on this Work Order's Yarn "
-				"Process Flow."
-			).format(wo.process_name)
-		)
 	if process.get("is_yarn_process"):
-		return _calculate_yarn_deliverables(wo, process, rows)
+		mode = _sync_yarn_selection_from_rows(wo, rows)
+		if mode == "transformation":
+			result = _calculate_yarn_transformations(wo, rows)
+		else:
+			result = _calculate_yarn_deliverables(wo, process, rows)
+		return _with_calculation_warnings(result, wo.name)
 
-	return _calculate_matrix_deliverables(wo, rows)
+	result = _calculate_matrix_deliverables(wo, rows)
+	return _with_calculation_warnings(result, wo.name)
+
+
+def _with_calculation_warnings(result, work_order):
+	"""Attach Frappe-15-style soft readiness warnings after a draft calculation."""
+	result = dict(result or {})
+	doc = frappe.get_doc("Work Order", work_order)
+	get_issues = getattr(doc, "get_submit_readiness_issues", None)
+	result["warnings"] = list(get_issues() if get_issues else [])
+	return result
 
 
 def _prepare_yarn_transformation_items(wo, rows):
@@ -456,36 +727,59 @@ def _prepare_yarn_transformation_items(wo, rows):
 			raw.get("attribute_values") or {},
 			raw.get("weight") or raw.get("qty"),
 		)
-		input_variant = _resolve_yarn_variant(io["input_item"], io["input_attrs"])
-		output_variant = _resolve_yarn_variant(io["output_item"], io["output_attrs"])
 
-		deliverable_key = (input_variant, io["input_uom"])
-		deliverable = deliverables_by_variant.setdefault(
-			deliverable_key,
-			{
-				"item_variant": input_variant,
-				"qty": 0,
-				"pending_quantity": 0,
-				"uom": io["input_uom"],
-				"received_type": "Accepted",
-				"is_calculated": 1,
-			},
-		)
-		deliverable["qty"] += io["input_qty"]
-		deliverable["pending_quantity"] += io["input_qty"]
+		# The popup identifies one operator-friendly route and input quantity.
+		# Resolve the actual I/O through the generated base-YRP matrix instead of
+		# treating the route child row as a second calculation engine.
+		from yrp.yrp.utils.ipd_engine import get_process_io
 
-		receivable_key = (output_variant, io["output_uom"])
-		receivable = receivables_by_variant.setdefault(
-			receivable_key,
-			{
-				"item_variant": output_variant,
-				"qty": 0,
-				"pending_quantity": 0,
-				"uom": io["output_uom"],
-			},
+		matrix_io = get_process_io(
+			production_detail,
+			wo.process_name,
+			[{"attrs": io["output_attrs"], "qty": io["output_qty"]}],
 		)
-		receivable["qty"] += io["output_qty"]
-		receivable["pending_quantity"] += io["output_qty"]
+		if not matrix_io.get("inputs") or not matrix_io.get("outputs"):
+			frappe.throw(
+				_("The generated Process Matrix returned no inputs or outputs for route {0}.").format(
+					route_name
+				)
+			)
+
+		for matrix_row in matrix_io["inputs"]:
+			input_variant = _resolve_yarn_variant(
+				matrix_row["item"], matrix_row.get("attrs") or {}
+			)
+			deliverable_key = (input_variant, matrix_row.get("uom"))
+			deliverable = deliverables_by_variant.setdefault(
+				deliverable_key,
+				{
+					"item_variant": input_variant,
+					"qty": 0,
+					"pending_quantity": 0,
+					"uom": matrix_row.get("uom"),
+					"received_type": "Accepted",
+					"is_calculated": 1,
+				},
+			)
+			deliverable["qty"] += flt(matrix_row.get("qty"))
+			deliverable["pending_quantity"] += flt(matrix_row.get("qty"))
+
+		for matrix_row in matrix_io["outputs"]:
+			output_variant = _resolve_yarn_variant(
+				matrix_row["item"], matrix_row.get("attrs") or {}
+			)
+			receivable_key = (output_variant, matrix_row.get("uom"))
+			receivable = receivables_by_variant.setdefault(
+				receivable_key,
+				{
+					"item_variant": output_variant,
+					"qty": 0,
+					"pending_quantity": 0,
+					"uom": matrix_row.get("uom"),
+				},
+			)
+			receivable["qty"] += flt(matrix_row.get("qty"))
+			receivable["pending_quantity"] += flt(matrix_row.get("qty"))
 
 	return list(deliverables_by_variant.values()), list(receivables_by_variant.values())
 

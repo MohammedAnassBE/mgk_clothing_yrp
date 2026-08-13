@@ -16,7 +16,7 @@
  *                 restrict the Address autocomplete to addresses belonging to
  *                 the selected party, the same way the Desk does.
  */
-import { searchAddressForParty } from "@/api/client"
+import { callMethod, searchAddressForParty } from "@/api/client"
 
 // Curated VIEW Details grouping. Work Order's own DocType layout is a flat
 // 26-field top section + several UNNAMED sections, so meta Section-Break
@@ -80,28 +80,57 @@ const detailGroups = [
 // fields are filtered out downstream by DocDetail.
 const formOrder = [
 	"naming_series",
-	"edit_wo_date",
-	"wo_date",
+	"process_name",
+	"production_detail",
+	"item",
 	"supplier",
 	"supplier_name",
-	"parent_wo",
-	"process_name",
-	"terms_and_condition",
-	"item",
-	"production_detail",
 	"delivery_location",
 	"delivery_location_name",
-	"planned_start_date",
-	"planned_end_date",
-	"planned_quantity",
-	"expected_delivery_date",
-	"supplier_type",
-	"rework_type",
 	"supplier_address",
 	"supplier_address_details",
 	"delivery_address",
 	"delivery_address_details",
+	"edit_wo_date",
+	"wo_date",
+	"planned_start_date",
+	"planned_end_date",
+	"planned_quantity",
+	"expected_delivery_date",
+	"parent_wo",
+	"supplier_type",
+	"rework_type",
+	"terms_and_condition",
 	"comments",
+]
+
+// The base Work Order has a large unnamed first section. The MGK Registered
+// Experience groups the same fields around the operator's actual sequence.
+// This is presentation only: field metadata, required rules and server-side
+// validation remain authoritative.
+const formGroups = [
+	{
+		label: "Work setup",
+		fields: ["naming_series", "process_name", "production_detail", "item"],
+	},
+	{
+		label: "Job-worker and delivery",
+		fields: [
+			"supplier", "supplier_name", "delivery_location", "delivery_location_name",
+			"supplier_address", "supplier_address_details", "delivery_address", "delivery_address_details",
+		],
+	},
+	{
+		label: "Schedule and quantity",
+		fields: [
+			"edit_wo_date", "wo_date", "planned_start_date", "planned_end_date",
+			"planned_quantity", "expected_delivery_date",
+		],
+	},
+	{
+		label: "Additional details",
+		fields: ["parent_wo", "supplier_type", "rework_type", "terms_and_condition"],
+	},
 ]
 
 // Hide unconditionally in EDIT/CREATE:
@@ -117,6 +146,7 @@ const formOrder = [
 //   deliverables/receivables pivots (DocDetail renders a dedicated WO comments
 //   block after all child tables). Mirrors the Desk's bottom-of-form placement.
 const hideFormFields = [
+	"is_rework",
 	"includes_packing",
 	"open_status",
 	"is_delivered",
@@ -131,6 +161,15 @@ const hideFormFields = [
 const emptyHandler = async () => []
 
 const linkSearchHandlers = {
+	production_detail: (form) =>
+		form.process_name
+			? async (query) => (
+				await callMethod(
+					"mgk_clothing_yrp.mgk_clothing_yrp.api.work_order.get_work_order_production_detail_options",
+					{ process_name: form.process_name, txt: query || "" },
+				)
+			) || []
+			: emptyHandler,
 	supplier_address: (form) =>
 		form.supplier
 			? (q) => searchAddressForParty("Supplier", form.supplier, q)
@@ -144,15 +183,27 @@ const linkSearchHandlers = {
 // Q18: unify the vendor party to ONE term across WO/DC/GRN. The Desk/meta calls
 // it "Supplier"; on MGK's floor the party doing the job IS the job-worker.
 const labels = {
+	production_detail: "Item Production Detail",
 	supplier: "Job-worker",
 	supplier_name: "Job-worker Name",
 	supplier_address: "Job-worker Address",
+	supplier_address_details: "Job-worker Address Details",
+}
+
+const help = {
+	process_name: "Choose the job-work process first. It controls which Production Details are available.",
+	production_detail: "Choose the production route for this Work Order. The Item is filled automatically.",
+	supplier: "Choose the job-worker who will perform this process.",
+	delivery_location: "Choose where the processed goods must be returned.",
+	planned_quantity: "Enter the quantity planned for this Work Order.",
 }
 
 export default {
 	detailGroups,
 	formOrder,
+	formGroups,
 	hideFormFields,
 	linkSearchHandlers,
 	labels,
+	help,
 }
