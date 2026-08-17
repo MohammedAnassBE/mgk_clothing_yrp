@@ -393,7 +393,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, reactive, ref, watch } from "vue"
+import { computed, defineComponent, h, onBeforeUnmount, reactive, ref, watch } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router"
 import { callMethod, getList, getListView, getCount, getDoc, getLinkedDocs, getAddressList, getMeta } from "@/api/client"
 import { logout } from "@/api/auth"
@@ -401,6 +401,7 @@ import { usePermissions } from "@/composables/usePermissions"
 import { useDisplayLanguage } from "@/composables/useDisplayLanguage"
 import { useTerminology } from "@/composables/useTerminology"
 import { useLinkTitles, LOCALIZED_NAME_FIELDS } from "@/composables/useLinkTitles"
+import { useRealtime } from "@/composables/useRealtime"
 import ColumnCustomizerModal from "@/components/ColumnCustomizerModal.vue"
 import DocDetail from "@/views/dynamic/DocDetail.vue"
 import StockBalanceView from "./StockBalanceView.vue"
@@ -421,6 +422,7 @@ const { canRead, canCreate, isAdmin, hasRole } = usePermissions()
 const { isTamil, setLanguage } = useDisplayLanguage()
 const { term } = useTerminology()
 const linkTitles = useLinkTitles()
+const realtime = useRealtime()
 
 const Breadcrumbs = defineComponent({
 	props: { items: { type: Array, default: () => [] } },
@@ -504,6 +506,8 @@ const activeStatus = ref("All")
 const showListColumnsModal = ref(false)
 let loadSequence = 0
 let columnLoadSequence = 0
+let listRealtimeDispose = null
+let listRealtimeTimer = null
 
 const bootUser = window.frappe?.boot?.user || {}
 const userName = computed(() => bootUser.full_name || bootUser.name || "User")
@@ -755,14 +759,51 @@ const INTERNAL_FIELDS = new Set([
 	"table_index", "row_index",
 ])
 
+function stopListRealtime() {
+	if (listRealtimeTimer) {
+		clearTimeout(listRealtimeTimer)
+		listRealtimeTimer = null
+	}
+	if (listRealtimeDispose) {
+		listRealtimeDispose()
+		listRealtimeDispose = null
+	}
+}
+
+function onListRealtimeChanged() {
+	if (listRealtimeTimer) clearTimeout(listRealtimeTimer)
+	listRealtimeTimer = setTimeout(() => {
+		listRealtimeTimer = null
+		if (page.value.kind !== "list" && page.value.kind !== "master-list") return
+		// Keep the existing rows rendered while the first page and total are
+		// refreshed. Filters, the active client-side status, and search text stay
+		// intact; the realtime event is only an invalidation signal.
+		loadList(false, true)
+	}, 500)
+}
+
+function subscribeListRealtime() {
+	if (listRealtimeDispose) {
+		listRealtimeDispose()
+		listRealtimeDispose = null
+	}
+	const doctype = currentListConfig.value?.doctype
+	if (!doctype || (page.value.kind !== "list" && page.value.kind !== "master-list")) return
+	listRealtimeDispose = realtime.onListUpdate(doctype, onListRealtimeChanged)
+}
+
 watch(() => route.fullPath, async () => {
+	stopListRealtime()
 	searchText.value = ""
 	activeStatus.value = "All"
 	showListColumnsModal.value = false
 	if (page.value.kind === "home") await loadHomeCounts()
 	else if (page.value.kind === "manage" || page.value.kind === "prices-costs") await loadMasterCounts()
 	else if (page.value.kind === "group") await loadBookCounts()
-	else if (page.value.kind === "list" || page.value.kind === "master-list") await loadList(false)
+	else if (page.value.kind === "list" || page.value.kind === "master-list") {
+		await loadList(false)
+		subscribeListRealtime()
+	}
 	else if (page.value.kind === "detail" && page.value.groupKey === "wo") {
 		// DocDetail owns Work Order load/create state.
 		detailState.doc = null
@@ -775,6 +816,8 @@ watch(() => route.fullPath, async () => {
 	}
 	else if (page.value.kind === "detail" || page.value.kind === "master-detail") await loadDetail()
 }, { immediate: true })
+
+onBeforeUnmount(stopListRealtime)
 
 function groupRoute(group) {
 	if (group.directList && group.books[0]) {
@@ -936,15 +979,17 @@ async function loadBookCounts() {
 	}))
 }
 
-async function loadList(append = false) {
+async function loadList(append = false, preserveRows = false) {
 	const config = currentListConfig.value
 	if (!config || (page.value.kind === "master-list" && !selectedMasterAllowed.value)) return
 	const sequence = ++loadSequence
 	if (!append) {
-		listState.rows = []
+		if (!preserveRows) {
+			listState.rows = []
+			listState.total = 0
+			listState.hasMore = false
+		}
 		listState.page = 0
-		listState.total = 0
-		listState.hasMore = false
 	}
 	listState.loading = true
 	listState.error = ""
